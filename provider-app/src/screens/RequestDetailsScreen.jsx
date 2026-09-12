@@ -1,0 +1,160 @@
+import { useNavigate, useParams } from "react-router-dom";
+import { useApp } from "../context/AppContext";
+import ScreenHeader from "../components/ScreenHeader";
+import { MapPinIcon, CalendarIcon, ClockIcon, PhoneIcon } from "../components/icons";
+import CategoryIcon from "../components/CategoryIcon";
+
+export default function RequestDetailsScreen() {
+  const { requestId } = useParams();
+  const navigate = useNavigate();
+  const { getRequest, acceptRequest, rejectRequest, advanceRequestStatus, showToast } = useApp();
+
+  const request = getRequest(requestId);
+  if (!request) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+        <p className="text-sm text-gray-500">Request not found.</p>
+        <button onClick={() => navigate("/requests")} className="text-sm font-semibold text-brand">
+          Back to Requests
+        </button>
+      </div>
+    );
+  }
+
+  const customer = request.customer;
+  const order = ["Accepted", "In Progress", "Completed"];
+  const nextStatus = order[Math.min(order.indexOf(request.status) + 1, order.length - 1)];
+
+  return (
+    <div className="flex flex-1 flex-col">
+      <ScreenHeader title="Request Details" subtitle={`Request ID: #${request.id}`} />
+
+      <div className="flex-1 space-y-5 px-4 pb-6 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-10">
+        {request.status === "Pending" && (
+          <span className="inline-block rounded-full bg-emerald-100 px-2.5 py-1 text-[10.5px] font-bold text-emerald-700">
+            NEW REQUEST
+          </span>
+        )}
+
+        <div className="flex items-center gap-3 rounded-2xl bg-gray-50 p-3">
+          <CategoryIcon categoryId={request.service?.categoryId} size={48} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[14px] font-semibold text-gray-900">{request.service?.name}</p>
+            <p className="text-[11px] text-gray-400">Starting Price</p>
+          </div>
+          <p className="text-lg font-extrabold text-brand">₹{request.amount}</p>
+        </div>
+
+        <div>
+          <h2 className="mb-2 text-[13px] font-bold text-gray-900">Customer Details</h2>
+          <div className="flex items-center gap-3 rounded-2xl border border-gray-100 p-3">
+            <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-xl">
+              {customer?.avatar}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-semibold text-gray-900">{customer?.name}</p>
+              <p className="text-[11px] text-gray-500">{customer?.phone}</p>
+            </div>
+            <a
+              href={`tel:${customer?.phone}`}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-light text-brand"
+              aria-label="Call customer"
+            >
+              <PhoneIcon width={16} height={16} />
+            </a>
+          </div>
+        </div>
+
+        <div>
+          <h2 className="mb-2 text-[13px] font-bold text-gray-900">Service Location</h2>
+          <div className="flex items-start gap-2 rounded-2xl border border-gray-100 p-3">
+            <MapPinIcon width={16} height={16} className="mt-0.5 flex-shrink-0 text-gray-400" />
+            <div>
+              <p className="text-[12.5px] leading-snug text-gray-700">
+                {request.address?.label} — {request.address?.line}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h2 className="mb-2 text-[13px] font-bold text-gray-900">Preferred Date & Time</h2>
+          <div className="space-y-1.5 rounded-2xl border border-gray-100 p-3">
+            <div className="flex items-center gap-2 text-[12.5px] text-gray-700">
+              <CalendarIcon width={15} height={15} className="text-gray-400" /> {formatDate(request.date)}
+            </div>
+            <div className="flex items-center gap-2 text-[12.5px] text-gray-700">
+              <ClockIcon width={15} height={15} className="text-gray-400" /> {request.time}
+            </div>
+          </div>
+        </div>
+
+        {request.issue && (
+          <div>
+            <h2 className="mb-1.5 text-[13px] font-bold text-gray-900">Issue Description</h2>
+            <p className="text-[12.5px] leading-relaxed text-gray-600">{request.issue}</p>
+          </div>
+        )}
+
+        {!["Pending", "Rejected", "Cancelled"].includes(request.status) && (
+          <div>
+            <StatusPill status={request.status} />
+            {request.status !== "Completed" && (
+              <button
+                onClick={() => {
+                  advanceRequestStatus(request.id);
+                  showToast("Status updated");
+                }}
+                className="mt-3 w-full rounded-xl border border-dashed border-gray-300 py-2.5 text-xs font-medium text-gray-500"
+              >
+                Simulate: mark as "{nextStatus}"
+              </button>
+            )}
+          </div>
+        )}
+
+        {["Accepted", "In Progress", "Completed"].includes(request.status) && (
+          <button
+            onClick={() => navigate(`/chat/${request.id}`)}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-light py-3 text-sm font-semibold text-brand-dark"
+          >
+            Message {customer?.name}
+          </button>
+        )}
+      </div>
+
+      {request.status === "Pending" && (
+        <div className="flex flex-shrink-0 gap-3 border-t border-gray-100 bg-white px-4 py-3 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:py-4">
+          <button
+            onClick={() => {
+              rejectRequest(request.id);
+              navigate(-1);
+            }}
+            className="flex-1 rounded-xl border border-red-200 py-3 text-sm font-semibold text-red-600 active:scale-[0.98]"
+          >
+            Reject
+          </button>
+          <button
+            onClick={() => acceptRequest(request.id)}
+            className="flex-1 rounded-xl bg-brand py-3 text-sm font-semibold text-white active:scale-[0.98]"
+          >
+            Accept Request
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatusPill({ status }) {
+  const styles = {
+    Accepted: "bg-emerald-100 text-emerald-700",
+    "In Progress": "bg-blue-100 text-blue-700",
+    Completed: "bg-gray-200 text-gray-600",
+  };
+  return <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${styles[status]}`}>{status}</span>;
+}
+
+function formatDate(iso) {
+  return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}

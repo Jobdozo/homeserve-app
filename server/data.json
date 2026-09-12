@@ -1,0 +1,679 @@
+{
+  "customer": {
+    "id": "cust-1",
+    "name": "Riya Malhotra",
+    "avatar": "🧑",
+    "phone": "+91 98765 43210",
+    "email": "info@zipcon.in"
+  },
+  "providers": {
+    "amit-sharma": {
+      "id": "amit-sharma",
+      "name": "Amit Sharma",
+      "avatar": "👨🏽‍🔧",
+      "category": "AC Repair & Service",
+      "rating": 4.8,
+      "reviews": 250,
+      "phone": "+91 98765 43210",
+      "live": true,
+      "verified": true,
+      "verificationStatus": "approved",
+      "businessName": "Sharma AC Services",
+      "experience": "5 Years",
+      "serviceArea": "5 km around your location",
+      "email": "amit.sharma@gmail.com",
+      "gstNumber": "07ABCDE1234F1Z5",
+      "responseRate": 98,
+      "joinedAt": "2026-06-12T09:00:00.000Z"
+    },
+    "rakesh-kumar": {
+      "id": "rakesh-kumar",
+      "name": "Rakesh Kumar",
+      "avatar": "👨🏽‍🔧",
+      "category": "Plumbing & Electrician",
+      "rating": 4.7,
+      "reviews": 180,
+      "phone": "+91 98765 11223",
+      "live": false,
+      "verificationStatus": "approved",
+      "joinedAt": "2026-05-20T09:00:00.000Z"
+    },
+    "sunita-devi": {
+      "id": "sunita-devi",
+      "name": "Sunita Devi",
+      "avatar": "👩🏽‍🔧",
+      "category": "Home Cleaning",
+      "rating": 4.9,
+      "reviews": 320,
+      "phone": "+91 98765 99887",
+      "live": false,
+      "verificationStatus": "approved",
+      "joinedAt": "2026-04-02T09:00:00.000Z"
+    },
+    "meena-kapoor": {
+      "id": "meena-kapoor",
+      "name": "Meena Kapoor",
+      "avatar": "👩🏽‍🔧",
+      "category": "Painting",
+      "rating": 0,
+      "reviews": 0,
+      "phone": "+91 98765 44556",
+      "live": false,
+      "verificationStatus": "approved",
+      "joinedAt": "2026-09-06T11:30:00.000Z",
+      "verified": true
+    }
+  },
+  "categories": [
+    {
+      "id": "home-cleaning",
+      "name": "Home Cleaning",
+      "icon": "🧹"
+    },
+    {
+      "id": "ac-repair",
+      "name": "AC Repair",
+      "icon": "❄️"
+    },
+    {
+      "id": "plumbing",
+      "name": "Plumbing",
+      "icon": "🔧"
+    },
+    {
+      "id": "electrician",
+      "name": "Electrician",
+      "icon": "⚡"
+    },
+    {
+      "id": "appliance-repair",
+      "name": "Appliance Repair",
+      "icon": "🛠️"
+    },
+    {
+      "id": "carpentry",
+      "name": "Carpentry",
+      "icon": "🪚"
+    },
+    {
+      "id": "painting",
+      "name": "Painting",
+      "icon": "🎨"
+    },
+    {
+      "id": "pest-control",
+      "name": "Pest Control",
+      "icon": "🐜"
+    },
+    {
+      "id": "salon-spa",
+      "name": "Salon & Spa",
+      "icon": "💇"
+    },
+    {
+      "id": "packers-movers",
+      "name": "Packers & Movers",
+      "icon": "📦"
+    },
+    {
+      "id": "computer-repair",
+      "name": "Computer Repair",
+      "icon": "💻"
+    },
+    {
+      "id": "more-services",
+      "name": "More Services",
+      "icon": "⋯"
+    }
+  ],
+  "services": [
+    {
+      "id": "ac-repair-service",
+      "categoryId": "ac-repair",
+      "name": "AC Repair & Service",
+      "icon": "❄️",
+      "tagline": "Professional AC Repair & Service at your Doorstep",
+      "price": 499,
+      "originalPrice": 599,
+      "rating": 4.8,
+      "reviewCount": 250,
+      "distanceLabel": "3.2 km away",
+      "providerId": "amit-sharma",
+      "status": "active",
+      "highlights": [
+        {
+          "icon": "🧑‍🔧",
+          "label": "Experienced Technicians"
+        },
+        {
+          "icon": "🧩",
+          "label": "Genuine Parts Used"
+        },
+        {
+          "icon": "⏱️",
+          "label": "On-time Service"
+        },
+        {
+          "icon": "✅",
+          "label": "Satisfaction Guaranteed"
+        }
+      ],
+      "includes": [
+        "AC General Service",
+        "AC Gas Refilling",
+        "AC Installation/Uninstallation",
+        "AC Repair & Maintenance"
+      ]
+    },
+    {
+      "id": "ac-install-service",
+      "categoryId": "ac-repair",
+      "name": "AC Installation",
+      "icon": "❄️",
+      "tagline": "Clean, safe split & window AC installation",
+      "price": 799,
+      "rating": 4.7,
+      "reviewCount": 180,
+      "distanceLabel": "3.2 km away",
+      "providerId": "amit-sharma",
+      "status": "active",
+      "highlights": [
+        {
+          "icon": "🧑‍🔧",
+          "label": "Experienced Technicians"
+        },
+        {
+          "icon": "🧩",
+          "label": "Genuine Parts Used"
+        },
+        {
+          "icon": "⏱️",
+          "label": "On-time Service"
+        },
+        {
+          "icon": "✅",
+          "label": "Satisfaction Guaranteed"
+        }
+      ],
+      "includes": [
+        "Wall Mounting",
+        "Copper Piping",
+        "Gas Charging",
+        "Test Run & Demo"
+      ]
+    },
+    {
+      "id": "ac-gas-service",
+      "categoryId": "ac-repair",
+      "name": "AC Gas Refilling",
+      "icon": "❄️",
+      "tagline": "Restore full cooling with a proper gas top-up",
+      "price": 599,
+      "originalPrice": 699,
+      "rating": 4.8,
+      "reviewCount": 210,
+      "distanceLabel": "3.2 km away",
+      "providerId": "amit-sharma",
+      "status": "active",
+      "highlights": [
+        {
+          "icon": "🧑‍🔧",
+          "label": "Experienced Technicians"
+        },
+        {
+          "icon": "🧩",
+          "label": "Genuine Parts Used"
+        },
+        {
+          "icon": "⏱️",
+          "label": "On-time Service"
+        },
+        {
+          "icon": "✅",
+          "label": "Satisfaction Guaranteed"
+        }
+      ],
+      "includes": [
+        "Leak Check",
+        "Gas Refilling",
+        "Pressure Test",
+        "Cooling Check"
+      ]
+    },
+    {
+      "id": "ac-maintenance-service",
+      "categoryId": "ac-repair",
+      "name": "AC Annual Maintenance",
+      "icon": "❄️",
+      "tagline": "Keep your AC running efficiently all year",
+      "price": 899,
+      "rating": 4.9,
+      "reviewCount": 150,
+      "distanceLabel": "3.2 km away",
+      "providerId": "amit-sharma",
+      "status": "active",
+      "highlights": [
+        {
+          "icon": "🧑‍🔧",
+          "label": "Experienced Technicians"
+        },
+        {
+          "icon": "🧩",
+          "label": "Genuine Parts Used"
+        },
+        {
+          "icon": "⏱️",
+          "label": "On-time Service"
+        },
+        {
+          "icon": "✅",
+          "label": "Satisfaction Guaranteed"
+        }
+      ],
+      "includes": [
+        "Filter Cleaning",
+        "Coil Cleaning",
+        "Gas Level Check",
+        "Full Diagnostics"
+      ]
+    },
+    {
+      "id": "home-cleaning-service",
+      "categoryId": "home-cleaning",
+      "name": "Home Cleaning",
+      "icon": "🧹",
+      "tagline": "Deep cleaning for your entire home, done right",
+      "price": 349,
+      "originalPrice": 399,
+      "rating": 4.7,
+      "reviewCount": 180,
+      "distanceLabel": "8-10 km",
+      "providerId": "sunita-devi",
+      "status": "active",
+      "highlights": [
+        {
+          "icon": "🧑‍🔧",
+          "label": "Trained Professionals"
+        },
+        {
+          "icon": "🧴",
+          "label": "Eco-friendly Products"
+        },
+        {
+          "icon": "⏱️",
+          "label": "On-time Service"
+        },
+        {
+          "icon": "✅",
+          "label": "Satisfaction Guaranteed"
+        }
+      ],
+      "includes": [
+        "Kitchen & Bathroom Deep Clean",
+        "Dusting & Mopping",
+        "Window & Glass Cleaning",
+        "Sofa & Carpet Vacuuming"
+      ]
+    },
+    {
+      "id": "plumbing-service",
+      "categoryId": "plumbing",
+      "name": "Plumbing Service",
+      "icon": "🔧",
+      "tagline": "Leak fixes, fittings & installations by experts",
+      "price": 399,
+      "rating": 4.6,
+      "reviewCount": 140,
+      "distanceLabel": "6-9 km",
+      "providerId": "rakesh-kumar",
+      "status": "active",
+      "highlights": [
+        {
+          "icon": "🧑‍🔧",
+          "label": "Licensed Plumbers"
+        },
+        {
+          "icon": "🧩",
+          "label": "Genuine Parts Used"
+        },
+        {
+          "icon": "⏱️",
+          "label": "On-time Service"
+        },
+        {
+          "icon": "✅",
+          "label": "Satisfaction Guaranteed"
+        }
+      ],
+      "includes": [
+        "Leak Detection & Repair",
+        "Tap & Pipe Fitting",
+        "Bathroom Fixture Installation",
+        "Drain Cleaning"
+      ]
+    },
+    {
+      "id": "electrician-service",
+      "categoryId": "electrician",
+      "name": "Electrician Visit",
+      "icon": "⚡",
+      "tagline": "Wiring, switches & appliance fixes, safely done",
+      "price": 299,
+      "originalPrice": 349,
+      "rating": 4.7,
+      "reviewCount": 210,
+      "distanceLabel": "5-7 km",
+      "providerId": "rakesh-kumar",
+      "status": "active",
+      "highlights": [
+        {
+          "icon": "🧑‍🔧",
+          "label": "Certified Electricians"
+        },
+        {
+          "icon": "🧩",
+          "label": "Genuine Parts Used"
+        },
+        {
+          "icon": "⏱️",
+          "label": "On-time Service"
+        },
+        {
+          "icon": "✅",
+          "label": "Satisfaction Guaranteed"
+        }
+      ],
+      "includes": [
+        "Switch & Socket Repair",
+        "Wiring Inspection",
+        "Fan & Light Installation",
+        "MCB & Fuse Fixes"
+      ]
+    }
+  ],
+  "bookings": [
+    {
+      "id": "BK12346",
+      "orderId": "ORD1001",
+      "serviceId": "home-cleaning-service",
+      "providerId": "sunita-devi",
+      "customerId": "cust-1",
+      "status": "Accepted",
+      "date": "2026-09-09",
+      "time": "10:00 AM – 12:00 PM",
+      "address": {
+        "label": "Home",
+        "line": "221B, Baker Street, Connaught Place, New Delhi - 110001"
+      },
+      "issue": "",
+      "amount": 349,
+      "createdAt": "2026-09-09T05:24:34.762Z",
+      "statusHistory": {
+        "Pending": "2026-09-09T05:24:34.762Z",
+        "Accepted": "2026-09-09T05:24:38.278Z"
+      },
+      "reviewed": false
+    },
+    {
+      "id": "BK12345",
+      "serviceId": "ac-repair-service",
+      "providerId": "amit-sharma",
+      "customerId": "cust-1",
+      "status": "Accepted",
+      "date": "2026-09-05",
+      "time": "10:00 AM – 12:00 PM",
+      "address": {
+        "label": "Home",
+        "line": "221B, Baker Street, Connaught Place, New Delhi - 110001"
+      },
+      "issue": "AC is not cooling properly and making some weird noise.",
+      "amount": 499,
+      "createdAt": "2026-09-02T09:30:00.000Z",
+      "statusHistory": {
+        "Pending": "2026-09-02T09:30:00.000Z",
+        "Accepted": "2026-09-02T09:45:00.000Z"
+      },
+      "reviewed": false
+    },
+    {
+      "id": "BK12341",
+      "serviceId": "ac-install-service",
+      "providerId": "amit-sharma",
+      "customerId": "cust-1",
+      "status": "Accepted",
+      "date": "2026-09-10",
+      "time": "12:00 PM – 02:00 PM",
+      "address": {
+        "label": "Home",
+        "line": "221B, Baker Street, Connaught Place, New Delhi - 110001"
+      },
+      "issue": "Need a new split AC installed in the bedroom.",
+      "amount": 799,
+      "createdAt": "2026-09-07T14:10:00.000Z",
+      "statusHistory": {
+        "Pending": "2026-09-07T14:10:00.000Z",
+        "Accepted": "2026-09-09T03:57:28.640Z"
+      },
+      "reviewed": false
+    },
+    {
+      "id": "BK12344",
+      "serviceId": "home-cleaning-service",
+      "providerId": "sunita-devi",
+      "customerId": "cust-1",
+      "status": "Accepted",
+      "date": "2026-09-06",
+      "time": "11:00 AM – 01:00 PM",
+      "address": {
+        "label": "Home",
+        "line": "221B, Baker Street, Connaught Place, New Delhi - 110001"
+      },
+      "issue": "Full home deep cleaning before a family visit.",
+      "amount": 349,
+      "createdAt": "2026-09-01T08:10:00.000Z",
+      "statusHistory": {
+        "Pending": "2026-09-01T08:10:00.000Z",
+        "Accepted": "2026-09-01T08:30:00.000Z"
+      },
+      "reviewed": false
+    },
+    {
+      "id": "BK12343",
+      "serviceId": "plumbing-service",
+      "providerId": "rakesh-kumar",
+      "customerId": "cust-1",
+      "status": "Completed",
+      "date": "2026-08-18",
+      "time": "02:00 PM – 04:00 PM",
+      "address": {
+        "label": "Home",
+        "line": "221B, Baker Street, Connaught Place, New Delhi - 110001"
+      },
+      "issue": "Kitchen sink pipe leaking under the counter.",
+      "amount": 399,
+      "createdAt": "2026-08-17T07:00:00.000Z",
+      "statusHistory": {
+        "Pending": "2026-08-17T07:00:00.000Z",
+        "Accepted": "2026-08-17T07:20:00.000Z",
+        "In Progress": "2026-08-18T14:05:00.000Z",
+        "Completed": "2026-08-18T15:10:00.000Z"
+      },
+      "reviewed": true,
+      "review": {
+        "rating": 5,
+        "text": "Great service! Technician was professional and fixed the issue."
+      }
+    }
+  ],
+  "messages": {
+    "BK12345": [
+      {
+        "from": "provider",
+        "text": "Hi, I have accepted your request. I will reach your location by 10:00 AM.",
+        "time": "2026-09-02T09:45:00.000Z"
+      },
+      {
+        "from": "user",
+        "text": "Great! See you then.",
+        "time": "2026-09-02T09:46:00.000Z"
+      }
+    ],
+    "BK12344": [
+      {
+        "from": "provider",
+        "text": "Booking confirmed! I'll bring all cleaning supplies.",
+        "time": "2026-09-01T08:31:00.000Z"
+      }
+    ],
+    "BK12343": [
+      {
+        "from": "provider",
+        "text": "Sure, I will check and let you know.",
+        "time": "2026-08-17T07:21:00.000Z"
+      },
+      {
+        "from": "user",
+        "text": "I am facing a leak under my kitchen sink. Please check and repair.",
+        "time": "2026-08-17T07:25:00.000Z"
+      },
+      {
+        "from": "provider",
+        "text": "Work completed. Please check.",
+        "time": "2026-08-18T15:00:00.000Z"
+      },
+      {
+        "from": "user",
+        "text": "Thank you! Great service.",
+        "time": "2026-08-18T15:05:00.000Z"
+      }
+    ],
+    "BK12346": [
+      {
+        "from": "provider",
+        "text": "Hi, I have accepted your request. I will reach your location on time.",
+        "time": "2026-09-09T05:24:38.285Z"
+      }
+    ],
+    "BK12341": [
+      {
+        "from": "user",
+        "text": "hi",
+        "time": "2026-09-12T12:36:49.145Z"
+      }
+    ]
+  },
+  "activities": [
+    {
+      "id": "act-8",
+      "type": "booking",
+      "message": "Booking #BK12346 (Home Cleaning) marked Accepted",
+      "time": "2026-09-09T05:24:38.280Z"
+    },
+    {
+      "id": "act-7",
+      "type": "booking",
+      "message": "New order received: #ORD1001 — 1 service",
+      "time": "2026-09-09T05:24:34.770Z"
+    },
+    {
+      "id": "act-6",
+      "type": "booking",
+      "message": "Booking #BK12341 (AC Installation) marked Accepted",
+      "time": "2026-09-09T03:57:28.641Z"
+    },
+    {
+      "id": "act-5",
+      "type": "provider",
+      "message": "Provider approved: Meena Kapoor (Painting)",
+      "time": "2026-09-09T03:56:20.135Z"
+    },
+    {
+      "id": "act-1",
+      "type": "provider",
+      "message": "New provider registration: Meena Kapoor (Painting)",
+      "time": "2026-09-06T11:30:00.000Z"
+    },
+    {
+      "id": "act-2",
+      "type": "review",
+      "message": "New review received: 5★ for Plumbing Service",
+      "time": "2026-08-18T15:10:00.000Z"
+    },
+    {
+      "id": "act-3",
+      "type": "booking",
+      "message": "New booking received: #BK12344 — Home Cleaning",
+      "time": "2026-09-01T08:10:00.000Z"
+    },
+    {
+      "id": "act-4",
+      "type": "provider",
+      "message": "Provider approved: Amit Sharma (AC Repair & Service)",
+      "time": "2026-06-12T09:05:00.000Z"
+    }
+  ],
+  "notifications": [
+    {
+      "id": "notif-5",
+      "recipientType": "provider",
+      "recipientId": "amit-sharma",
+      "type": "message",
+      "title": "New message from Riya Malhotra",
+      "message": "hi",
+      "bookingId": "BK12341",
+      "read": false,
+      "time": "2026-09-12T12:36:49.146Z"
+    },
+    {
+      "id": "notif-4",
+      "recipientType": "customer",
+      "recipientId": "cust-1",
+      "type": "message",
+      "title": "New message from Sunita Devi",
+      "message": "Hi, I have accepted your request. I will reach your location on time.",
+      "bookingId": "BK12346",
+      "read": false,
+      "time": "2026-09-09T05:24:38.288Z"
+    },
+    {
+      "id": "notif-3",
+      "recipientType": "customer",
+      "recipientId": "cust-1",
+      "type": "booking",
+      "title": "Booking Accepted",
+      "message": "Sunita Devi accepted your Home Cleaning request",
+      "bookingId": "BK12346",
+      "read": false,
+      "time": "2026-09-09T05:24:38.282Z"
+    },
+    {
+      "id": "notif-2",
+      "recipientType": "provider",
+      "recipientId": "sunita-devi",
+      "type": "booking",
+      "title": "New booking request",
+      "message": "Riya Malhotra requested Home Cleaning for 2026-09-09",
+      "bookingId": "BK12346",
+      "read": false,
+      "time": "2026-09-09T05:24:34.764Z"
+    },
+    {
+      "id": "notif-1",
+      "recipientType": "customer",
+      "recipientId": "cust-1",
+      "type": "booking",
+      "title": "Booking Accepted",
+      "message": "Amit Sharma accepted your AC Installation request",
+      "bookingId": "BK12341",
+      "read": true,
+      "time": "2026-09-09T03:57:28.641Z"
+    }
+  ],
+  "counters": {
+    "booking": 12347,
+    "service": 1,
+    "activity": 9,
+    "order": 1002,
+    "notification": 6
+  }
+}

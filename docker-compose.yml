@@ -1,0 +1,48 @@
+services:
+  server:
+    build: ./server
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: "4000"
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      DATA_FILE: /app/data/data.json
+    volumes:
+      - server_data:/app/data
+
+  local-service-app:
+    build:
+      context: ./local-service-app
+      args:
+        VITE_SERVER_URL: ${VITE_SERVER_URL}
+    restart: unless-stopped
+    ports:
+      - "5175:80"
+    depends_on:
+      - server
+
+  provider-app:
+    build:
+      context: ./provider-app
+      args:
+        VITE_SERVER_URL: ${VITE_SERVER_URL}
+    restart: unless-stopped
+    ports:
+      - "5174:80"
+    depends_on:
+      - server
+
+  admin-dashboard:
+    build:
+      context: ./admin-dashboard
+      args:
+        VITE_SERVER_URL: ${VITE_SERVER_URL}
+    restart: unless-stopped
+    ports:
+      - "5177:80"
+    depends_on:
+      - server
+
+volumes:
+  server_data:

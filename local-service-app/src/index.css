@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: "Inter", system-ui, sans-serif;
+  background: #fff;
+  color: #17172b;
+}
+
+/* Mobile: fills the browser window edge-to-edge, no phone mockup.
+   Desktop (lg): a real website — full-width header, narrow centered
+   content column (like most mobile-first marketplace apps), page scrolls
+   normally instead of an internal fixed-height pane. */
+.app-shell {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.phone-frame {
+  width: 100%;
+  background: #fff;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.screen {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 1024px) {
+  .app-shell {
+    height: auto;
+    min-height: 100dvh;
+    background: #f5f6fa;
+  }
+  .app-body {
+    justify-content: center;
+    overflow-y: auto;
+    padding: 28px 16px 48px;
+  }
+  .phone-frame {
+    max-width: 720px;
+    flex: none;
+    height: auto;
+    min-height: calc(100dvh - 56px - 76px);
+    border-radius: 20px;
+    border: 1px solid #eef0f5;
+    box-shadow: 0 4px 28px -10px rgba(20, 20, 43, 0.1);
+  }
+  .phone-frame .screen {
+    overflow: visible;
+    flex: none;
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+.toast-anim {
+  animation: toast-in 0.25s ease-out;
+}

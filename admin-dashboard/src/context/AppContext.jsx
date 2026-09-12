@@ -1,0 +1,171 @@
+import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { api } from "../api";
+import { socket } from "../socket";
+
+const AppContext = createContext(null);
+
+function upsertById(list, item) {
+  const idx = list.findIndex((x) => x.id === item.id);
+  if (idx === -1) return [item, ...list];
+  const copy = [...list];
+  copy[idx] = item;
+  return copy;
+}
+
+export function AppProvider({ children }) {
+  const [overview, setOverview] = useState(null);
+  const [providers, setProviders] = useState([]);
+  const [services, setServices] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [connected, setConnected] = useState(socket.connected);
+  const [toast, setToast] = useState(null);
+  const refreshTimer = useRef(null);
+
+  const loadAll = useCallback(async () => {
+    const [overviewData, providerData, serviceData, bookingData, activityData] = await Promise.all([
+      api.getOverview(),
+      api.listProviders(),
+      api.listServices(),
+      api.listBookings(),
+      api.listActivities(20),
+    ]);
+    setOverview(overviewData);
+    setProviders(providerData);
+    setServices(serviceData);
+    setBookings(bookingData);
+    setActivities(activityData);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await loadAll();
+      } catch (e) {
+        console.error("Failed to load admin data", e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadAll]);
+
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => {
+      loadAll().catch((e) => console.error("Refresh failed", e));
+    }, 350);
+  }, [loadAll]);
+
+  useEffect(() => {
+    const onConnect = () => setConnected(true);
+    const onDisconnect = () => setConnected(false);
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+    socket.connect();
+    return () => {
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onBookingChanged = () => scheduleRefresh();
+    const onServiceChanged = (service) => {
+      setServices((prev) => upsertById(prev, service));
+      scheduleRefresh();
+    };
+    const onProviderUpdated = (provider) => {
+      setProviders((prev) => upsertById(prev, provider));
+      scheduleRefresh();
+    };
+    const onActivityCreated = (activity) => {
+      if (!activity) return;
+      setActivities((prev) => [activity, ...prev].slice(0, 20));
+    };
+
+    socket.on("booking:created", onBookingChanged);
+    socket.on("booking:updated", onBookingChanged);
+    socket.on("service:created", onServiceChanged);
+    socket.on("service:updated", onServiceChanged);
+    socket.on("provider:updated", onProviderUpdated);
+    socket.on("activity:created", onActivityCreated);
+    return () => {
+      socket.off("booking:created", onBookingChanged);
+      socket.off("booking:updated", onBookingChanged);
+      socket.off("service:created", onServiceChanged);
+      socket.off("service:updated", onServiceChanged);
+      socket.off("provider:updated", onProviderUpdated);
+      socket.off("activity:created", onActivityCreated);
+    };
+  }, [scheduleRefresh]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2200);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const showToast = useCallback((message) => setToast(message), []);
+
+  const approveProvider = useCallback(
+    async (id) => {
+      const provider = await api.setProviderVerification(id, "approved");
+      setProviders((prev) => upsertById(prev, provider));
+      showToast("Provider approved");
+      scheduleRefresh();
+    },
+    [showToast, scheduleRefresh]
+  );
+
+  const rejectProvider = useCallback(
+    async (id) => {
+      const provider = await api.setProviderVerification(id, "rejected");
+      setProviders((prev) => upsertById(prev, provider));
+      showToast("Provider rejected");
+      scheduleRefresh();
+    },
+    [showToast, scheduleRefresh]
+  );
+
+  const toggleServiceStatus = useCallback(
+    async (id, currentStatus) => {
+      const nextStatus = currentStatus === "active" ? "inactive" : "active";
+      const service = await api.setServiceStatus(id, nextStatus);
+      setServices((prev) => upsertById(prev, service));
+      showToast(`Service set to ${nextStatus}`);
+      scheduleRefresh();
+    },
+    [showToast, scheduleRefresh]
+  );
+
+  const value = useMemo(
+    () => ({
+      overview,
+      providers,
+      services,
+      bookings,
+      activities,
+      loading,
+      connected,
+      toast,
+      showToast,
+      approveProvider,
+      rejectProvider,
+      toggleServiceStatus,
+    }),
+    [overview, providers, services, bookings, activities, loading, connected, toast, showToast, approveProvider, rejectProvider, toggleServiceStatus]
+  );
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+}
+
+export function useApp() {
+  const ctx = useContext(AppContext);
+  if (!ctx) throw new Error("useApp must be used within AppProvider");
+  return ctx;
+}
