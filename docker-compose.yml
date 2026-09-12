@@ -44,22 +44,5 @@ services:
     depends_on:
       - server
 
-  caddy:
-    build: ./caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - server
-      - local-service-app
-      - provider-app
-      - admin-dashboard
-
 volumes:
   server_data:
-  caddy_data:
-  caddy_config:
