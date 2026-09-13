@@ -2,17 +2,23 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { ChevronRightIcon, StarIcon, ShieldCheckIcon, EditIcon, LogoutIcon } from "../components/icons";
 
-const menuItems = [
-  { icon: "💳", label: "Payout Details" },
-  { icon: "📄", label: "Documents & KYC", badge: "Verified" },
-  { icon: "🗓️", label: "Manage Availability" },
-  { icon: "🔔", label: "Notification Settings" },
-  { icon: "❓", label: "Help & Support" },
-];
+const verificationBadges = {
+  approved: { text: "Verified", className: "bg-emerald-100 text-emerald-700" },
+  pending: { text: "Pending", className: "bg-amber-100 text-amber-700" },
+  rejected: { text: "Rejected", className: "bg-red-100 text-red-700" },
+};
 
 export default function ProfileScreen() {
   const navigate = useNavigate();
   const { provider: providerProfile, showToast, logout } = useApp();
+
+  const menuItems = [
+    { icon: "💳", label: "Payout Details" },
+    { icon: "📄", label: "Documents & KYC", path: "/profile/documents", badge: verificationBadges[providerProfile.verificationStatus] },
+    { icon: "🗓️", label: "Manage Availability" },
+    { icon: "🔔", label: "Notification Settings" },
+    { icon: "❓", label: "Help & Support" },
+  ];
 
   return (
     <div className="flex flex-1 flex-col pb-4 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-16 lg:pt-8">
@@ -56,14 +62,14 @@ export default function ProfileScreen() {
         {menuItems.map((item) => (
           <button
             key={item.label}
-            onClick={() => showToast(`${item.label} coming soon`)}
+            onClick={() => (item.path ? navigate(item.path) : showToast(`${item.label} coming soon`))}
             className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50 lg:px-5 lg:py-4"
           >
             <span className="text-lg">{item.icon}</span>
             <span className="flex-1 text-[13px] font-medium text-gray-700">{item.label}</span>
             {item.badge && (
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                {item.badge}
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${item.badge.className}`}>
+                {item.badge.text}
               </span>
             )}
             <ChevronRightIcon width={16} height={16} className="text-gray-300" />
