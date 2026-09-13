@@ -37,7 +37,10 @@ export function AppProvider({ children }) {
   const [toast, setToast] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [notificationPrefs, setNotificationPrefs] = useState(loadNotificationPrefs);
+  const [ringingRequest, setRingingRequest] = useState(null);
   const loadedThreads = useRef(new Set());
+
+  const dismissRinging = useCallback(() => setRingingRequest(null), []);
 
   const updateNotificationPref = useCallback((type, enabled) => {
     setNotificationPrefs((prev) => {
@@ -152,10 +155,19 @@ export function AppProvider({ children }) {
     const onBookingCreated = (booking) => {
       if (booking.providerId !== providerId) return;
       setRequests((prev) => upsertById(prev, booking));
+      if (booking.status === "Pending") setRingingRequest(booking);
     };
     const onBookingUpdated = (booking) => {
-      if (booking.providerId !== providerId) return;
+      if (booking.providerId !== providerId) {
+        // Reassigned away to another provider — stop showing/ringing it here.
+        setRequests((prev) => prev.filter((r) => r.id !== booking.id));
+        setRingingRequest((prev) => (prev?.id === booking.id ? null : prev));
+        return;
+      }
       setRequests((prev) => upsertById(prev, booking));
+      if (booking.status !== "Pending") {
+        setRingingRequest((prev) => (prev?.id === booking.id ? null : prev));
+      }
       if (booking.status === "Completed") refreshEarnings();
     };
     const onMessageCreated = ({ bookingId, message }) => {
@@ -207,6 +219,7 @@ export function AppProvider({ children }) {
     async (id) => {
       const booking = await api.updateBookingStatus(id, "Accepted");
       setRequests((prev) => upsertById(prev, booking));
+      setRingingRequest((prev) => (prev?.id === id ? null : prev));
       showToast("Request accepted");
     },
     [showToast]
@@ -214,9 +227,12 @@ export function AppProvider({ children }) {
 
   const rejectRequest = useCallback(
     async (id) => {
-      const booking = await api.updateBookingStatus(id, "Rejected");
-      setRequests((prev) => upsertById(prev, booking));
-      showToast("Request rejected");
+      // The booking may get handed to another provider right away — either
+      // way it's no longer this provider's to act on, so drop it locally.
+      await api.updateBookingStatus(id, "Rejected");
+      setRequests((prev) => prev.filter((r) => r.id !== id));
+      setRingingRequest((prev) => (prev?.id === id ? null : prev));
+      showToast("Request declined");
     },
     [showToast]
   );
@@ -322,6 +338,8 @@ export function AppProvider({ children }) {
       notifications,
       notificationPrefs,
       updateNotificationPref,
+      ringingRequest,
+      dismissRinging,
       markNotificationRead,
       markAllNotificationsRead,
     }),
@@ -350,6 +368,8 @@ export function AppProvider({ children }) {
       notifications,
       notificationPrefs,
       updateNotificationPref,
+      ringingRequest,
+      dismissRinging,
       markNotificationRead,
       markAllNotificationsRead,
     ]

@@ -16,6 +16,7 @@ import NotificationSettingsScreen from "./screens/NotificationSettingsScreen";
 import HelpSupportScreen from "./screens/HelpSupportScreen";
 import ChatScreen from "./screens/ChatScreen";
 import NotificationsScreen from "./screens/NotificationsScreen";
+import RingingOverlay from "./components/RingingOverlay";
 
 function AppRoutes() {
   const { provider, authLoading } = useApp();
@@ -37,7 +38,9 @@ function AppRoutes() {
   if (!provider) return <LoginScreen />;
 
   return (
-    <Routes>
+    <>
+      <RingingOverlay />
+      <Routes>
       <Route element={<MainLayout />}>
         <Route path="/dashboard" element={<DashboardScreen />} />
         <Route path="/requests" element={<RequestsScreen />} />
@@ -59,7 +62,8 @@ function AppRoutes() {
       </Route>
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
-    </Routes>
+      </Routes>
+    </>
   );
 }
 

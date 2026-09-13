@@ -481,6 +481,83 @@ async function updateBookingStatus(id, status) {
   return fetchBookingWithRelations(id);
 }
 
+// ---- dispatch: ring one provider, and if they don't respond (timeout or
+// explicit reject), hand the booking to another active provider in the same
+// category rather than leaving the customer stuck ----
+
+async function findAlternativeProviderService(categorySlug, excludeProviderIds) {
+  const categoryUuid = await getCategoryUuidBySlug(categorySlug);
+  if (!categoryUuid) return null;
+  const { services } = await query(
+    `query($categoryId: UUID!) {
+      services(where: { category: { id: { eq: $categoryId } }, status: { eq: "active" } }) {
+        id price provider { id live }
+      }
+    }`,
+    { categoryId: categoryUuid }
+  );
+  const candidate = services.find((s) => s.provider && !excludeProviderIds.includes(s.provider.id));
+  if (!candidate) return null;
+  return { serviceId: candidate.id, providerId: candidate.provider.id, amount: candidate.price };
+}
+
+// Tries to move a still-pending booking to another provider in the same
+// category. If none are left, the booking is marked Rejected for real and
+// the customer is told. Returns { reassigned, booking }.
+async function reassignBooking(bookingId, excludeProviderIds) {
+  const booking = await fetchBookingWithRelations(bookingId);
+  if (!booking || booking.status !== "Pending") return { reassigned: false, booking };
+
+  // Always exclude the booking's current provider too — reassigning it to
+  // itself is never meaningful, regardless of what the caller passed in.
+  const excludeIds = [...new Set([...excludeProviderIds, booking.providerId])];
+  const categorySlug = booking.service?.categoryId;
+  const candidate = categorySlug ? await findAlternativeProviderService(categorySlug, excludeIds) : null;
+
+  if (candidate) {
+    await mutate(
+      `mutation($id: UUID!, $serviceId: UUID!, $providerId: UUID!, $amount: Int!) {
+        booking_update(id: $id, data: { serviceId: $serviceId, providerId: $providerId, amount: $amount })
+      }`,
+      { id: bookingId, serviceId: candidate.serviceId, providerId: candidate.providerId, amount: candidate.amount }
+    );
+    await logActivity("booking", `Booking #${bookingId} reassigned to another provider after no response`);
+    const updated = await fetchBookingWithRelations(bookingId);
+    await addNotification({
+      recipientType: "provider",
+      recipientId: candidate.providerId,
+      type: "booking",
+      title: "New booking request",
+      message: `${updated.customer?.name || "A customer"} requested ${updated.service?.name || "a service"} for ${updated.date}`,
+      bookingId,
+    });
+    return { reassigned: true, booking: updated };
+  }
+
+  const now = new Date().toISOString();
+  await mutate(`mutation($id: UUID!, $status: String!) { booking_update(id: $id, data: { status: $status }) }`, {
+    id: bookingId,
+    status: "Rejected",
+  });
+  await mutate(
+    `mutation($bookingId: UUID!, $status: String!, $at: Timestamp!) {
+      bookingStatusEvent_insert(data: { bookingId: $bookingId, status: $status, at: $at })
+    }`,
+    { bookingId, status: "Rejected", at: now }
+  );
+  await logActivity("booking", `Booking #${bookingId} rejected — no providers available`);
+  const updated = await fetchBookingWithRelations(bookingId);
+  await addNotification({
+    recipientType: "customer",
+    recipientId: updated.customerId,
+    type: "booking",
+    title: "Booking Rejected",
+    message: `No providers were available for your ${updated.service?.name || "booking"} request. Please try again later.`,
+    bookingId,
+  });
+  return { reassigned: false, booking: updated };
+}
+
 async function addMessage(bookingId, from, text) {
   const now = new Date().toISOString();
   await mutate(
@@ -863,6 +940,7 @@ module.exports = {
   createBooking,
   createOrder,
   updateBookingStatus,
+  reassignBooking,
   addMessage,
   addReview,
   addProviderService,

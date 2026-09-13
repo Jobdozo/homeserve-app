@@ -58,6 +58,35 @@ function simulateProviderIfNeeded(booking) {
   }, AUTO_ACCEPT_DELAY);
 }
 
+// A "live" provider (a real Provider App instance, not a simulated demo one)
+// gets 90 seconds to accept a booking before it's automatically handed to
+// another active provider in the same category — same idea as ride-hailing
+// dispatch, so a customer never gets stuck waiting on one unresponsive provider.
+const RING_TIMEOUT_MS = 90 * 1000;
+
+async function dispatchBooking(booking, triedProviderIds = [booking.providerId]) {
+  const provider = await store.getProvider(booking.providerId);
+  if (!provider || !provider.live) {
+    simulateProviderIfNeeded(booking);
+    return;
+  }
+  setTimeout(async () => {
+    try {
+      const current = await store.getBooking(booking.id);
+      if (!current || current.status !== "Pending") return; // already accepted/rejected/cancelled
+      const result = await store.reassignBooking(booking.id, triedProviderIds);
+      io.emit("booking:updated", result.booking);
+      io.emit("activity:created", (await store.listActivities(1))[0]);
+      if (result.reassigned) {
+        io.emit("booking:created", result.booking);
+        await dispatchBooking(result.booking, [...triedProviderIds, result.booking.providerId]);
+      }
+    } catch (e) {
+      console.error("dispatchBooking timeout failed:", e);
+    }
+  }, RING_TIMEOUT_MS);
+}
+
 function simulateReplyIfNeeded(bookingId, from) {
   if (from !== "user") return;
   setTimeout(async () => {
@@ -262,7 +291,7 @@ app.post("/api/bookings", auth.requireAuth("customer"), ah(async (req, res) => {
   const booking = await store.createBooking({ ...req.body, customerId: req.user.id });
   io.emit("booking:created", booking);
   io.emit("activity:created", (await store.listActivities(1))[0]);
-  simulateProviderIfNeeded(booking);
+  dispatchBooking(booking);
   res.status(201).json(booking);
 }));
 
@@ -271,7 +300,7 @@ app.post("/api/orders", auth.requireAuth("customer"), ah(async (req, res) => {
   const bookings = await store.createOrder({ ...req.body, customerId: req.user.id });
   bookings.forEach((b) => {
     io.emit("booking:created", b);
-    simulateProviderIfNeeded(b);
+    dispatchBooking(b);
   });
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.status(201).json(bookings);
@@ -289,6 +318,19 @@ app.patch("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
     if (existing.customerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
     if (status !== "Cancelled") return res.status(403).json({ error: "Customers can only cancel bookings" });
   }
+  // A provider declining doesn't fail the booking outright — try handing it
+  // to another provider in the same category first, same as a ring timeout.
+  if (req.user.role === "provider" && status === "Rejected" && existing.status === "Pending") {
+    const result = await store.reassignBooking(req.params.id, [req.user.id]);
+    io.emit("booking:updated", result.booking);
+    io.emit("activity:created", (await store.listActivities(1))[0]);
+    if (result.reassigned) {
+      io.emit("booking:created", result.booking);
+      dispatchBooking(result.booking, [req.user.id, result.booking.providerId]);
+    }
+    return res.json(result.booking);
+  }
+
   const booking = await store.updateBookingStatus(req.params.id, status);
   io.emit("booking:updated", booking);
   io.emit("activity:created", (await store.listActivities(1))[0]);
