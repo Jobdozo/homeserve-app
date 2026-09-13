@@ -1,10 +1,21 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { api } from "../api";
+import { api, setAuthToken } from "../api";
 import { socket } from "../socket";
 import { timeSlots, defaultAddress } from "../data/mockData";
 
 const AppContext = createContext(null);
 const CART_KEY = "homeserve-cart-v1";
+const AUTH_KEY = "tikdum-customer-auth-v1";
+
+function loadAuth() {
+  try {
+    const raw = localStorage.getItem(AUTH_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    // ignore corrupt storage
+  }
+  return null;
+}
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -29,7 +40,9 @@ function upsertById(list, item) {
 }
 
 export function AppProvider({ children }) {
-  const [customer, setCustomer] = useState(null);
+  const initialAuth = loadAuth();
+  const [customer, setCustomer] = useState(initialAuth?.user || null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [providers, setProviders] = useState({});
   const [categories, setCategories] = useState([]);
   const [services, setServices] = useState([]);
@@ -46,18 +59,79 @@ export function AppProvider({ children }) {
     localStorage.setItem(CART_KEY, JSON.stringify(cart));
   }, [cart]);
 
+  const login = useCallback((token, user) => {
+    setAuthToken(token);
+    localStorage.setItem(AUTH_KEY, JSON.stringify({ token, user }));
+    setCustomer(user);
+  }, []);
+
+  const logout = useCallback(() => {
+    setAuthToken(null);
+    localStorage.removeItem(AUTH_KEY);
+    setCustomer(null);
+    setBookings([]);
+    setMessages({});
+    setNotifications([]);
+    loadedThreads.current = new Set();
+  }, []);
+
+  // Restore + validate a persisted session on first load.
   useEffect(() => {
     let cancelled = false;
-    async function load() {
+    async function restore() {
+      if (!initialAuth?.token) {
+        setAuthLoading(false);
+        return;
+      }
+      setAuthToken(initialAuth.token);
+      try {
+        const { user } = await api.me();
+        if (cancelled) return;
+        setCustomer(user);
+      } catch (e) {
+        if (!cancelled) logout();
+      } finally {
+        if (!cancelled) setAuthLoading(false);
+      }
+    }
+    restore();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Public catalog data — loads regardless of auth so browsing works pre-login.
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCatalog() {
       try {
         const boot = await api.bootstrap();
         if (cancelled) return;
-        setCustomer(boot.customer);
         setProviders(Object.fromEntries(boot.providers.map((p) => [p.id, p])));
         setCategories(boot.categories);
         setServices(boot.services);
+      } catch (e) {
+        console.error("Failed to load catalog", e);
+      }
+    }
+    loadCatalog();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-        const myBookings = await api.listBookings(boot.customer.id);
+  // Per-customer data — only once logged in.
+  useEffect(() => {
+    if (!customer) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    async function loadCustomerData() {
+      setLoading(true);
+      try {
+        const myBookings = await api.listBookings();
         if (cancelled) return;
         setBookings(myBookings);
 
@@ -68,7 +142,7 @@ export function AppProvider({ children }) {
         threads.forEach(([id]) => loadedThreads.current.add(id));
         setMessages(Object.fromEntries(threads));
 
-        const myNotifications = await api.listNotifications("customer", boot.customer.id);
+        const myNotifications = await api.listNotifications();
         if (cancelled) return;
         setNotifications(myNotifications);
       } catch (e) {
@@ -77,11 +151,11 @@ export function AppProvider({ children }) {
         if (!cancelled) setLoading(false);
       }
     }
-    load();
+    loadCustomerData();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [customer]);
 
   useEffect(() => {
     const onConnect = () => setConnected(true);
@@ -151,21 +225,11 @@ export function AppProvider({ children }) {
   const getProvider = useCallback((id) => providers[id], [providers]);
   const getBooking = useCallback((id) => bookings.find((b) => b.id === id), [bookings]);
 
-  const createBooking = useCallback(
-    async ({ serviceId, date, time, address, issue }) => {
-      const booking = await api.createBooking({
-        serviceId,
-        date,
-        time,
-        address,
-        issue,
-        customerId: customer?.id,
-      });
-      setBookings((prev) => upsertById(prev, booking));
-      return booking;
-    },
-    [customer]
-  );
+  const createBooking = useCallback(async ({ serviceId, date, time, address, issue }) => {
+    const booking = await api.createBooking({ serviceId, date, time, address, issue });
+    setBookings((prev) => upsertById(prev, booking));
+    return booking;
+  }, []);
 
   const cancelBooking = useCallback(async (id) => {
     const booking = await api.updateBookingStatus(id, "Cancelled");
@@ -185,7 +249,7 @@ export function AppProvider({ children }) {
   }, []);
 
   const sendMessage = useCallback((bookingId, text) => {
-    api.sendMessage(bookingId, "user", text).catch((e) => console.error("Failed to send message", e));
+    api.sendMessage(bookingId, text).catch((e) => console.error("Failed to send message", e));
   }, []);
 
   const submitReview = useCallback(async (bookingId, rating, text) => {
@@ -219,13 +283,13 @@ export function AppProvider({ children }) {
     async (address) => {
       if (cart.length === 0) return [];
       const items = cart.map(({ serviceId, date, time, issue }) => ({ serviceId, date, time, issue }));
-      const created = await api.createOrder({ items, address: address || defaultAddress, customerId: customer?.id });
+      const created = await api.createOrder({ items, address: address || defaultAddress });
       setBookings((prev) => created.reduce((acc, b) => upsertById(acc, b), prev));
       setCart([]);
       showToast(`Order placed! ${created.length} service${created.length > 1 ? "s" : ""} booked`);
       return created;
     },
-    [cart, customer, showToast]
+    [cart, showToast]
   );
 
   const markNotificationRead = useCallback(async (id) => {
@@ -235,13 +299,16 @@ export function AppProvider({ children }) {
 
   const markAllNotificationsRead = useCallback(async () => {
     if (!customer) return;
-    await api.markAllNotificationsRead("customer", customer.id);
+    await api.markAllNotificationsRead();
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   }, [customer]);
 
   const value = useMemo(
     () => ({
       customer,
+      authLoading,
+      login,
+      logout,
       providers,
       categories,
       services,
@@ -271,6 +338,9 @@ export function AppProvider({ children }) {
     }),
     [
       customer,
+      authLoading,
+      login,
+      logout,
       providers,
       categories,
       services,

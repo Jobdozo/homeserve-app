@@ -8,6 +8,8 @@ services:
       PORT: "4000"
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
       DATA_FILE: /app/data/data.json
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_PHONES: ${ADMIN_PHONES}
     volumes:
       - server_data:/app/data
 

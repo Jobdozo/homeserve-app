@@ -10,7 +10,7 @@ const menuItems = [
 ];
 
 export default function ProfileScreen() {
-  const { provider: providerProfile, showToast } = useApp();
+  const { provider: providerProfile, showToast, logout } = useApp();
 
   return (
     <div className="flex flex-1 flex-col pb-4 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-16 lg:pt-8">
@@ -70,7 +70,7 @@ export default function ProfileScreen() {
       </div>
 
       <button
-        onClick={() => showToast("Logged out (demo)")}
+        onClick={logout}
         className="mx-4 mt-4 flex items-center justify-center gap-2 rounded-2xl border border-red-200 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 lg:mx-0"
       >
         <LogoutIcon width={16} height={16} /> Logout

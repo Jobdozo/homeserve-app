@@ -11,7 +11,7 @@ const menuItems = [
 ];
 
 export default function ProfileScreen() {
-  const { customer, bookings, showToast } = useApp();
+  const { customer, bookings, showToast, logout } = useApp();
   const completed = bookings.filter((b) => b.status === "Completed").length;
 
   return (
@@ -61,7 +61,7 @@ export default function ProfileScreen() {
       </div>
 
       <button
-        onClick={() => showToast("Logged out (demo)")}
+        onClick={logout}
         className="mx-4 mt-4 rounded-2xl border border-red-200 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 lg:mx-0"
       >
         Logout

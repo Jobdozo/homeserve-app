@@ -16,9 +16,10 @@ function timeAgo(iso) {
 }
 
 export default function Topbar({ title, subtitle, onMenuClick }) {
-  const { activities, services, providers, bookings, showToast } = useApp();
+  const { activities, services, providers, bookings, logout } = useApp();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [query, setQuery] = useState("");
   const [showResults, setShowResults] = useState(false);
 
@@ -163,16 +164,31 @@ export default function Topbar({ title, subtitle, onMenuClick }) {
         )}
       </div>
 
-      <button
-        onClick={() => showToast("Profile settings coming soon")}
-        className="flex items-center gap-2 rounded-lg pl-2 hover:bg-gray-50"
-      >
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-light text-base">🧑‍💼</div>
-        <div className="hidden text-left sm:block">
-          <p className="text-[12.5px] font-semibold text-gray-900">Super Admin</p>
-          <p className="text-[10.5px] text-gray-400">Super Administrator</p>
-        </div>
-      </button>
+      <div className="relative">
+        <button
+          onClick={() => setShowAccountMenu((v) => !v)}
+          className="flex items-center gap-2 rounded-lg pl-2 hover:bg-gray-50"
+        >
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-light text-base">🧑‍💼</div>
+          <div className="hidden text-left sm:block">
+            <p className="text-[12.5px] font-semibold text-gray-900">Super Admin</p>
+            <p className="text-[10.5px] text-gray-400">Super Administrator</p>
+          </div>
+        </button>
+        {showAccountMenu && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setShowAccountMenu(false)} />
+            <div className="absolute right-0 z-20 mt-2 w-40 rounded-xl border border-gray-100 bg-white p-1 shadow-xl">
+              <button
+                onClick={logout}
+                className="w-full rounded-lg px-3 py-2 text-left text-[12.5px] font-medium text-red-600 hover:bg-red-50"
+              >
+                Logout
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </header>
   );
 }

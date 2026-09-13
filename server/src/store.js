@@ -7,13 +7,21 @@ const DB_FILE = process.env.DATA_FILE || path.join(__dirname, "..", "data.json")
 function loadState() {
   if (fs.existsSync(DB_FILE)) {
     try {
-      return JSON.parse(fs.readFileSync(DB_FILE, "utf-8"));
+      const parsed = JSON.parse(fs.readFileSync(DB_FILE, "utf-8"));
+      // Migrate older single-customer data files to the multi-customer shape.
+      if (parsed.customer && !parsed.customers) {
+        parsed.customers = { [parsed.customer.id]: parsed.customer };
+        delete parsed.customer;
+      }
+      if (!parsed.counters.customer) parsed.counters.customer = 2;
+      if (!parsed.counters.provider) parsed.counters.provider = 1;
+      return parsed;
     } catch (e) {
       console.warn("Failed to read data.json, reseeding.", e.message);
     }
   }
   const fresh = {
-    customer: seed.customer,
+    customers: { [seed.customer.id]: seed.customer },
     providers: seed.providers,
     categories: seed.categories,
     services: seed.services,
@@ -21,7 +29,7 @@ function loadState() {
     messages: seed.messages,
     activities: seed.activities,
     notifications: [],
-    counters: seed.counters,
+    counters: { ...seed.counters, customer: 2, provider: 1 },
   };
   persist(fresh);
   return fresh;
@@ -127,8 +135,45 @@ function markAllNotificationsRead(recipientType, recipientId) {
 
 // ---- reads ----
 
-function getCustomer() {
-  return state.customer;
+function getCustomerById(id) {
+  return state.customers[id];
+}
+
+function getCustomerByPhone(phone) {
+  return Object.values(state.customers).find((c) => c.phone === phone);
+}
+
+function createCustomer({ phone, name }) {
+  const id = `cust-${state.counters.customer++}`;
+  const customer = { id, name: name || "New Customer", avatar: "🧑", phone, email: null };
+  state.customers[id] = customer;
+  save();
+  return customer;
+}
+
+function getProviderByPhone(phone) {
+  return Object.values(state.providers).find((p) => p.phone === phone);
+}
+
+function createProviderSignup({ phone, name }) {
+  const id = `provider-${state.counters.provider++}`;
+  const provider = {
+    id,
+    name: name || "New Provider",
+    avatar: "🧑‍🔧",
+    category: "Not set",
+    rating: 0,
+    reviews: 0,
+    phone,
+    live: true,
+    verified: false,
+    verificationStatus: "pending",
+    joinedAt: new Date().toISOString(),
+  };
+  state.providers[id] = provider;
+  save();
+  logActivity("provider", `New provider registration: ${provider.name}`);
+  return provider;
 }
 
 function listProviders() {
@@ -159,7 +204,7 @@ function enrichBooking(booking) {
   const service = getService(booking.serviceId);
   return {
     ...booking,
-    customer: state.customer,
+    customer: state.customers[booking.customerId],
     service: service
       ? { id: service.id, name: service.name, icon: service.icon, categoryId: service.categoryId, price: service.price }
       : null,
@@ -175,7 +220,7 @@ function getProviderReviews(providerId) {
         id: b.id,
         rating: b.review.rating,
         text: b.review.text,
-        customer: state.customer,
+        customer: state.customers[b.customerId],
         serviceName: service?.name,
         serviceIcon: service?.icon,
         date: b.statusHistory?.Completed || b.createdAt,
@@ -205,6 +250,8 @@ function getMessages(bookingId) {
 function createBooking({ serviceId, date, time, address, issue, customerId, orderId }) {
   const service = getService(serviceId);
   if (!service) throw new Error("Unknown service");
+  const customer = state.customers[customerId];
+  if (!customer) throw new Error("Unknown customer");
 
   const id = nextBookingId();
   const now = new Date().toISOString();
@@ -213,7 +260,7 @@ function createBooking({ serviceId, date, time, address, issue, customerId, orde
     ...(orderId ? { orderId } : {}),
     serviceId,
     providerId: service.providerId,
-    customerId: customerId || state.customer.id,
+    customerId,
     status: "Pending",
     date,
     time,
@@ -232,7 +279,7 @@ function createBooking({ serviceId, date, time, address, issue, customerId, orde
     recipientId: service.providerId,
     type: "booking",
     title: "New booking request",
-    message: `${state.customer.name} requested ${service.name} for ${date}`,
+    message: `${customer.name} requested ${service.name} for ${date}`,
     bookingId: booking.id,
   });
   return enrichBooking(booking);
@@ -305,7 +352,8 @@ function addMessage(bookingId, from, text) {
   const booking = state.bookings.find((b) => b.id === bookingId);
   if (booking) {
     const service = getService(booking.serviceId);
-    const senderName = from === "provider" ? state.providers[booking.providerId]?.name : state.customer.name;
+    const senderName =
+      from === "provider" ? state.providers[booking.providerId]?.name : state.customers[booking.customerId]?.name;
     addNotification({
       recipientType: from === "provider" ? "customer" : "provider",
       recipientId: from === "provider" ? booking.customerId : booking.providerId,
@@ -340,12 +388,13 @@ function addReview(bookingId, rating, text) {
   save();
   logActivity("review", `New review received: ${rating}★ for ${service?.name || "a service"}`);
   if (provider) {
+    const customer = state.customers[booking.customerId];
     addNotification({
       recipientType: "provider",
       recipientId: provider.id,
       type: "review",
       title: "New review",
-      message: `${state.customer.name} left a ${rating}★ review for ${service?.name || "your service"}`,
+      message: `${customer?.name || "A customer"} left a ${rating}★ review for ${service?.name || "your service"}`,
       bookingId: booking.id,
     });
   }
@@ -501,7 +550,7 @@ function getAdminOverview() {
 
   return {
     totals: {
-      totalUsers: 1,
+      totalUsers: Object.keys(state.customers).length,
       totalProviders: providers.length,
       totalBookings: bookings.length,
       totalRevenue,
@@ -536,7 +585,7 @@ function getTransactions() {
         categoryId: service?.categoryId,
         providerId: b.providerId,
         providerName: provider?.name,
-        customerName: state.customer.name,
+        customerName: state.customers[b.customerId]?.name,
         amount: b.amount,
         platformFee,
         payout: b.amount - platformFee,
@@ -592,7 +641,11 @@ function getAdminReports() {
 }
 
 module.exports = {
-  getCustomer,
+  getCustomerById,
+  getCustomerByPhone,
+  createCustomer,
+  getProviderByPhone,
+  createProviderSignup,
   listProviders,
   getProvider,
   listCategories,

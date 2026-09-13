@@ -1,10 +1,12 @@
 {
-  "customer": {
-    "id": "cust-1",
-    "name": "Riya Malhotra",
-    "avatar": "🧑",
-    "phone": "+91 98765 43210",
-    "email": "info@zipcon.in"
+  "customers": {
+    "cust-1": {
+      "id": "cust-1",
+      "name": "Riya Malhotra",
+      "avatar": "🧑",
+      "phone": "+91 98765 43210",
+      "email": "info@zipcon.in"
+    }
   },
   "providers": {
     "amit-sharma": {
@@ -59,9 +61,8 @@
       "reviews": 0,
       "phone": "+91 98765 44556",
       "live": false,
-      "verificationStatus": "approved",
-      "joinedAt": "2026-09-06T11:30:00.000Z",
-      "verified": true
+      "verificationStatus": "pending",
+      "joinedAt": "2026-09-06T11:30:00.000Z"
     }
   },
   "categories": [
@@ -393,28 +394,6 @@
   ],
   "bookings": [
     {
-      "id": "BK12346",
-      "orderId": "ORD1001",
-      "serviceId": "home-cleaning-service",
-      "providerId": "sunita-devi",
-      "customerId": "cust-1",
-      "status": "Accepted",
-      "date": "2026-09-09",
-      "time": "10:00 AM – 12:00 PM",
-      "address": {
-        "label": "Home",
-        "line": "221B, Baker Street, Connaught Place, New Delhi - 110001"
-      },
-      "issue": "",
-      "amount": 349,
-      "createdAt": "2026-09-09T05:24:34.762Z",
-      "statusHistory": {
-        "Pending": "2026-09-09T05:24:34.762Z",
-        "Accepted": "2026-09-09T05:24:38.278Z"
-      },
-      "reviewed": false
-    },
-    {
       "id": "BK12345",
       "serviceId": "ac-repair-service",
       "providerId": "amit-sharma",
@@ -440,7 +419,7 @@
       "serviceId": "ac-install-service",
       "providerId": "amit-sharma",
       "customerId": "cust-1",
-      "status": "Accepted",
+      "status": "Pending",
       "date": "2026-09-10",
       "time": "12:00 PM – 02:00 PM",
       "address": {
@@ -451,8 +430,7 @@
       "amount": 799,
       "createdAt": "2026-09-07T14:10:00.000Z",
       "statusHistory": {
-        "Pending": "2026-09-07T14:10:00.000Z",
-        "Accepted": "2026-09-09T03:57:28.640Z"
+        "Pending": "2026-09-07T14:10:00.000Z"
       },
       "reviewed": false
     },
@@ -546,47 +524,9 @@
         "text": "Thank you! Great service.",
         "time": "2026-08-18T15:05:00.000Z"
       }
-    ],
-    "BK12346": [
-      {
-        "from": "provider",
-        "text": "Hi, I have accepted your request. I will reach your location on time.",
-        "time": "2026-09-09T05:24:38.285Z"
-      }
-    ],
-    "BK12341": [
-      {
-        "from": "user",
-        "text": "hi",
-        "time": "2026-09-12T12:36:49.145Z"
-      }
     ]
   },
   "activities": [
-    {
-      "id": "act-8",
-      "type": "booking",
-      "message": "Booking #BK12346 (Home Cleaning) marked Accepted",
-      "time": "2026-09-09T05:24:38.280Z"
-    },
-    {
-      "id": "act-7",
-      "type": "booking",
-      "message": "New order received: #ORD1001 — 1 service",
-      "time": "2026-09-09T05:24:34.770Z"
-    },
-    {
-      "id": "act-6",
-      "type": "booking",
-      "message": "Booking #BK12341 (AC Installation) marked Accepted",
-      "time": "2026-09-09T03:57:28.641Z"
-    },
-    {
-      "id": "act-5",
-      "type": "provider",
-      "message": "Provider approved: Meena Kapoor (Painting)",
-      "time": "2026-09-09T03:56:20.135Z"
-    },
     {
       "id": "act-1",
       "type": "provider",
@@ -612,68 +552,14 @@
       "time": "2026-06-12T09:05:00.000Z"
     }
   ],
-  "notifications": [
-    {
-      "id": "notif-5",
-      "recipientType": "provider",
-      "recipientId": "amit-sharma",
-      "type": "message",
-      "title": "New message from Riya Malhotra",
-      "message": "hi",
-      "bookingId": "BK12341",
-      "read": false,
-      "time": "2026-09-12T12:36:49.146Z"
-    },
-    {
-      "id": "notif-4",
-      "recipientType": "customer",
-      "recipientId": "cust-1",
-      "type": "message",
-      "title": "New message from Sunita Devi",
-      "message": "Hi, I have accepted your request. I will reach your location on time.",
-      "bookingId": "BK12346",
-      "read": false,
-      "time": "2026-09-09T05:24:38.288Z"
-    },
-    {
-      "id": "notif-3",
-      "recipientType": "customer",
-      "recipientId": "cust-1",
-      "type": "booking",
-      "title": "Booking Accepted",
-      "message": "Sunita Devi accepted your Home Cleaning request",
-      "bookingId": "BK12346",
-      "read": false,
-      "time": "2026-09-09T05:24:38.282Z"
-    },
-    {
-      "id": "notif-2",
-      "recipientType": "provider",
-      "recipientId": "sunita-devi",
-      "type": "booking",
-      "title": "New booking request",
-      "message": "Riya Malhotra requested Home Cleaning for 2026-09-09",
-      "bookingId": "BK12346",
-      "read": false,
-      "time": "2026-09-09T05:24:34.764Z"
-    },
-    {
-      "id": "notif-1",
-      "recipientType": "customer",
-      "recipientId": "cust-1",
-      "type": "booking",
-      "title": "Booking Accepted",
-      "message": "Amit Sharma accepted your AC Installation request",
-      "bookingId": "BK12341",
-      "read": true,
-      "time": "2026-09-09T03:57:28.641Z"
-    }
-  ],
+  "notifications": [],
   "counters": {
-    "booking": 12347,
+    "booking": 12346,
     "service": 1,
-    "activity": 9,
-    "order": 1002,
-    "notification": 6
+    "activity": 5,
+    "order": 1001,
+    "notification": 1,
+    "customer": 2,
+    "provider": 1
   }
 }

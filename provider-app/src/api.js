@@ -1,9 +1,17 @@
 export const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:4000";
 export const API_BASE = `${SERVER_URL}/api`;
 
+let authToken = null;
+export function setAuthToken(token) {
+  authToken = token;
+}
+
 async function request(path, options) {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
     ...options,
   });
   if (!res.ok) {
@@ -15,22 +23,24 @@ async function request(path, options) {
 }
 
 export const api = {
+  requestOtp: (phone, role) => request("/auth/otp/request", { method: "POST", body: JSON.stringify({ phone, role }) }),
+  verifyOtp: (phone, code, role, name) =>
+    request("/auth/otp/verify", { method: "POST", body: JSON.stringify({ phone, code, role, name }) }),
+  me: () => request("/auth/me"),
+
   getProvider: (id) => request(`/providers/${id}`),
-  listBookings: (providerId) => request(`/bookings?providerId=${providerId}`),
+  listBookings: () => request("/bookings"),
   updateBookingStatus: (id, status) =>
     request(`/bookings/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
   getMessages: (bookingId) => request(`/messages/${bookingId}`),
-  sendMessage: (bookingId, from, text) =>
-    request(`/messages/${bookingId}`, { method: "POST", body: JSON.stringify({ from, text }) }),
+  sendMessage: (bookingId, text) => request(`/messages/${bookingId}`, { method: "POST", body: JSON.stringify({ text }) }),
   listProviderServices: (providerId) => request(`/providers/${providerId}/services`),
   addProviderService: (providerId, data) =>
     request(`/providers/${providerId}/services`, { method: "POST", body: JSON.stringify(data) }),
   updateProviderService: (providerId, serviceId, patch) =>
     request(`/providers/${providerId}/services/${serviceId}`, { method: "PATCH", body: JSON.stringify(patch) }),
   getEarnings: (providerId) => request(`/providers/${providerId}/earnings`),
-  listNotifications: (recipientType, recipientId) =>
-    request(`/notifications?recipientType=${recipientType}&recipientId=${recipientId}`),
+  listNotifications: () => request("/notifications"),
   markNotificationRead: (id) => request(`/notifications/${id}/read`, { method: "PATCH" }),
-  markAllNotificationsRead: (recipientType, recipientId) =>
-    request("/notifications/read-all", { method: "POST", body: JSON.stringify({ recipientType, recipientId }) }),
+  markAllNotificationsRead: () => request("/notifications/read-all", { method: "POST" }),
 };

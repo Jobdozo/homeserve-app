@@ -1,10 +1,19 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { api } from "../api";
+import { api, setAuthToken } from "../api";
 import { socket } from "../socket";
 
-const PROVIDER_ID = "amit-sharma";
-
 const AppContext = createContext(null);
+const AUTH_KEY = "tikdum-provider-auth-v1";
+
+function loadAuth() {
+  try {
+    const raw = localStorage.getItem(AUTH_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    // ignore corrupt storage
+  }
+  return null;
+}
 
 function upsertById(list, item) {
   const idx = list.findIndex((x) => x.id === item.id);
@@ -15,7 +24,9 @@ function upsertById(list, item) {
 }
 
 export function AppProvider({ children }) {
-  const [provider, setProvider] = useState(null);
+  const initialAuth = loadAuth();
+  const [provider, setProvider] = useState(initialAuth?.user || null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [requests, setRequests] = useState([]);
   const [services, setServices] = useState([]);
   const [messages, setMessages] = useState({});
@@ -26,23 +37,71 @@ export function AppProvider({ children }) {
   const [notifications, setNotifications] = useState([]);
   const loadedThreads = useRef(new Set());
 
+  const login = useCallback((token, user) => {
+    setAuthToken(token);
+    localStorage.setItem(AUTH_KEY, JSON.stringify({ token, user }));
+    setProvider(user);
+  }, []);
+
+  const logout = useCallback(() => {
+    setAuthToken(null);
+    localStorage.removeItem(AUTH_KEY);
+    setProvider(null);
+    setRequests([]);
+    setServices([]);
+    setMessages({});
+    setEarnings(null);
+    setNotifications([]);
+    loadedThreads.current = new Set();
+  }, []);
+
   const refreshEarnings = useCallback(() => {
-    api.getEarnings(PROVIDER_ID).then(setEarnings).catch((e) => console.error("earnings", e));
+    if (!provider) return;
+    api.getEarnings(provider.id).then(setEarnings).catch((e) => console.error("earnings", e));
+  }, [provider]);
+
+  // Restore + validate a persisted session on first load.
+  useEffect(() => {
+    let cancelled = false;
+    async function restore() {
+      if (!initialAuth?.token) {
+        setAuthLoading(false);
+        return;
+      }
+      setAuthToken(initialAuth.token);
+      try {
+        const { user } = await api.me();
+        if (cancelled) return;
+        setProvider(user);
+      } catch (e) {
+        if (!cancelled) logout();
+      } finally {
+        if (!cancelled) setAuthLoading(false);
+      }
+    }
+    restore();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
+    if (!provider) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     async function load() {
+      setLoading(true);
       try {
-        const [providerData, requestData, serviceData, earningsData, notificationData] = await Promise.all([
-          api.getProvider(PROVIDER_ID),
-          api.listBookings(PROVIDER_ID),
-          api.listProviderServices(PROVIDER_ID),
-          api.getEarnings(PROVIDER_ID),
-          api.listNotifications("provider", PROVIDER_ID),
+        const [requestData, serviceData, earningsData, notificationData] = await Promise.all([
+          api.listBookings(),
+          api.listProviderServices(provider.id),
+          api.getEarnings(provider.id),
+          api.listNotifications(),
         ]);
         if (cancelled) return;
-        setProvider(providerData);
         setRequests(requestData);
         setServices(serviceData);
         setEarnings(earningsData);
@@ -64,7 +123,7 @@ export function AppProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [provider]);
 
   useEffect(() => {
     const onConnect = () => setConnected(true);
@@ -79,12 +138,13 @@ export function AppProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    const providerId = provider?.id;
     const onBookingCreated = (booking) => {
-      if (booking.providerId !== PROVIDER_ID) return;
+      if (booking.providerId !== providerId) return;
       setRequests((prev) => upsertById(prev, booking));
     };
     const onBookingUpdated = (booking) => {
-      if (booking.providerId !== PROVIDER_ID) return;
+      if (booking.providerId !== providerId) return;
       setRequests((prev) => upsertById(prev, booking));
       if (booking.status === "Completed") refreshEarnings();
     };
@@ -92,15 +152,15 @@ export function AppProvider({ children }) {
       setMessages((prev) => ({ ...prev, [bookingId]: [...(prev[bookingId] || []), message] }));
     };
     const onServiceChanged = (service) => {
-      if (service.providerId !== PROVIDER_ID) return;
+      if (service.providerId !== providerId) return;
       setServices((prev) => upsertById(prev, service));
     };
     const onProviderUpdated = (updated) => {
-      if (updated.id !== PROVIDER_ID) return;
+      if (updated.id !== providerId) return;
       setProvider(updated);
     };
     const onNotificationCreated = (notification) => {
-      if (notification.recipientType !== "provider" || notification.recipientId !== PROVIDER_ID) return;
+      if (notification.recipientType !== "provider" || notification.recipientId !== providerId) return;
       setNotifications((prev) => [notification, ...prev].slice(0, 50));
     };
 
@@ -120,7 +180,7 @@ export function AppProvider({ children }) {
       socket.off("provider:updated", onProviderUpdated);
       socket.off("notification:created", onNotificationCreated);
     };
-  }, [refreshEarnings]);
+  }, [provider, refreshEarnings]);
 
   useEffect(() => {
     if (!toast) return;
@@ -172,21 +232,23 @@ export function AppProvider({ children }) {
   }, []);
 
   const sendMessage = useCallback((requestId, text) => {
-    api.sendMessage(requestId, "provider", text).catch((e) => console.error("Failed to send message", e));
+    api.sendMessage(requestId, text).catch((e) => console.error("Failed to send message", e));
   }, []);
 
   const toggleServiceStatus = useCallback(async (id) => {
+    if (!provider) return;
     const current = services.find((s) => s.id === id);
     if (!current) return;
     const nextStatus = current.status === "active" ? "inactive" : "active";
-    const service = await api.updateProviderService(PROVIDER_ID, id, { status: nextStatus });
+    const service = await api.updateProviderService(provider.id, id, { status: nextStatus });
     setServices((prev) => upsertById(prev, service));
-  }, [services]);
+  }, [provider, services]);
 
   const addService = useCallback(
     async ({ name, category, description, price, originalPrice, extraCharges, serviceArea }) => {
+      if (!provider) return;
       const numericOriginal = Number(originalPrice) || 0;
-      const service = await api.addProviderService(PROVIDER_ID, {
+      const service = await api.addProviderService(provider.id, {
         name,
         category,
         description,
@@ -199,7 +261,7 @@ export function AppProvider({ children }) {
       showToast("Service added");
       return service;
     },
-    [showToast]
+    [provider, showToast]
   );
 
   const markNotificationRead = useCallback(async (id) => {
@@ -208,13 +270,16 @@ export function AppProvider({ children }) {
   }, []);
 
   const markAllNotificationsRead = useCallback(async () => {
-    await api.markAllNotificationsRead("provider", PROVIDER_ID);
+    await api.markAllNotificationsRead();
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   }, []);
 
   const value = useMemo(
     () => ({
       provider,
+      authLoading,
+      login,
+      logout,
       requests,
       services,
       messages,
@@ -237,6 +302,9 @@ export function AppProvider({ children }) {
     }),
     [
       provider,
+      authLoading,
+      login,
+      logout,
       requests,
       services,
       messages,

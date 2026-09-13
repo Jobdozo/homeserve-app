@@ -1,8 +1,19 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { api } from "../api";
+import { api, setAuthToken } from "../api";
 import { socket } from "../socket";
 
 const AppContext = createContext(null);
+const AUTH_KEY = "tikdum-admin-auth-v1";
+
+function loadAuth() {
+  try {
+    const raw = localStorage.getItem(AUTH_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    // ignore corrupt storage
+  }
+  return null;
+}
 
 function upsertById(list, item) {
   const idx = list.findIndex((x) => x.id === item.id);
@@ -13,6 +24,9 @@ function upsertById(list, item) {
 }
 
 export function AppProvider({ children }) {
+  const initialAuth = loadAuth();
+  const [admin, setAdmin] = useState(initialAuth?.user || null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [overview, setOverview] = useState(null);
   const [providers, setProviders] = useState([]);
   const [services, setServices] = useState([]);
@@ -22,6 +36,23 @@ export function AppProvider({ children }) {
   const [connected, setConnected] = useState(socket.connected);
   const [toast, setToast] = useState(null);
   const refreshTimer = useRef(null);
+
+  const login = useCallback((token, user) => {
+    setAuthToken(token);
+    localStorage.setItem(AUTH_KEY, JSON.stringify({ token, user }));
+    setAdmin(user);
+  }, []);
+
+  const logout = useCallback(() => {
+    setAuthToken(null);
+    localStorage.removeItem(AUTH_KEY);
+    setAdmin(null);
+    setOverview(null);
+    setProviders([]);
+    setServices([]);
+    setBookings([]);
+    setActivities([]);
+  }, []);
 
   const loadAll = useCallback(async () => {
     const [overviewData, providerData, serviceData, bookingData, activityData] = await Promise.all([
@@ -38,9 +69,40 @@ export function AppProvider({ children }) {
     setActivities(activityData);
   }, []);
 
+  // Restore + validate a persisted session on first load.
   useEffect(() => {
     let cancelled = false;
+    async function restore() {
+      if (!initialAuth?.token) {
+        setAuthLoading(false);
+        return;
+      }
+      setAuthToken(initialAuth.token);
+      try {
+        const { user } = await api.me();
+        if (cancelled) return;
+        setAdmin(user);
+      } catch (e) {
+        if (!cancelled) logout();
+      } finally {
+        if (!cancelled) setAuthLoading(false);
+      }
+    }
+    restore();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!admin) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
     (async () => {
+      setLoading(true);
       try {
         await loadAll();
       } catch (e) {
@@ -52,7 +114,7 @@ export function AppProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [loadAll]);
+  }, [admin, loadAll]);
 
   const scheduleRefresh = useCallback(() => {
     if (refreshTimer.current) clearTimeout(refreshTimer.current);
@@ -145,6 +207,10 @@ export function AppProvider({ children }) {
 
   const value = useMemo(
     () => ({
+      admin,
+      authLoading,
+      login,
+      logout,
       overview,
       providers,
       services,
@@ -158,7 +224,24 @@ export function AppProvider({ children }) {
       rejectProvider,
       toggleServiceStatus,
     }),
-    [overview, providers, services, bookings, activities, loading, connected, toast, showToast, approveProvider, rejectProvider, toggleServiceStatus]
+    [
+      admin,
+      authLoading,
+      login,
+      logout,
+      overview,
+      providers,
+      services,
+      bookings,
+      activities,
+      loading,
+      connected,
+      toast,
+      showToast,
+      approveProvider,
+      rejectProvider,
+      toggleServiceStatus,
+    ]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
