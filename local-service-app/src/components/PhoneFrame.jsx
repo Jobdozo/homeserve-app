@@ -8,7 +8,7 @@ function LoadingState() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3">
       <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-brand-light border-t-brand" />
-      <p className="text-xs text-gray-400">Connecting to HomeServe…</p>
+      <p className="text-xs text-gray-400">Connecting to Tikdum…</p>
     </div>
   );
 }

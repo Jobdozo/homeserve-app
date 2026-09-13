@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run this on the VPS (as root) via SSH: ssh root@187.127.157.192
 # Adds Nginx server blocks that proxy tikdum.com + subdomains to the
-# HomeServe Docker containers already running on 127.0.0.1:5175/5174/5177/4000.
+# Tikdum Docker containers already running on 127.0.0.1:5175/5174/5177/4000.
 # Does NOT touch any existing site config on this box.
 set -euo pipefail
 

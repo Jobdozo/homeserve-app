@@ -21,7 +21,7 @@ export default function DesktopHeader() {
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-lg text-white">
             🧑‍🔧
           </span>
-          <span className="text-[17px] font-extrabold text-gray-900">HomeServe</span>
+          <span className="text-[17px] font-extrabold text-gray-900">Tikdum</span>
         </button>
 
         <nav className="flex flex-1 items-center gap-1">

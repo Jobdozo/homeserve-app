@@ -282,5 +282,5 @@ process.on("unhandledRejection", (err) => console.error("Unhandled rejection:", 
 process.on("uncaughtException", (err) => console.error("Uncaught exception:", err));
 
 server.listen(PORT, () => {
-  console.log(`HomeServe API + realtime server listening on http://localhost:${PORT}`);
+  console.log(`Tikdum API + realtime server listening on http://localhost:${PORT}`);
 });
