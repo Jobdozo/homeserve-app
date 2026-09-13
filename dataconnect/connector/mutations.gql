@@ -1,0 +1,135 @@
+# Write operations. Same naming-convention caveat as queries.gql applies.
+
+mutation CreateCustomer($name: String!, $phone: String!, $avatar: String) @auth(level: PUBLIC) {
+  customer_insert(data: { name: $name, phone: $phone, avatar: $avatar })
+}
+
+mutation CreateProviderSignup($name: String!, $phone: String!) @auth(level: PUBLIC) {
+  provider_insert(
+    data: {
+      name: $name
+      phone: $phone
+      avatar: "🧑‍🔧"
+      category: "Not set"
+      live: true
+      verified: false
+      verificationStatus: "pending"
+    }
+  )
+}
+
+mutation SetProviderVerification($providerId: UUID!, $status: String!, $verified: Boolean!) @auth(level: USER) {
+  provider_update(id: $providerId, data: { verificationStatus: $status, verified: $verified })
+}
+
+mutation CreateBooking(
+  $serviceId: UUID!
+  $providerId: UUID!
+  $customerId: UUID!
+  $date: Date!
+  $time: String!
+  $addressLabel: String
+  $addressLine: String
+  $addressLat: Float
+  $addressLng: Float
+  $issue: String
+  $amount: Int!
+  $orderId: String
+) @auth(level: USER) {
+  booking_insert(
+    data: {
+      serviceId: $serviceId
+      providerId: $providerId
+      customerId: $customerId
+      date: $date
+      time: $time
+      addressLabel: $addressLabel
+      addressLine: $addressLine
+      addressLat: $addressLat
+      addressLng: $addressLng
+      issue: $issue
+      amount: $amount
+      orderId: $orderId
+      status: "Pending"
+    }
+  )
+}
+
+mutation RecordBookingStatus($bookingId: UUID!, $status: String!) @auth(level: USER) {
+  booking_update(id: $bookingId, data: { status: $status })
+  bookingStatusEvent_insert(data: { bookingId: $bookingId, status: $status })
+}
+
+mutation CancelBooking($bookingId: UUID!) @auth(level: USER) {
+  booking_update(id: $bookingId, data: { status: "Cancelled", cancelledAt_expr: "request.time" })
+}
+
+mutation SubmitReview($bookingId: UUID!, $rating: Int!, $text: String) @auth(level: USER) {
+  booking_update(
+    id: $bookingId
+    data: { reviewed: true, reviewRating: $rating, reviewText: $text }
+  )
+}
+
+mutation UpdateProviderRating($providerId: UUID!, $rating: Float!, $reviews: Int!) @auth(level: USER) {
+  provider_update(id: $providerId, data: { rating: $rating, reviews: $reviews })
+}
+
+mutation UpdateServiceRating($serviceId: UUID!, $rating: Float!, $reviewCount: Int!) @auth(level: USER) {
+  service_update(id: $serviceId, data: { rating: $rating, reviewCount: $reviewCount })
+}
+
+mutation SetServiceStatus($serviceId: UUID!, $status: String!) @auth(level: USER) {
+  service_update(id: $serviceId, data: { status: $status })
+}
+
+mutation AddProviderService(
+  $providerId: UUID!
+  $categoryId: UUID!
+  $name: String!
+  $price: Int!
+  $originalPrice: Int
+) @auth(level: USER) {
+  service_insert(
+    data: {
+      providerId: $providerId
+      categoryId: $categoryId
+      name: $name
+      price: $price
+      originalPrice: $originalPrice
+      status: "active"
+    }
+  )
+}
+
+mutation SendMessage($bookingId: UUID!, $sender: String!, $text: String!) @auth(level: USER) {
+  message_insert(data: { bookingId: $bookingId, sender: $sender, text: $text })
+}
+
+mutation CreateNotification(
+  $recipientType: String!
+  $recipientId: UUID!
+  $type: String!
+  $title: String!
+  $message: String!
+  $bookingId: UUID
+) @auth(level: USER) {
+  notification_insert(
+    data: {
+      recipientType: $recipientType
+      recipientId: $recipientId
+      type: $type
+      title: $title
+      message: $message
+      bookingId: $bookingId
+    }
+  )
+}
+
+mutation MarkNotificationRead($id: UUID!) @auth(level: USER) {
+  notification_update(id: $id, data: { read: true })
+}
+
+mutation LogActivity($type: String!, $message: String!) @auth(level: USER) {
+  activity_insert(data: { type: $type, message: $message })
+}

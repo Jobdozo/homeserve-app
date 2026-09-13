@@ -1,0 +1,5 @@
+connectorId: "default"
+generate:
+  javascriptSdk:
+    outputDir: "../../generated/dataconnect-js"
+    package: "@tikdum/dataconnect"

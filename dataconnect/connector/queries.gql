@@ -1,0 +1,230 @@
+# Read operations. Field names (customers, customer_insert, etc.) follow
+# Data Connect's auto-generated CRUD convention for each @table type in
+# schema.gql — verify exact names against `firebase dataconnect:sdk:generate`
+# output once this is deployed, names may shift slightly by CLI version.
+
+query GetCustomerByPhone($phone: String!) @auth(level: PUBLIC) {
+  customers(where: { phone: { eq: $phone } }) {
+    id
+    name
+    avatar
+    phone
+    email
+  }
+}
+
+query GetProviderByPhone($phone: String!) @auth(level: PUBLIC) {
+  providers(where: { phone: { eq: $phone } }) {
+    id
+    name
+    avatar
+    category
+    rating
+    reviews
+    phone
+    live
+    verified
+    verificationStatus
+    businessName
+    experience
+    serviceArea
+    email
+    gstNumber
+    responseRate
+    joinedAt
+  }
+}
+
+query ListCategories @auth(level: PUBLIC) {
+  categories {
+    id
+    slug
+    name
+    icon
+  }
+}
+
+query ListActiveServices @auth(level: PUBLIC) {
+  services(where: { status: { eq: "active" } }) {
+    id
+    name
+    icon
+    tagline
+    price
+    originalPrice
+    rating
+    reviewCount
+    distanceLabel
+    status
+    category {
+      id
+      slug
+      name
+    }
+    provider {
+      id
+      name
+    }
+  }
+}
+
+query ListProviderServices($providerId: UUID!) @auth(level: PUBLIC) {
+  services(where: { provider: { id: { eq: $providerId } } }) {
+    id
+    name
+    icon
+    price
+    originalPrice
+    status
+    rating
+    reviewCount
+  }
+}
+
+query ListProviders @auth(level: PUBLIC) {
+  providers {
+    id
+    name
+    avatar
+    category
+    rating
+    reviews
+    verified
+    verificationStatus
+    live
+  }
+}
+
+query ListBookingsForCustomer($customerId: UUID!) @auth(level: USER) {
+  bookings(where: { customer: { id: { eq: $customerId } } }, orderBy: { createdAt: DESC }) {
+    id
+    orderId
+    status
+    date
+    time
+    addressLabel
+    addressLine
+    addressLat
+    addressLng
+    issue
+    amount
+    createdAt
+    reviewed
+    reviewRating
+    reviewText
+    service {
+      id
+      name
+      icon
+      categoryId: category {
+        id
+      }
+      price
+    }
+    provider {
+      id
+      name
+      avatar
+    }
+  }
+}
+
+query ListBookingsForProvider($providerId: UUID!) @auth(level: USER) {
+  bookings(where: { provider: { id: { eq: $providerId } } }, orderBy: { createdAt: DESC }) {
+    id
+    orderId
+    status
+    date
+    time
+    addressLabel
+    addressLine
+    addressLat
+    addressLng
+    issue
+    amount
+    createdAt
+    customer {
+      id
+      name
+      phone
+      avatar
+    }
+    service {
+      id
+      name
+      icon
+    }
+  }
+}
+
+query GetBooking($id: UUID!) @auth(level: USER) {
+  booking(id: $id) {
+    id
+    orderId
+    status
+    date
+    time
+    addressLabel
+    addressLine
+    addressLat
+    addressLng
+    issue
+    amount
+    createdAt
+    reviewed
+    reviewRating
+    reviewText
+    customer {
+      id
+      name
+      phone
+    }
+    provider {
+      id
+      name
+      phone
+    }
+    service {
+      id
+      name
+      icon
+      price
+    }
+  }
+}
+
+query ListMessagesForBooking($bookingId: UUID!) @auth(level: USER) {
+  messages(where: { booking: { id: { eq: $bookingId } } }, orderBy: { sentAt: ASC }) {
+    id
+    sender
+    text
+    sentAt
+  }
+}
+
+query ListNotifications($recipientType: String!, $recipientId: UUID!) @auth(level: USER) {
+  notifications(
+    where: { recipientType: { eq: $recipientType }, recipientId: { eq: $recipientId } }
+    orderBy: { createdAt: DESC }
+    limit: 50
+  ) {
+    id
+    type
+    title
+    message
+    read
+    createdAt
+    booking {
+      id
+    }
+  }
+}
+
+query ListActivities($limit: Int!) @auth(level: USER) {
+  activities(orderBy: { occurredAt: DESC }, limit: $limit) {
+    id
+    type
+    message
+    occurredAt
+  }
+}

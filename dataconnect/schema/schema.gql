@@ -1,0 +1,120 @@
+# Relational schema for Tikdum, translated from the current JSON-file store
+# (server/src/store.js + seedData.js) into Postgres tables for Firebase Data
+# Connect. Every @table type gets an implicit `id: UUID!` primary key unless
+# noted otherwise. Fields typed as another @table type become foreign keys.
+
+type Customer @table {
+  name: String!
+  avatar: String
+  phone: String! @unique
+  email: String
+}
+
+type Provider @table {
+  name: String!
+  avatar: String
+  category: String
+  rating: Float @default(value: 0)
+  reviews: Int @default(value: 0)
+  phone: String! @unique
+  live: Boolean @default(value: true)
+  verified: Boolean @default(value: false)
+  verificationStatus: String @default(value: "pending")
+  businessName: String
+  experience: String
+  serviceArea: String
+  email: String
+  gstNumber: String
+  responseRate: Int
+  joinedAt: Timestamp! @default(expr: "request.time")
+}
+
+type Category @table {
+  slug: String! @unique
+  name: String!
+  icon: String
+}
+
+type Service @table {
+  category: Category!
+  provider: Provider!
+  name: String!
+  icon: String
+  tagline: String
+  price: Int!
+  originalPrice: Int
+  rating: Float @default(value: 0)
+  reviewCount: Int @default(value: 0)
+  distanceLabel: String
+  status: String! @default(value: "active")
+  extraCharges: String
+  serviceArea: String
+}
+
+# `highlights` on a service — one row per {icon, label} pair.
+type ServiceHighlight @table {
+  service: Service!
+  icon: String
+  label: String!
+}
+
+# `includes` on a service — one row per included line item.
+type ServiceInclude @table {
+  service: Service!
+  text: String!
+}
+
+type Booking @table {
+  orderId: String
+  service: Service!
+  provider: Provider!
+  customer: Customer!
+  status: String! @default(value: "Pending")
+  date: Date!
+  time: String!
+  addressLabel: String
+  addressLine: String
+  addressLat: Float
+  addressLng: Float
+  issue: String
+  amount: Int!
+  createdAt: Timestamp! @default(expr: "request.time")
+  cancelledAt: Timestamp
+  reviewed: Boolean @default(value: false)
+  reviewRating: Int
+  reviewText: String
+}
+
+# Replaces the old `statusHistory` map — one row per status transition.
+type BookingStatusEvent @table {
+  booking: Booking!
+  status: String!
+  at: Timestamp! @default(expr: "request.time")
+}
+
+type Message @table {
+  booking: Booking!
+  sender: String! # "customer" | "provider"
+  text: String!
+  sentAt: Timestamp! @default(expr: "request.time")
+}
+
+type Activity @table {
+  type: String!
+  message: String!
+  occurredAt: Timestamp! @default(expr: "request.time")
+}
+
+# recipientType + recipientId is a lightweight polymorphic reference to
+# either a Customer or a Provider (Data Connect FKs can't point to a union),
+# resolved in application code the same way the JSON store did it.
+type Notification @table {
+  recipientType: String! # "customer" | "provider"
+  recipientId: UUID!
+  type: String!
+  title: String!
+  message: String!
+  booking: Booking
+  read: Boolean! @default(value: false)
+  createdAt: Timestamp! @default(expr: "request.time")
+}

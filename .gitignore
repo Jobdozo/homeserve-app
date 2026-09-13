@@ -4,4 +4,11 @@ dist
 .DS_Store
 server/data.json
 
+# Firebase local emulator artifacts
+.firebase
+.dataconnect
+firebase-debug.log
+firebase-export-*
+generated/
+
 WhatsApp Image*.jpeg
