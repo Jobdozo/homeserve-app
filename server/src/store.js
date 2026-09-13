@@ -1,5 +1,12 @@
 const { query, mutate } = require("./dataconnect");
 
+// Phones are compared digits-only so formatting differences (spacing, missing
+// "+", etc.) between the number typed at signup and at a later login never
+// cause a returning user to be treated as new.
+function normalizePhone(phone) {
+  return (phone || "").replace(/\D/g, "");
+}
+
 // ---- shared field selections (kept as plain strings, not GraphQL fragments,
 // to avoid any uncertainty about fragment support in ad-hoc executeGraphql calls) ----
 
@@ -125,11 +132,10 @@ async function getCustomerById(id) {
 }
 
 async function getCustomerByPhone(phone) {
-  const { customers } = await query(
-    `query($phone: String!) { customers(where: { phone: { eq: $phone } }) { id name avatar phone email } }`,
-    { phone }
-  );
-  return customers[0];
+  const target = normalizePhone(phone);
+  if (!target) return undefined;
+  const { customers } = await query(`query { customers { id name avatar phone email } }`, {});
+  return customers.find((c) => normalizePhone(c.phone) === target);
 }
 
 async function createCustomer({ phone, name }) {
@@ -143,11 +149,10 @@ async function createCustomer({ phone, name }) {
 // ---- providers ----
 
 async function getProviderByPhone(phone) {
-  const { providers } = await query(
-    `query($phone: String!) { providers(where: { phone: { eq: $phone } }) { ${PROVIDER_FIELDS} } }`,
-    { phone }
-  );
-  return mapProvider(providers[0]);
+  const target = normalizePhone(phone);
+  if (!target) return undefined;
+  const { providers } = await query(`query { providers { ${PROVIDER_FIELDS} } }`, {});
+  return mapProvider(providers.find((p) => normalizePhone(p.phone) === target));
 }
 
 async function createProviderSignup({ phone, name }) {

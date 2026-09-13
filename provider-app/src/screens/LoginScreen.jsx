@@ -2,24 +2,30 @@ import { useState } from "react";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
 import LogoMark from "../components/LogoMark";
+import PhoneInput from "../components/PhoneInput";
+import { detectDefaultCountry, COUNTRY_CODES } from "../data/countryCodes";
 
 export default function LoginScreen() {
   const { login } = useApp();
   const [step, setStep] = useState("phone"); // "phone" | "otp"
-  const [phone, setPhone] = useState("");
+  const [country, setCountry] = useState(detectDefaultCountry);
+  const [number, setNumber] = useState("");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [devOtp, setDevOtp] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const dial = COUNTRY_CODES.find((c) => c.iso2 === country)?.dial || "+91";
+  const fullPhone = `${dial} ${number}`;
+
   async function handleRequestOtp(e) {
     e.preventDefault();
-    if (!phone.trim()) return;
+    if (!number.trim()) return;
     setError("");
     setBusy(true);
     try {
-      const res = await api.requestOtp(phone.trim(), "provider");
+      const res = await api.requestOtp(fullPhone, "provider");
       setDevOtp(res.devOtp || null);
       setStep("otp");
     } catch (err) {
@@ -35,7 +41,7 @@ export default function LoginScreen() {
     setError("");
     setBusy(true);
     try {
-      const { token, user } = await api.verifyOtp(phone.trim(), code.trim(), "provider", name.trim());
+      const { token, user } = await api.verifyOtp(fullPhone, code.trim(), "provider", name.trim());
       login(token, user);
     } catch (err) {
       setError(err.message || "Incorrect code");
@@ -61,14 +67,9 @@ export default function LoginScreen() {
               <form onSubmit={handleRequestOtp} className="flex flex-col gap-3">
                 <label className="text-[13px] font-semibold text-gray-700">
                   WhatsApp number
-                  <input
-                    type="tel"
-                    autoFocus
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+91 98765 43210"
-                    className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 text-[14px] focus:border-brand focus:outline-none"
-                  />
+                  <div className="mt-1">
+                    <PhoneInput country={country} onCountryChange={setCountry} number={number} onNumberChange={setNumber} autoFocus />
+                  </div>
                 </label>
                 <label className="text-[13px] font-semibold text-gray-700">
                   Name / business name <span className="font-normal text-gray-400">(new providers only)</span>
@@ -83,7 +84,7 @@ export default function LoginScreen() {
                 {error && <p className="text-[12.5px] font-medium text-red-500">{error}</p>}
                 <button
                   type="submit"
-                  disabled={busy || !phone.trim()}
+                  disabled={busy || !number.trim()}
                   className="mt-2 rounded-xl bg-brand py-3 text-[14px] font-bold text-white disabled:opacity-50"
                 >
                   {busy ? "Sending code…" : "Send WhatsApp code"}
@@ -94,7 +95,7 @@ export default function LoginScreen() {
             {step === "otp" && (
               <form onSubmit={handleVerifyOtp} className="flex flex-col gap-3">
                 <p className="text-center text-[13px] text-gray-500">
-                  We sent a code via WhatsApp to <span className="font-semibold text-gray-800">{phone}</span>
+                  We sent a code via WhatsApp to <span className="font-semibold text-gray-800">{fullPhone}</span>
                 </p>
                 {devOtp && (
                   <p className="rounded-xl bg-amber-50 px-3 py-2 text-center text-[12.5px] font-medium text-amber-700">
