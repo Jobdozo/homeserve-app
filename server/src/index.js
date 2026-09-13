@@ -173,6 +173,14 @@ app.post("/api/providers/:id/services", auth.requireAuth("provider"), ah(async (
   res.status(201).json(service);
 }));
 
+app.patch("/api/providers/:id/profile", auth.requireAuth("provider"), ah(async (req, res) => {
+  if (req.user.id !== req.params.id) return res.status(403).json({ error: "Not your provider account" });
+  const provider = await store.updateProviderProfile(req.params.id, req.body || {});
+  if (!provider) return res.status(404).json({ error: "Provider not found" });
+  io.emit("provider:updated", provider);
+  res.json(provider);
+}));
+
 app.patch("/api/providers/:id/verification", auth.requireAuth("admin"), ah(async (req, res) => {
   const { status } = req.body || {};
   if (!["pending", "approved", "rejected"].includes(status)) {

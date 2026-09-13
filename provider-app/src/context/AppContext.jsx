@@ -264,6 +264,17 @@ export function AppProvider({ children }) {
     [provider, showToast]
   );
 
+  const updateProfile = useCallback(
+    async (patch) => {
+      if (!provider) return;
+      const updated = await api.updateProviderProfile(provider.id, patch);
+      setProvider(updated);
+      showToast("Profile updated");
+      return updated;
+    },
+    [provider, showToast]
+  );
+
   const markNotificationRead = useCallback(async (id) => {
     const notification = await api.markNotificationRead(id);
     setNotifications((prev) => prev.map((n) => (n.id === id ? notification : n)));
@@ -296,6 +307,7 @@ export function AppProvider({ children }) {
       sendMessage,
       toggleServiceStatus,
       addService,
+      updateProfile,
       notifications,
       markNotificationRead,
       markAllNotificationsRead,
@@ -321,6 +333,7 @@ export function AppProvider({ children }) {
       sendMessage,
       toggleServiceStatus,
       addService,
+      updateProfile,
       notifications,
       markNotificationRead,
       markAllNotificationsRead,

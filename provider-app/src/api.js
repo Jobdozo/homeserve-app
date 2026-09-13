@@ -29,6 +29,8 @@ export const api = {
   me: () => request("/auth/me"),
 
   getProvider: (id) => request(`/providers/${id}`),
+  updateProviderProfile: (id, patch) =>
+    request(`/providers/${id}/profile`, { method: "PATCH", body: JSON.stringify(patch) }),
   listBookings: () => request("/bookings"),
   updateBookingStatus: (id, status) =>
     request(`/bookings/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),

@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { ChevronRightIcon, StarIcon, ShieldCheckIcon, EditIcon, LogoutIcon } from "../components/icons";
 
@@ -10,6 +11,7 @@ const menuItems = [
 ];
 
 export default function ProfileScreen() {
+  const navigate = useNavigate();
   const { provider: providerProfile, showToast, logout } = useApp();
 
   return (
@@ -17,7 +19,7 @@ export default function ProfileScreen() {
       <div className="flex items-center justify-between px-4 pt-1 lg:px-0 lg:pt-0">
         <h1 className="text-lg font-bold text-gray-900 lg:text-2xl">Profile</h1>
         <button
-          onClick={() => showToast("Edit profile coming soon")}
+          onClick={() => navigate("/profile/edit")}
           className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200"
         >
           <EditIcon width={16} height={16} />

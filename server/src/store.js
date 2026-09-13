@@ -187,6 +187,24 @@ async function setProviderVerification(providerId, status) {
   return provider;
 }
 
+const EDITABLE_PROVIDER_FIELDS = ["name", "category", "businessName", "experience", "serviceArea", "email", "gstNumber"];
+
+async function updateProviderProfile(providerId, patch) {
+  const fields = {};
+  for (const key of EDITABLE_PROVIDER_FIELDS) {
+    if (patch[key] !== undefined) fields[key] = patch[key] === "" ? null : patch[key];
+  }
+  if (Object.keys(fields).length === 0) return getProvider(providerId);
+
+  const varDefs = Object.keys(fields).map((k) => `$${k}: String`).join(", ");
+  const dataFields = Object.keys(fields).map((k) => `${k}: $${k}`).join(", ");
+  await mutate(
+    `mutation($id: UUID!, ${varDefs}) { provider_update(id: $id, data: { ${dataFields} }) }`,
+    { id: providerId, ...fields }
+  );
+  return getProvider(providerId);
+}
+
 // ---- services ----
 
 async function listServices({ activeOnly = false } = {}) {
@@ -851,6 +869,7 @@ module.exports = {
   updateProviderService,
   updateServiceStatus,
   setProviderVerification,
+  updateProviderProfile,
   getEarnings,
   listActivities,
   getAdminOverview,
