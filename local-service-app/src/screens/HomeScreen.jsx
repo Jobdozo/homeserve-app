@@ -8,7 +8,7 @@ import CartBar from "../components/CartBar";
 
 export default function HomeScreen() {
   const navigate = useNavigate();
-  const { categories, services, cart, notifications } = useApp();
+  const { categories, services, cart, notifications, location, locationStatus, detectLocation } = useApp();
   const unreadCount = notifications.filter((n) => !n.read).length;
   const topCategories = categories.slice(0, 4);
   const popular = [...services].sort((a, b) => b.reviewCount - a.reviewCount);
@@ -26,8 +26,16 @@ export default function HomeScreen() {
     <div className="flex flex-col pb-4 lg:px-8 lg:py-8">
       {/* Location + notification */}
       <div className="flex items-center justify-between px-4 pt-1 lg:px-0 lg:pt-0">
-        <button className="flex items-center gap-1 text-sm font-semibold text-gray-900 lg:text-base">
-          <span>📍</span> Delhi, India
+        <button
+          onClick={detectLocation}
+          className="flex items-center gap-1 text-sm font-semibold text-gray-900 lg:text-base"
+        >
+          <span>📍</span>{" "}
+          {locationStatus === "detecting"
+            ? "Detecting…"
+            : locationStatus === "denied"
+              ? "Location off — tap to enable"
+              : location?.label || "Tap to set your location"}
           <span className="text-gray-400">▾</span>
         </button>
         <div className="flex items-center gap-2 lg:hidden">
@@ -55,7 +63,7 @@ export default function HomeScreen() {
           </button>
         </div>
       </div>
-      <p className="px-4 pb-3 text-xs text-gray-400 lg:hidden">110001</p>
+      {location?.pincode && <p className="px-4 pb-3 text-xs text-gray-400 lg:hidden">{location.pincode}</p>}
 
       {/* Search */}
       <div className="px-4 lg:hidden">

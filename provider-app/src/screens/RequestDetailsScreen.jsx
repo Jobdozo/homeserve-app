@@ -69,10 +69,20 @@ export default function RequestDetailsScreen() {
           <h2 className="mb-2 text-[13px] font-bold text-gray-900">Service Location</h2>
           <div className="flex items-start gap-2 rounded-2xl border border-gray-100 p-3">
             <MapPinIcon width={16} height={16} className="mt-0.5 flex-shrink-0 text-gray-400" />
-            <div>
+            <div className="flex-1">
               <p className="text-[12.5px] leading-snug text-gray-700">
                 {request.address?.label} — {request.address?.line}
               </p>
+              {request.address?.lat && request.address?.lng && (
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${request.address.lat},${request.address.lng}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1.5 inline-block text-[12px] font-semibold text-brand"
+                >
+                  Get Directions →
+                </a>
+              )}
             </div>
           </div>
         </div>

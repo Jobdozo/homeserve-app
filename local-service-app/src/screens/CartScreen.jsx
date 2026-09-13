@@ -9,7 +9,8 @@ import CategoryIcon from "../components/CategoryIcon";
 
 export default function CartScreen() {
   const navigate = useNavigate();
-  const { cart, services, getService, updateCartItem, removeFromCart, checkout, showToast } = useApp();
+  const { cart, services, getService, updateCartItem, removeFromCart, checkout, showToast, location, locationStatus, detectLocation } =
+    useApp();
   const [submitting, setSubmitting] = useState(false);
 
   const lines = useMemo(
@@ -18,12 +19,15 @@ export default function CartScreen() {
   );
   const total = lines.reduce((sum, l) => sum + l.service.price, 0);
   const savings = lines.reduce((sum, l) => sum + (l.service.originalPrice ? l.service.originalPrice - l.service.price : 0), 0);
+  const bookingAddress = location
+    ? { label: location.label, line: location.line, lat: location.lat, lng: location.lng }
+    : defaultAddress;
 
   const handleCheckout = async () => {
     if (submitting || lines.length === 0) return;
     setSubmitting(true);
     try {
-      const created = await checkout(defaultAddress);
+      const created = await checkout(bookingAddress);
       navigate("/bookings", { replace: true, state: { orderId: created[0]?.orderId } });
     } catch (e) {
       showToast("Something went wrong. Please try again.");
@@ -117,13 +121,16 @@ export default function CartScreen() {
         <div>
           <div className="mb-1.5 flex items-center justify-between">
             <h2 className="text-[13px] font-semibold text-gray-900">Delivery Address</h2>
-            <button className="text-xs font-semibold text-brand">Change</button>
+            <button onClick={detectLocation} className="text-xs font-semibold text-brand">
+              {locationStatus === "detecting" ? "Detecting…" : "Use current location"}
+            </button>
           </div>
           <div className="flex items-start gap-2 rounded-xl border border-gray-200 px-3 py-2.5">
             <MapPinIcon width={16} height={16} className="mt-0.5 flex-shrink-0 text-gray-400" />
             <div>
-              <p className="text-[13px] font-semibold text-gray-800">{defaultAddress.label}</p>
-              <p className="text-[11.5px] leading-snug text-gray-500">{defaultAddress.line}</p>
+              <p className="text-[13px] font-semibold text-gray-800">{bookingAddress.label}</p>
+              <p className="text-[11.5px] leading-snug text-gray-500">{bookingAddress.line}</p>
+              {!location && <p className="mt-0.5 text-[10.5px] text-amber-600">Using a placeholder address — tap "Use current location" for accurate pickup.</p>}
             </div>
           </div>
         </div>

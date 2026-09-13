@@ -2,10 +2,22 @@ import { createContext, useContext, useEffect, useMemo, useState, useCallback, u
 import { api, setAuthToken } from "../api";
 import { socket } from "../socket";
 import { timeSlots, defaultAddress } from "../data/mockData";
+import { detectCurrentLocation } from "../utils/geolocation";
 
 const AppContext = createContext(null);
 const CART_KEY = "homeserve-cart-v1";
 const AUTH_KEY = "tikdum-customer-auth-v1";
+const LOCATION_KEY = "tikdum-location-v1";
+
+function loadLocation() {
+  try {
+    const raw = localStorage.getItem(LOCATION_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    // ignore corrupt storage
+  }
+  return null;
+}
 
 function loadAuth() {
   try {
@@ -53,11 +65,32 @@ export function AppProvider({ children }) {
   const [toast, setToast] = useState(null);
   const [cart, setCart] = useState(loadCart);
   const [notifications, setNotifications] = useState([]);
+  const [location, setLocation] = useState(loadLocation);
+  const [locationStatus, setLocationStatus] = useState("idle"); // idle | detecting | ready | denied | error
   const loadedThreads = useRef(new Set());
 
   useEffect(() => {
     localStorage.setItem(CART_KEY, JSON.stringify(cart));
   }, [cart]);
+
+  const detectLocation = useCallback(async () => {
+    setLocationStatus("detecting");
+    try {
+      const loc = await detectCurrentLocation();
+      setLocation(loc);
+      localStorage.setItem(LOCATION_KEY, JSON.stringify(loc));
+      setLocationStatus("ready");
+    } catch (e) {
+      console.error("Failed to detect location", e);
+      setLocationStatus(e.code === 1 ? "denied" : "error");
+    }
+  }, []);
+
+  // Ask for location once per login if we don't already have one saved.
+  useEffect(() => {
+    if (customer && !location) detectLocation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customer]);
 
   const login = useCallback((token, user) => {
     setAuthToken(token);
@@ -335,6 +368,9 @@ export function AppProvider({ children }) {
       notifications,
       markNotificationRead,
       markAllNotificationsRead,
+      location,
+      locationStatus,
+      detectLocation,
     }),
     [
       customer,
@@ -367,6 +403,9 @@ export function AppProvider({ children }) {
       notifications,
       markNotificationRead,
       markAllNotificationsRead,
+      location,
+      locationStatus,
+      detectLocation,
     ]
   );
 
