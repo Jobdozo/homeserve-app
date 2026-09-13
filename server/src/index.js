@@ -358,11 +358,11 @@ app.post("/api/bookings/:id/review", auth.requireAuth("customer"), ah(async (req
 // while a booking is active, so "Get Directions" can target where someone
 // actually is instead of the address captured at booking time) ----
 app.post("/api/location", auth.requireAuth("customer", "provider"), ah(async (req, res) => {
-  const { lat, lng } = req.body || {};
+  const { lat, lng, accuracy } = req.body || {};
   if (typeof lat !== "number" || typeof lng !== "number") {
     return res.status(400).json({ error: "lat and lng (numbers) are required" });
   }
-  res.json(liveLocation.setLocation(req.user.role, req.user.id, lat, lng));
+  res.json(liveLocation.setLocation(req.user.role, req.user.id, lat, lng, accuracy));
 }));
 
 // Scoped to a specific booking (not a free lookup by id) so a provider can

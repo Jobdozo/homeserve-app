@@ -118,6 +118,7 @@ export default function RequestDetailsScreen() {
                     {liveLocation && (
                       <p className="mt-0.5 text-[10.5px] font-medium text-emerald-600">
                         Using customer's live location
+                        {typeof liveLocation.accuracy === "number" && ` (±${Math.round(liveLocation.accuracy)}m)`}
                       </p>
                     )}
                   </>

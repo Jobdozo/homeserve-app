@@ -107,10 +107,12 @@ export function AppProvider({ children }) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           if (cancelled) return;
-          api.reportLocation(pos.coords.latitude, pos.coords.longitude).catch(() => {});
+          api.reportLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy).catch(() => {});
         },
         () => {},
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 20000 }
+        // maximumAge: 0 forces a fresh GPS fix each time instead of reusing a
+        // cached (often lower-accuracy, wifi/cell-based) position.
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     };
     report();

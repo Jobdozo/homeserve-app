@@ -132,14 +132,21 @@ export default function BookingDetailsScreen() {
             </a>
           </div>
           {liveLocation && (
-            <a
-              href={`https://www.google.com/maps/dir/?api=1&destination=${liveLocation.lat},${liveLocation.lng}`}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-brand"
-            >
-              <MapPinIcon width={14} height={14} /> Get Directions to provider →
-            </a>
+            <div className="mt-2">
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&destination=${liveLocation.lat},${liveLocation.lng}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-brand"
+              >
+                <MapPinIcon width={14} height={14} /> Get Directions to provider →
+              </a>
+              {typeof liveLocation.accuracy === "number" && (
+                <p className="mt-0.5 text-[10.5px] font-medium text-gray-400">
+                  Accurate to within ~{Math.round(liveLocation.accuracy)}m
+                </p>
+              )}
+            </div>
           )}
         </div>
 
