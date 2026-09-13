@@ -11,7 +11,9 @@ services:
       ADMIN_PHONES: ${ADMIN_PHONES}
       WHATSAPP_INSTANCE_ID: ${WHATSAPP_INSTANCE_ID}
       WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN}
-      GOOGLE_APPLICATION_CREDENTIALS_JSON: ${GOOGLE_APPLICATION_CREDENTIALS_JSON}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcp-service-account.json
+    volumes:
+      - /root/tikdum-secrets/gcp-service-account.json:/run/secrets/gcp-service-account.json:ro
 
   local-service-app:
     build:
