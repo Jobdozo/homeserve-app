@@ -13,6 +13,7 @@ import EditProfileScreen from "./screens/EditProfileScreen";
 import DocumentsKycScreen from "./screens/DocumentsKycScreen";
 import ManageAvailabilityScreen from "./screens/ManageAvailabilityScreen";
 import NotificationSettingsScreen from "./screens/NotificationSettingsScreen";
+import HelpSupportScreen from "./screens/HelpSupportScreen";
 import ChatScreen from "./screens/ChatScreen";
 import NotificationsScreen from "./screens/NotificationsScreen";
 
@@ -52,6 +53,7 @@ function AppRoutes() {
         <Route path="/profile/documents" element={<DocumentsKycScreen />} />
         <Route path="/profile/availability" element={<ManageAvailabilityScreen />} />
         <Route path="/profile/notifications" element={<NotificationSettingsScreen />} />
+        <Route path="/profile/help" element={<HelpSupportScreen />} />
         <Route path="/chat/:requestId" element={<ChatScreen />} />
         <Route path="/notifications" element={<NotificationsScreen />} />
       </Route>
