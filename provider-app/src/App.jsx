@@ -11,6 +11,7 @@ import EarningsScreen from "./screens/EarningsScreen";
 import ProfileScreen from "./screens/ProfileScreen";
 import EditProfileScreen from "./screens/EditProfileScreen";
 import DocumentsKycScreen from "./screens/DocumentsKycScreen";
+import ManageAvailabilityScreen from "./screens/ManageAvailabilityScreen";
 import ChatScreen from "./screens/ChatScreen";
 import NotificationsScreen from "./screens/NotificationsScreen";
 
@@ -48,6 +49,7 @@ function AppRoutes() {
         <Route path="/services/add" element={<AddServiceScreen />} />
         <Route path="/profile/edit" element={<EditProfileScreen />} />
         <Route path="/profile/documents" element={<DocumentsKycScreen />} />
+        <Route path="/profile/availability" element={<ManageAvailabilityScreen />} />
         <Route path="/chat/:requestId" element={<ChatScreen />} />
         <Route path="/notifications" element={<NotificationsScreen />} />
       </Route>

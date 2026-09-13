@@ -15,7 +15,7 @@ export default function ProfileScreen() {
   const menuItems = [
     { icon: "💳", label: "Payout Details" },
     { icon: "📄", label: "Documents & KYC", path: "/profile/documents", badge: verificationBadges[providerProfile.verificationStatus] },
-    { icon: "🗓️", label: "Manage Availability" },
+    { icon: "🗓️", label: "Manage Availability", path: "/profile/availability" },
     { icon: "🔔", label: "Notification Settings" },
     { icon: "❓", label: "Help & Support" },
   ];
