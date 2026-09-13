@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { HomeIcon, BookingsIcon, GridIcon, ChatIcon, ProfileIcon, BellIcon, SearchIcon, CartIcon } from "./icons";
 import { useApp } from "../context/AppContext";
+import LogoMark from "./LogoMark";
 
 const links = [
   { to: "/home", label: "Home", Icon: HomeIcon },
@@ -18,8 +19,8 @@ export default function DesktopHeader() {
     <header className="hidden flex-shrink-0 border-b border-gray-100 bg-white lg:block">
       <div className="mx-auto flex max-w-6xl items-center gap-8 px-8 py-3.5">
         <button onClick={() => navigate("/home")} className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-lg text-white">
-            🧑‍🔧
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-white">
+            <LogoMark size={19} />
           </span>
           <span className="text-[17px] font-extrabold text-gray-900">Tikdum</span>
         </button>

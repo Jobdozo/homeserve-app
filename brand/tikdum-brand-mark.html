@@ -1,0 +1,320 @@
+<title>Tikdum Brand Mark</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ground: #F5F3FC;
+    --surface: #FFFFFF;
+    --ink: #1F1B33;
+    --muted: #6B6483;
+    --label: #8B7FD9;
+    --hairline: #E6E1F7;
+    --brand-1: #7B63EE;
+    --brand-2: #4A2FD1;
+    --brand: #5B3FE0;
+    --brand-soft: #EDE9FE;
+    --mock-header: #FFFFFF;
+    --mock-body: #F7F6FB;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #15112A;
+      --surface: #1E1938;
+      --ink: #F3F1FC;
+      --muted: #A79CD6;
+      --label: #A79CD6;
+      --hairline: #322A55;
+      --brand-soft: #2A2350;
+      --mock-header: #1E1938;
+      --mock-body: #18142E;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #15112A;
+    --surface: #1E1938;
+    --ink: #F3F1FC;
+    --muted: #A79CD6;
+    --label: #A79CD6;
+    --hairline: #322A55;
+    --brand-soft: #2A2350;
+    --mock-header: #1E1938;
+    --mock-body: #18142E;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Inter", system-ui, sans-serif;
+    margin: 0;
+    padding: 56px 24px 80px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 64px; }
+
+  .eyebrow {
+    font: 700 11px/1 "Inter", sans-serif;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--label);
+    margin: 0 0 10px;
+  }
+
+  /* Hero */
+  .hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 28px; }
+  .mark-hero { position: relative; width: 168px; height: 168px; }
+  .mark-hero::before {
+    content: "";
+    position: absolute; inset: -30px;
+    background: radial-gradient(circle, color-mix(in srgb, var(--brand) 22%, transparent) 0%, transparent 70%);
+  }
+  .mark-hero svg { position: relative; width: 100%; height: 100%; display: block; }
+  .wordmark {
+    font: 800 56px/1 "Manrope", sans-serif;
+    letter-spacing: -0.02em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .tagline {
+    font: 700 12px/1 "Inter", sans-serif;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--label);
+    margin: -14px 0 0;
+  }
+
+  /* Rationale */
+  .rationale {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+  }
+  .rationale-item h3 {
+    font: 700 14px/1.3 "Manrope", sans-serif;
+    margin: 0 0 6px;
+  }
+  .rationale-item p {
+    font: 400 13.5px/1.6 "Inter", sans-serif;
+    color: var(--muted);
+    margin: 0;
+    max-width: 32ch;
+  }
+  .rationale-glyph {
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 10px;
+    background: var(--brand-soft);
+    color: var(--brand);
+    margin-bottom: 14px;
+  }
+
+  /* In-context section */
+  .section-title {
+    font: 700 20px/1.3 "Manrope", sans-serif;
+    margin: 0 0 24px;
+    letter-spacing: -0.01em;
+  }
+  .context-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+  .context-card {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 16px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .context-card figcaption {
+    font: 600 12px/1 "Inter", sans-serif;
+    color: var(--muted);
+    padding: 12px 16px;
+    border-top: 1px solid var(--hairline);
+  }
+
+  /* Favicon mock */
+  .mock-tab {
+    background: var(--mock-body);
+    padding: 24px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .browser-tab {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--mock-header);
+    border: 1px solid var(--hairline);
+    border-radius: 8px 8px 0 0;
+    padding: 8px 14px;
+    font: 500 12px/1 "Inter", sans-serif;
+    color: var(--ink);
+  }
+  .browser-tab svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+  /* App header mock */
+  .mock-app-header {
+    background: var(--mock-body);
+    padding: 24px;
+  }
+  .app-bar {
+    background: var(--mock-header);
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    padding: 12px 16px;
+    display: flex; align-items: center; gap: 9px;
+  }
+  .app-bar svg { width: 28px; height: 28px; flex-shrink: 0; }
+  .app-bar span { font: 800 16px/1 "Manrope", sans-serif; color: var(--ink); letter-spacing: -0.01em; }
+
+  /* Dark login mock */
+  .mock-login {
+    background: #15112A;
+    padding: 36px 24px;
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+  }
+  .mock-login svg { width: 56px; height: 56px; }
+  .mock-login p { font: 700 15px/1 "Manrope", sans-serif; color: white; margin: 0; }
+  .mock-login span { font: 500 11px/1 "Inter", sans-serif; color: #A79CD6; }
+
+  /* Tokens strip */
+  .tokens { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .token-swatch {
+    border-radius: 12px;
+    height: 64px;
+    border: 1px solid var(--hairline);
+  }
+  .token-label {
+    font: 500 11.5px/1.3 "Inter", sans-serif;
+    color: var(--muted);
+    margin-top: 8px;
+  }
+  .token-label strong { color: var(--ink); display: block; font-weight: 600; }
+  .type-row { display: flex; align-items: baseline; gap: 14px; padding: 14px 0; border-top: 1px solid var(--hairline); }
+  .type-row:first-of-type { border-top: none; }
+  .type-sample-display { font: 800 22px/1 "Manrope", sans-serif; }
+  .type-sample-body { font: 500 15px/1 "Inter", sans-serif; }
+  .type-meta { font: 500 11px/1 "Inter", sans-serif; color: var(--muted); margin-left: auto; }
+
+  @media (max-width: 720px) {
+    .rationale, .context-grid, .tokens { grid-template-columns: 1fr; }
+    .wordmark { font-size: 40px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <section class="hero">
+    <div class="mark-hero">
+      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="heroBg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#7B63EE"/>
+            <stop offset="1" stop-color="#4A2FD1"/>
+          </linearGradient>
+        </defs>
+        <rect x="2" y="2" width="96" height="96" rx="26" fill="url(#heroBg)"/>
+        <path d="M27 52 L43 68 L75 30" fill="none" stroke="white" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="43" y1="68" x2="43" y2="80" stroke="white" stroke-width="7" stroke-linecap="round"/>
+        <circle cx="43" cy="83" r="3.6" fill="white"/>
+      </svg>
+    </div>
+    <div>
+      <p class="tagline">Local services, verified</p>
+      <h1 class="wordmark">Tikdum</h1>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Concept</p>
+    <div class="rationale">
+      <div class="rationale-item">
+        <div class="rationale-glyph">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 13 10 18 19 7"/></svg>
+        </div>
+        <h3>The check</h3>
+        <p>A booking made, a provider verified, a job completed — the app's whole promise is a series of things confirmed. The checkmark is the literal shape of that promise.</p>
+      </div>
+      <div class="rationale-item">
+        <div class="rationale-glyph">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="1.4" fill="currentColor" stroke="none"/><path d="M12 21c-4-4.5-7-8.2-7-11.5A7 7 0 0 1 19 9.5C19 12.8 16 16.5 12 21Z"/></svg>
+        </div>
+        <h3>The drop</h3>
+        <p>Every one of these services happens at a real address, not in an app. The tail extending from the check reads as a pin drop — the moment the provider arrives.</p>
+      </div>
+      <div class="rationale-item">
+        <div class="rationale-glyph">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="5"/></svg>
+        </div>
+        <h3>The mark</h3>
+        <p>One continuous stroke, no lettering to shrink — it reads the same as a 512px splash icon or a 16px browser tab, which is where it has to work hardest.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">In context</p>
+    <h2 class="section-title">Where it actually appears</h2>
+    <div class="context-grid">
+      <figure class="context-card">
+        <div class="mock-tab">
+          <div class="browser-tab">
+            <svg viewBox="0 0 100 100"><rect x="2" y="2" width="96" height="96" rx="26" fill="url(#tabGrad)"/><defs><linearGradient id="tabGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7B63EE"/><stop offset="1" stop-color="#4A2FD1"/></linearGradient></defs><path d="M27 52 L43 68 L75 30" fill="none" stroke="white" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><line x1="43" y1="68" x2="43" y2="80" stroke="white" stroke-width="7" stroke-linecap="round"/><circle cx="43" cy="83" r="3.6" fill="white"/></svg>
+            <span>Tikdum</span>
+          </div>
+        </div>
+        <figcaption>Browser tab favicon</figcaption>
+      </figure>
+      <figure class="context-card">
+        <div class="mock-app-header">
+          <div class="app-bar">
+            <svg viewBox="0 0 100 100"><rect x="2" y="2" width="96" height="96" rx="26" fill="url(#appGrad)"/><defs><linearGradient id="appGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7B63EE"/><stop offset="1" stop-color="#4A2FD1"/></linearGradient></defs><path d="M27 52 L43 68 L75 30" fill="none" stroke="white" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><line x1="43" y1="68" x2="43" y2="80" stroke="white" stroke-width="7" stroke-linecap="round"/><circle cx="43" cy="83" r="3.6" fill="white"/></svg>
+            <span>Tikdum</span>
+          </div>
+        </div>
+        <figcaption>Desktop header lockup</figcaption>
+      </figure>
+      <figure class="context-card">
+        <div class="mock-login">
+          <svg viewBox="0 0 100 100"><rect x="2" y="2" width="96" height="96" rx="26" fill="white"/><path d="M27 52 L43 68 L75 30" fill="none" stroke="#5B3FE0" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><line x1="43" y1="68" x2="43" y2="80" stroke="#5B3FE0" stroke-width="7" stroke-linecap="round"/><circle cx="43" cy="83" r="3.6" fill="#5B3FE0"/></svg>
+          <p>Tikdum</p>
+          <span>Log in with WhatsApp</span>
+        </div>
+        <figcaption>Login screen (dark ground)</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Reference</p>
+    <h2 class="section-title">Palette &amp; type</h2>
+    <div class="tokens" style="margin-bottom: 28px;">
+      <div>
+        <div class="token-swatch" style="background:#5B3FE0"></div>
+        <div class="token-label"><strong>Brand</strong>#5B3FE0</div>
+      </div>
+      <div>
+        <div class="token-swatch" style="background:linear-gradient(135deg,#7B63EE,#4A2FD1)"></div>
+        <div class="token-label"><strong>Mark gradient</strong>#7B63EE → #4A2FD1</div>
+      </div>
+      <div>
+        <div class="token-swatch" style="background:#1F1B33"></div>
+        <div class="token-label"><strong>Ink</strong>#1F1B33</div>
+      </div>
+      <div>
+        <div class="token-swatch" style="background:#EDE9FE; border:1px solid #E6E1F7;"></div>
+        <div class="token-label"><strong>Brand tint</strong>#EDE9FE</div>
+      </div>
+    </div>
+    <div>
+      <div class="type-row">
+        <span class="type-sample-display">Tikdum</span>
+        <span class="type-meta">Manrope 800 — wordmark, headings</span>
+      </div>
+      <div class="type-row">
+        <span class="type-sample-body">Book trusted local help in minutes</span>
+        <span class="type-meta">Inter 400/600 — body, UI text</span>
+      </div>
+    </div>
+  </section>
+
+</div>

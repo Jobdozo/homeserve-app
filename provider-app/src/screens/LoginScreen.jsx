@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
+import LogoMark from "../components/LogoMark";
 
 export default function LoginScreen() {
   const { login } = useApp();
@@ -49,8 +50,8 @@ export default function LoginScreen() {
         <div className="phone-frame">
           <div className="screen no-scrollbar flex flex-col justify-center px-6 py-10">
             <div className="mb-8 flex flex-col items-center gap-2 text-center">
-              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-2xl text-white">
-                🧑‍🔧
+              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-white">
+                <LogoMark size={30} />
               </span>
               <h1 className="text-xl font-extrabold text-gray-900">Tikdum Pro</h1>
               <p className="text-[13px] text-gray-400">Log in or register as a provider with WhatsApp</p>

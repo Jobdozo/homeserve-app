@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useApp } from "../context/AppContext";
+import LogoMark from "./LogoMark";
 import {
   DashboardIcon,
   UsersIcon,
@@ -68,7 +69,9 @@ export default function Sidebar({ open, onClose }) {
         }`}
       >
         <div className="flex items-center gap-2 px-5 py-5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-lg">🛡️</span>
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand">
+            <LogoMark size={19} />
+          </span>
           <div>
             <p className="text-[15px] font-bold leading-tight">Tikdum</p>
             <p className="text-[11px] text-white/50">Super Admin</p>
