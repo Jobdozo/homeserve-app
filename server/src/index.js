@@ -84,10 +84,10 @@ app.post("/api/auth/otp/request", ah(async (req, res) => {
     return res.status(403).json({ error: "This number is not registered as an admin" });
   }
   const code = auth.requestOtp(role, phone);
-  await sendOtpViaWhatsApp(phone, code);
-  // No real WhatsApp provider is wired up yet, so the code is echoed back
-  // here instead of only being delivered — remove devOtp once one is.
-  res.json({ sent: true, devOtp: code });
+  const delivered = await sendOtpViaWhatsApp(phone, code);
+  // Only echo the code back when it wasn't actually delivered (no provider
+  // configured, or the send failed) — otherwise it stays WhatsApp-only.
+  res.json({ sent: true, ...(delivered ? {} : { devOtp: code }) });
 }));
 
 app.post("/api/auth/otp/verify", ah((req, res) => {

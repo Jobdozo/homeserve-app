@@ -1,11 +1,39 @@
-// Placeholder WhatsApp OTP delivery — no real WhatsApp Business API account is
-// wired up yet. This logs the code server-side instead of sending it, so the
-// full login/signup flow can be built and tested end-to-end today. Swap the
-// body of this function for a real provider (Twilio, Meta Cloud API, Gupshup,
-// MSG91, ...) later; nothing else in the auth flow needs to change.
+// Sends OTP codes via a WhatsApp Web automation gateway (saasyto.com) — an
+// unofficial API, not the WhatsApp Business Cloud API. It works by driving a
+// real WhatsApp Web session (paired via QR code in their dashboard), so
+// delivery depends on that session staying connected and carries some risk
+// of the paired number being flagged by WhatsApp for automation.
+const INSTANCE_ID = process.env.WHATSAPP_INSTANCE_ID;
+const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+
+const isConfigured = Boolean(INSTANCE_ID && ACCESS_TOKEN);
+
+function toGatewayNumber(phone) {
+  return String(phone || "").replace(/\D/g, "");
+}
+
 async function sendOtpViaWhatsApp(phone, code) {
-  console.log(`[WhatsApp OTP] To ${phone}: Your Tikdum verification code is ${code}. It expires in 5 minutes.`);
+  const message = `Your Tikdum verification code is ${code}. It expires in 5 minutes.`;
+
+  if (!isConfigured) {
+    console.log(`[WhatsApp OTP] (no provider configured) To ${phone}: ${message}`);
+    return false;
+  }
+
+  const url = new URL("https://web.saasyto.com/api/send");
+  url.searchParams.set("number", toGatewayNumber(phone));
+  url.searchParams.set("type", "text");
+  url.searchParams.set("message", message);
+  url.searchParams.set("instance_id", INSTANCE_ID);
+  url.searchParams.set("access_token", ACCESS_TOKEN);
+
+  const res = await fetch(url.toString());
+  const data = await res.json().catch(() => ({}));
+  if (data.status !== "success") {
+    console.error("[WhatsApp OTP] Send failed:", data);
+    return false;
+  }
   return true;
 }
 
-module.exports = { sendOtpViaWhatsApp };
+module.exports = { sendOtpViaWhatsApp, isConfigured };
