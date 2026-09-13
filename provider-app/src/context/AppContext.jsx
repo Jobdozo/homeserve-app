@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { api, setAuthToken } from "../api";
 import { socket } from "../socket";
+import { loadNotificationPrefs, saveNotificationPrefs } from "../utils/notificationPrefs";
 
 const AppContext = createContext(null);
 const AUTH_KEY = "tikdum-provider-auth-v1";
@@ -35,7 +36,16 @@ export function AppProvider({ children }) {
   const [connected, setConnected] = useState(socket.connected);
   const [toast, setToast] = useState(null);
   const [notifications, setNotifications] = useState([]);
+  const [notificationPrefs, setNotificationPrefs] = useState(loadNotificationPrefs);
   const loadedThreads = useRef(new Set());
+
+  const updateNotificationPref = useCallback((type, enabled) => {
+    setNotificationPrefs((prev) => {
+      const next = { ...prev, [type]: enabled };
+      saveNotificationPrefs(next);
+      return next;
+    });
+  }, []);
 
   const login = useCallback((token, user) => {
     setAuthToken(token);
@@ -161,6 +171,7 @@ export function AppProvider({ children }) {
     };
     const onNotificationCreated = (notification) => {
       if (notification.recipientType !== "provider" || notification.recipientId !== providerId) return;
+      if (notificationPrefs[notification.type] === false) return;
       setNotifications((prev) => [notification, ...prev].slice(0, 50));
     };
 
@@ -180,7 +191,7 @@ export function AppProvider({ children }) {
       socket.off("provider:updated", onProviderUpdated);
       socket.off("notification:created", onNotificationCreated);
     };
-  }, [provider, refreshEarnings]);
+  }, [provider, refreshEarnings, notificationPrefs]);
 
   useEffect(() => {
     if (!toast) return;
@@ -309,6 +320,8 @@ export function AppProvider({ children }) {
       addService,
       updateProfile,
       notifications,
+      notificationPrefs,
+      updateNotificationPref,
       markNotificationRead,
       markAllNotificationsRead,
     }),
@@ -335,6 +348,8 @@ export function AppProvider({ children }) {
       addService,
       updateProfile,
       notifications,
+      notificationPrefs,
+      updateNotificationPref,
       markNotificationRead,
       markAllNotificationsRead,
     ]
