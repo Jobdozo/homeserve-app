@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { MapPinIcon, ClockIcon, XIcon, CheckIcon } from "./icons";
+import { startRingtone } from "../utils/ringtone";
 
 const RING_SECONDS = 90;
 
@@ -25,6 +26,12 @@ export default function RingingOverlay() {
     }, 1000);
     return () => clearInterval(interval);
   }, [ringingRequest, dismissRinging]);
+
+  useEffect(() => {
+    if (!ringingRequest) return;
+    const stopRingtone = startRingtone();
+    return stopRingtone;
+  }, [ringingRequest]);
 
   if (!ringingRequest) return null;
 
