@@ -1,15 +1,43 @@
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
+import { api } from "../api";
 import ScreenHeader from "../components/ScreenHeader";
 import { MapPinIcon, CalendarIcon, ClockIcon, PhoneIcon } from "../components/icons";
 import CategoryIcon from "../components/CategoryIcon";
+
+const LOCATION_TRACKED_STATUSES = ["Pending", "Accepted", "In Progress"];
 
 export default function RequestDetailsScreen() {
   const { requestId } = useParams();
   const navigate = useNavigate();
   const { getRequest, acceptRequest, rejectRequest, advanceRequestStatus, showToast } = useApp();
+  const [liveLocation, setLiveLocation] = useState(null);
 
   const request = getRequest(requestId);
+
+  // Poll the customer's real-time position every 30s (matching how often
+  // they report it) so directions target where they actually are.
+  useEffect(() => {
+    setLiveLocation(null);
+    if (!request || !LOCATION_TRACKED_STATUSES.includes(request.status)) return;
+    let cancelled = false;
+    const poll = () => {
+      api
+        .getBookingLiveLocation(request.id)
+        .then((loc) => {
+          if (!cancelled) setLiveLocation(loc);
+        })
+        .catch(() => {});
+    };
+    poll();
+    const interval = setInterval(poll, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [request?.id, request?.status]);
+
   if (!request) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
@@ -73,16 +101,28 @@ export default function RequestDetailsScreen() {
               <p className="text-[12.5px] leading-snug text-gray-700">
                 {request.address?.label} — {request.address?.line}
               </p>
-              {request.address?.lat && request.address?.lng && (
-                <a
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${request.address.lat},${request.address.lng}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-1.5 inline-block text-[12px] font-semibold text-brand"
-                >
-                  Get Directions →
-                </a>
-              )}
+              {(() => {
+                const lat = liveLocation?.lat ?? request.address?.lat;
+                const lng = liveLocation?.lng ?? request.address?.lng;
+                if (!lat || !lng) return null;
+                return (
+                  <>
+                    <a
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1.5 inline-block text-[12px] font-semibold text-brand"
+                    >
+                      Get Directions →
+                    </a>
+                    {liveLocation && (
+                      <p className="mt-0.5 text-[10.5px] font-medium text-emerald-600">
+                        Using customer's live location
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>

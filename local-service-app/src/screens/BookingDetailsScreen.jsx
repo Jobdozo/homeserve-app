@@ -1,9 +1,13 @@
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
+import { api } from "../api";
 import { STATUS_STEPS } from "../data/mockData";
 import ScreenHeader from "../components/ScreenHeader";
-import { ChatIcon, PhoneIcon, StarIcon, CheckIcon } from "../components/icons";
+import { ChatIcon, PhoneIcon, StarIcon, CheckIcon, MapPinIcon } from "../components/icons";
 import CategoryIcon from "../components/CategoryIcon";
+
+const LOCATION_TRACKED_STATUSES = ["Accepted", "In Progress"];
 
 const statusStyles = {
   Pending: "bg-amber-100 text-amber-700",
@@ -20,6 +24,30 @@ export default function BookingDetailsScreen() {
   const { getBooking, getService, getProvider, cancelBooking, advanceBookingStatus, showToast } = useApp();
 
   const booking = getBooking(bookingId);
+  const [liveLocation, setLiveLocation] = useState(null);
+
+  // Poll the provider's real-time position every 30s (matching how often
+  // they report it) so directions target where they actually are.
+  useEffect(() => {
+    setLiveLocation(null);
+    if (!booking || !LOCATION_TRACKED_STATUSES.includes(booking.status)) return;
+    let cancelled = false;
+    const poll = () => {
+      api
+        .getBookingLiveLocation(booking.id)
+        .then((loc) => {
+          if (!cancelled) setLiveLocation(loc);
+        })
+        .catch(() => {});
+    };
+    poll();
+    const interval = setInterval(poll, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [booking?.id, booking?.status]);
+
   if (!booking) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
@@ -103,6 +131,16 @@ export default function BookingDetailsScreen() {
               <PhoneIcon width={16} height={16} />
             </a>
           </div>
+          {liveLocation && (
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&destination=${liveLocation.lat},${liveLocation.lng}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-brand"
+            >
+              <MapPinIcon width={14} height={14} /> Get Directions to provider →
+            </a>
+          )}
         </div>
 
         {/* Booking info */}

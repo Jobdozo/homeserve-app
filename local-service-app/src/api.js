@@ -42,4 +42,6 @@ export const api = {
   listNotifications: () => request("/notifications"),
   markNotificationRead: (id) => request(`/notifications/${id}/read`, { method: "PATCH" }),
   markAllNotificationsRead: () => request("/notifications/read-all", { method: "POST" }),
+  reportLocation: (lat, lng) => request("/location", { method: "POST", body: JSON.stringify({ lat, lng }) }),
+  getBookingLiveLocation: (bookingId) => request(`/bookings/${bookingId}/live-location`),
 };

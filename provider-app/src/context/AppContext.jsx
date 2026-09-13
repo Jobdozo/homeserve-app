@@ -211,6 +211,35 @@ export function AppProvider({ children }) {
     return () => clearTimeout(t);
   }, [toast]);
 
+  const hasActiveJob = useMemo(
+    () => requests.some((r) => ["Pending", "Accepted", "In Progress"].includes(r.status)),
+    [requests]
+  );
+
+  // While a job is in flight, share this provider's real-time position every
+  // 30s so the customer can see where they actually are, not just their
+  // profile's service area.
+  useEffect(() => {
+    if (!provider || !hasActiveJob || !navigator.geolocation) return;
+    let cancelled = false;
+    const report = () => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (cancelled) return;
+          api.reportLocation(pos.coords.latitude, pos.coords.longitude).catch(() => {});
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 20000 }
+      );
+    };
+    report();
+    const interval = setInterval(report, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [provider, hasActiveJob]);
+
   const showToast = useCallback((message) => setToast(message), []);
 
   const getRequest = useCallback((id) => requests.find((r) => r.id === id), [requests]);

@@ -92,6 +92,35 @@ export function AppProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer]);
 
+  const hasActiveBooking = useMemo(
+    () => bookings.some((b) => ["Pending", "Accepted", "In Progress"].includes(b.status)),
+    [bookings]
+  );
+
+  // While a booking is in flight, share this customer's real-time position
+  // every 30s so the provider's "Get Directions" can target where they
+  // actually are instead of the address captured when the booking was made.
+  useEffect(() => {
+    if (!customer || !hasActiveBooking || !navigator.geolocation) return;
+    let cancelled = false;
+    const report = () => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (cancelled) return;
+          api.reportLocation(pos.coords.latitude, pos.coords.longitude).catch(() => {});
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 20000 }
+      );
+    };
+    report();
+    const interval = setInterval(report, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [customer, hasActiveBooking]);
+
   const login = useCallback((token, user) => {
     setAuthToken(token);
     localStorage.setItem(AUTH_KEY, JSON.stringify({ token, user }));

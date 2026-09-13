@@ -6,6 +6,7 @@ const { Server } = require("socket.io");
 const store = require("./store");
 const auth = require("./auth");
 const { sendOtpViaWhatsApp } = require("./whatsapp");
+const liveLocation = require("./liveLocation");
 
 const PORT = process.env.PORT || 4000;
 
@@ -351,6 +352,36 @@ app.post("/api/bookings/:id/review", auth.requireAuth("customer"), ah(async (req
   if (result.service) io.emit("service:updated", result.service);
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.json(result.booking);
+}));
+
+// ---- live location (self-reported every ~30s by the customer/provider apps
+// while a booking is active, so "Get Directions" can target where someone
+// actually is instead of the address captured at booking time) ----
+app.post("/api/location", auth.requireAuth("customer", "provider"), ah(async (req, res) => {
+  const { lat, lng } = req.body || {};
+  if (typeof lat !== "number" || typeof lng !== "number") {
+    return res.status(400).json({ error: "lat and lng (numbers) are required" });
+  }
+  res.json(liveLocation.setLocation(req.user.role, req.user.id, lat, lng));
+}));
+
+// Scoped to a specific booking (not a free lookup by id) so a provider can
+// only ever see the location of their own booking's customer, and vice versa.
+app.get("/api/bookings/:id/live-location", auth.requireAuth("customer", "provider"), ah(async (req, res) => {
+  const booking = await store.getBooking(req.params.id);
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  if (req.user.role === "customer" && booking.customerId !== req.user.id) {
+    return res.status(403).json({ error: "Not your booking" });
+  }
+  if (req.user.role === "provider" && booking.providerId !== req.user.id) {
+    return res.status(403).json({ error: "Not your booking" });
+  }
+  const counterpart = req.user.role === "provider"
+    ? { role: "customer", id: booking.customerId }
+    : { role: "provider", id: booking.providerId };
+  const entry = liveLocation.getLocation(counterpart.role, counterpart.id);
+  if (!entry) return res.status(404).json({ error: "Live location not available yet" });
+  res.json(entry);
 }));
 
 // ---- messages ----
