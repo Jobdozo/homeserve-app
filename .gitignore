@@ -3,6 +3,8 @@ dist
 *.log
 .DS_Store
 server/data.json
+server/.env
+*service-account*.json
 
 # Firebase local emulator artifacts
 .firebase
