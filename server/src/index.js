@@ -7,6 +7,7 @@ const store = require("./store");
 const auth = require("./auth");
 const { sendOtpViaWhatsApp } = require("./whatsapp");
 const liveLocation = require("./liveLocation");
+const push = require("./push");
 
 const PORT = process.env.PORT || 4000;
 
@@ -71,6 +72,17 @@ async function dispatchBooking(booking, triedProviderIds = [booking.providerId])
     simulateProviderIfNeeded(booking);
     return;
   }
+  // The socket event only reaches a provider whose app is open right now —
+  // the push notification is what actually wakes a backgrounded/closed app,
+  // so it has to fire here too, not just rely on io.emit.
+  push
+    .sendPush("provider", provider.id, {
+      title: "New booking request",
+      body: `${booking.service?.name || "A service"} request nearby`,
+      bookingId: booking.id,
+      type: "booking:created",
+    })
+    .catch((e) => console.error("push send failed", e));
   setTimeout(async () => {
     try {
       const current = await store.getBooking(booking.id);
@@ -477,6 +489,28 @@ app.post("/api/bookings/:id/review", auth.requireAuth("customer"), ah(async (req
   if (result.service) io.emit("service:updated", result.service);
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.json(result.booking);
+}));
+
+// ---- push notifications (wake a backgrounded/closed provider app for new
+// booking requests — see server/src/push.js) ----
+app.get("/api/push/vapid-public-key", (req, res) => {
+  res.json({ publicKey: push.VAPID_PUBLIC_KEY, configured: push.configured });
+});
+
+app.post("/api/push/subscribe", auth.requireAuth("provider"), ah(async (req, res) => {
+  const { subscription } = req.body || {};
+  if (!subscription || !subscription.endpoint) {
+    return res.status(400).json({ error: "subscription is required" });
+  }
+  push.saveSubscription("provider", req.user.id, subscription);
+  res.status(201).json({ ok: true });
+}));
+
+app.post("/api/push/unsubscribe", auth.requireAuth("provider"), ah(async (req, res) => {
+  const { endpoint } = req.body || {};
+  if (!endpoint) return res.status(400).json({ error: "endpoint is required" });
+  push.removeSubscriptionByEndpoint(endpoint);
+  res.json({ ok: true });
 }));
 
 // ---- live location (self-reported every ~30s by the customer/provider apps

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, useCallback, u
 import { api, setAuthToken } from "../api";
 import { socket } from "../socket";
 import { loadNotificationPrefs, saveNotificationPrefs } from "../utils/notificationPrefs";
+import { ensurePushSubscribed } from "../utils/pushNotifications";
 
 const AppContext = createContext(null);
 const AUTH_KEY = "tikdum-provider-auth-v1";
@@ -141,6 +142,13 @@ export function AppProvider({ children }) {
         setEarnings(earningsData);
         setNotifications(notificationData);
 
+        // Reopening the app (e.g. tapping a push notification) should show
+        // the ringing overlay for a request that's still waiting on this
+        // provider, not just list it — ringingRequest otherwise only gets
+        // set from the live "booking:created" socket event.
+        const stillPending = requestData.find((r) => r.status === "Pending");
+        if (stillPending) setRingingRequest(stillPending);
+
         const threads = await Promise.all(
           requestData.map((r) => api.getMessages(r.id).then((thread) => [r.id, thread]))
         );
@@ -157,6 +165,12 @@ export function AppProvider({ children }) {
     return () => {
       cancelled = true;
     };
+  }, [provider]);
+
+  // Register for push once logged in, so new booking requests can wake this
+  // device even while the app is backgrounded or fully closed.
+  useEffect(() => {
+    if (provider) ensurePushSubscribed();
   }, [provider]);
 
   useEffect(() => {
