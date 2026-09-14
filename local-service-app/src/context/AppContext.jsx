@@ -103,7 +103,7 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (customer && !location) detectLocation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customer]);
+  }, [customer?.id]);
 
   const hasActiveBooking = useMemo(
     () => bookings.some((b) => ["Pending", "Accepted", "In Progress"].includes(b.status)),
@@ -134,7 +134,8 @@ export function AppProvider({ children }) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [customer, hasActiveBooking]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customer?.id, hasActiveBooking]);
 
   const login = useCallback((token, user) => {
     setAuthToken(token);
@@ -218,17 +219,13 @@ export function AppProvider({ children }) {
     async function loadCustomerData() {
       setLoading(true);
       try {
-        const myBookings = await api.listBookings();
-        if (cancelled) return;
-        setBookings(myBookings);
-
         // Chat threads load lazily per-booking (see loadMessages, used by
         // ChatScreen) — prefetching all of them here used to mean one extra
         // network round trip per booking on every app open, for chats most
         // people never look at.
-
-        const myNotifications = await api.listNotifications();
+        const [myBookings, myNotifications] = await Promise.all([api.listBookings(), api.listNotifications()]);
         if (cancelled) return;
+        setBookings(myBookings);
         setNotifications(myNotifications);
       } catch (e) {
         console.error("Failed to load app data", e);
@@ -240,7 +237,12 @@ export function AppProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [customer]);
+    // Depend on the id, not the whole `customer` object: session restore
+    // sets a fresh-but-identical user object right after the cached one
+    // loads, and keying this on object reference was firing every fetch in
+    // loadCustomerData() twice on every single app open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customer?.id]);
 
   useEffect(() => {
     const onConnect = () => setConnected(true);

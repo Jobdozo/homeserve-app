@@ -27,6 +27,21 @@ function cacheClear(prefix) {
   }
 }
 
+// Collapses genuinely concurrent identical calls into one shared query —
+// unlike the TTL cache above, this isn't about repeat requests over time,
+// it's for the same page load firing two requests that both need the exact
+// same data at nearly the same instant (e.g. the app's own /api/bookings
+// call and /api/providers/:id/earnings, which computes earnings from that
+// same provider's bookings) so they don't each pay for a separate round
+// trip to Data Connect for identical results.
+const inFlight = new Map();
+function dedupe(key, fn) {
+  if (inFlight.has(key)) return inFlight.get(key);
+  const promise = fn().finally(() => inFlight.delete(key));
+  inFlight.set(key, promise);
+  return promise;
+}
+
 function slugify(text) {
   return String(text || "")
     .toLowerCase()
@@ -436,7 +451,12 @@ async function fetchBookingWithRelations(id) {
   );
 }
 
-async function listBookings({ customerId, providerId } = {}) {
+async function listBookings(filter = {}) {
+  const { customerId, providerId } = filter;
+  return dedupe(`listBookings:${customerId || ""}:${providerId || ""}`, () => listBookingsUncached(filter));
+}
+
+async function listBookingsUncached({ customerId, providerId } = {}) {
   const hasFilter = Boolean(customerId || providerId);
   const where = customerId
     ? `where: { customer: { id: { eq: $id } } }, `

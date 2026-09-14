@@ -162,13 +162,19 @@ export function AppProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [provider]);
+    // Depend on the id, not the whole `provider` object: session restore
+    // sets a fresh-but-identical user object right after the cached one
+    // loads, and keying this on object reference was firing every fetch in
+    // load() twice on every single app open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider?.id]);
 
   // Register for push once logged in, so new booking requests can wake this
   // device even while the app is backgrounded or fully closed.
   useEffect(() => {
     if (provider) ensurePushSubscribed();
-  }, [provider]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider?.id]);
 
   // The service worker's push handler postMessages every open tab the
   // moment a booking comes in — this tab may have been backgrounded with a
