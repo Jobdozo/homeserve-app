@@ -271,6 +271,34 @@ app.post("/api/admin/categories", auth.requireAuth("admin"), ah(async (req, res)
   res.status(201).json(category);
 }));
 
+// ---- serviceable locations (PIN-code allowlist gating checkout) ----
+app.get("/api/serviceable-locations/check", ah(async (req, res) => {
+  const { pincode } = req.query || {};
+  if (!pincode) return res.status(400).json({ error: "pincode is required" });
+  res.json(await store.checkServiceability(pincode));
+}));
+
+app.get("/api/admin/serviceable-locations", auth.requireAuth("admin"), ah(async (req, res) => {
+  res.json(await store.listServiceableLocations({}));
+}));
+
+app.post("/api/admin/serviceable-locations", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { pincode, city, area } = req.body || {};
+  const location = await store.createServiceableLocation({ pincode, city, area });
+  res.status(201).json(location);
+}));
+
+app.patch("/api/admin/serviceable-locations/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const location = await store.updateServiceableLocation(req.params.id, req.body || {});
+  if (!location) return res.status(404).json({ error: "Location not found" });
+  res.json(location);
+}));
+
+app.delete("/api/admin/serviceable-locations/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  await store.deleteServiceableLocation(req.params.id);
+  res.status(204).end();
+}));
+
 // ---- admin: onboard a provider directly (skips WhatsApp self-signup) ----
 app.post("/api/admin/providers", auth.requireAuth("admin"), ah(async (req, res) => {
   const { name, phone, category } = req.body || {};

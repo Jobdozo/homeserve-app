@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
-import { timeSlots, defaultAddress } from "../data/mockData";
+import { timeSlots } from "../data/mockData";
 import ScreenHeader from "../components/ScreenHeader";
 import { CalendarIcon, ClockIcon, MapPinIcon, XIcon } from "../components/icons";
 import { discountPct } from "../utils/format";
@@ -24,10 +24,14 @@ export default function CartScreen() {
     location,
     locationStatus,
     detectLocation,
+    checkPincode,
   } = useApp();
   const [submitting, setSubmitting] = useState(false);
   const [couponInput, setCouponInput] = useState("");
   const [applyingCoupon, setApplyingCoupon] = useState(false);
+  const [pincodeInput, setPincodeInput] = useState("");
+  const [checkingPincode, setCheckingPincode] = useState(false);
+  const [pincodeError, setPincodeError] = useState("");
 
   const lines = useMemo(
     () => cart.map((item) => ({ item, service: getService(item.serviceId) })).filter((l) => l.service),
@@ -49,18 +53,34 @@ export default function CartScreen() {
       setApplyingCoupon(false);
     }
   };
+  const serviceable = location?.pincode && location.serviceable !== false;
   const bookingAddress = location
-    ? { label: location.label, line: location.line, lat: location.lat, lng: location.lng }
-    : defaultAddress;
+    ? { label: location.label, line: location.line, lat: location.lat, lng: location.lng, pincode: location.pincode }
+    : null;
+
+  const handleCheckPincode = async () => {
+    if (!/^\d{6}$/.test(pincodeInput.trim()) || checkingPincode) return;
+    setCheckingPincode(true);
+    setPincodeError("");
+    try {
+      const loc = await checkPincode(pincodeInput.trim());
+      if (!loc.serviceable) setPincodeError("Sorry, Tikdum isn't available at this PIN code yet.");
+      else setPincodeInput("");
+    } catch (e) {
+      setPincodeError(e.message || "Couldn't check that PIN code. Try again.");
+    } finally {
+      setCheckingPincode(false);
+    }
+  };
 
   const handleCheckout = async () => {
-    if (submitting || lines.length === 0) return;
+    if (submitting || lines.length === 0 || !serviceable) return;
     setSubmitting(true);
     try {
       const created = await checkout(bookingAddress);
       navigate("/bookings", { replace: true, state: { orderId: created[0]?.orderId } });
     } catch (e) {
-      showToast("Something went wrong. Please try again.");
+      showToast(e.message || "Something went wrong. Please try again.");
       setSubmitting(false);
     }
   };
@@ -155,14 +175,52 @@ export default function CartScreen() {
               {locationStatus === "detecting" ? "Detecting…" : "Use current location"}
             </button>
           </div>
-          <div className="flex items-start gap-2 rounded-xl border border-gray-200 px-3 py-2.5">
-            <MapPinIcon width={16} height={16} className="mt-0.5 flex-shrink-0 text-gray-400" />
-            <div>
-              <p className="text-[13px] font-semibold text-gray-800">{bookingAddress.label}</p>
-              <p className="text-[11.5px] leading-snug text-gray-500">{bookingAddress.line}</p>
-              {!location && <p className="mt-0.5 text-[10.5px] text-amber-600">Using a placeholder address — tap "Use current location" for accurate pickup.</p>}
+
+          {bookingAddress && (
+            <div
+              className={`flex items-start gap-2 rounded-xl border px-3 py-2.5 ${
+                serviceable ? "border-gray-200" : "border-red-200 bg-red-50"
+              }`}
+            >
+              <MapPinIcon width={16} height={16} className={`mt-0.5 flex-shrink-0 ${serviceable ? "text-gray-400" : "text-red-400"}`} />
+              <div>
+                <p className="text-[13px] font-semibold text-gray-800">{bookingAddress.label}</p>
+                <p className="text-[11.5px] leading-snug text-gray-500">{bookingAddress.line}</p>
+                {!serviceable && (
+                  <p className="mt-0.5 text-[11px] font-medium text-red-600">
+                    Sorry, Tikdum isn't available at PIN {bookingAddress.pincode} yet — try a different PIN code below.
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
+          )}
+
+          {!bookingAddress && locationStatus === "denied" && (
+            <p className="mb-2 text-[11px] text-amber-600">Location access denied — enter your PIN code instead.</p>
+          )}
+
+          {!serviceable && (
+            <div className="mt-2 flex gap-2">
+              <input
+                value={pincodeInput}
+                onChange={(e) => {
+                  setPincodeInput(e.target.value.replace(/\D/g, "").slice(0, 6));
+                  setPincodeError("");
+                }}
+                placeholder="Enter 6-digit PIN code"
+                inputMode="numeric"
+                className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-[13px] text-gray-800 outline-none focus:border-brand"
+              />
+              <button
+                onClick={handleCheckPincode}
+                disabled={!/^\d{6}$/.test(pincodeInput) || checkingPincode}
+                className="flex-shrink-0 rounded-xl bg-gray-900 px-4 py-2.5 text-[12.5px] font-semibold text-white disabled:opacity-50"
+              >
+                {checkingPincode ? "Checking…" : "Check"}
+              </button>
+            </div>
+          )}
+          {pincodeError && <p className="mt-1.5 text-[11.5px] font-medium text-red-500">{pincodeError}</p>}
         </div>
 
         <div>
@@ -221,10 +279,14 @@ export default function CartScreen() {
         )}
         <button
           onClick={handleCheckout}
-          disabled={submitting}
+          disabled={submitting || !serviceable}
           className="w-full rounded-xl bg-brand py-3.5 text-sm font-semibold text-white shadow-card hover:bg-brand-dark active:scale-[0.98] disabled:opacity-60"
         >
-          {submitting ? "Placing order..." : `Checkout · ₹${payable}`}
+          {submitting
+            ? "Placing order..."
+            : !serviceable
+              ? "Confirm a serviceable address to continue"
+              : `Checkout · ₹${payable}`}
         </button>
         <p className="mt-2 text-center text-[10.5px] text-gray-400">
           You won't be charged now. Payment after service completion.

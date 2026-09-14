@@ -32,7 +32,7 @@ const sections = [
     items: [
       { label: "Providers Verification", icon: ShieldCheckIcon, to: "/providers" },
       { label: "Services & Categories", icon: GridIcon, to: "/services" },
-      { label: "Locations", icon: MapPinIcon, sub: "Cities / Areas / PIN Codes" },
+      { label: "Locations", icon: MapPinIcon, to: "/locations", sub: "Cities / Areas / PIN Codes" },
       { label: "Bookings", icon: CalendarIcon, to: "/bookings" },
       { label: "Payments & Transactions", icon: WalletIcon, to: "/payments" },
       { label: "Commission", icon: PercentIcon },
@@ -96,7 +96,10 @@ export default function Sidebar({ open, onClose }) {
                       }
                     >
                       <Icon width={16} height={16} />
-                      {item.label}
+                      <span className="flex-1">
+                        {item.label}
+                        {item.sub && <span className="block text-[10px] text-white/35">{item.sub}</span>}
+                      </span>
                     </NavLink>
                   );
                 }

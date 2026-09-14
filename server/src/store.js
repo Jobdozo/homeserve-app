@@ -74,13 +74,15 @@ const SERVICE_FIELDS = `
 `;
 
 const BOOKING_FIELDS = `
-  id orderId status date time addressLabel addressLine addressLat addressLng issue amount
+  id orderId status date time addressLabel addressLine addressLat addressLng addressPincode issue amount
   createdAt cancelledAt reviewed reviewRating reviewText
   service { id }
   provider { id }
   customer { id name avatar phone email }
   bookingStatusEvents_on_booking { status at }
 `;
+
+const SERVICEABLE_LOCATION_FIELDS = `id pincode city area active createdAt`;
 
 // ---- mappers: raw GraphQL rows -> the exact shapes the rest of the app expects ----
 
@@ -127,7 +129,7 @@ function mapBooking(b, customer, service) {
     status: b.status,
     date: b.date,
     time: b.time,
-    address: { label: b.addressLabel, line: b.addressLine, lat: b.addressLat, lng: b.addressLng },
+    address: { label: b.addressLabel, line: b.addressLine, lat: b.addressLat, lng: b.addressLng, pincode: b.addressPincode },
     issue: b.issue,
     amount: b.amount,
     createdAt: b.createdAt,
@@ -191,6 +193,92 @@ async function createCategory({ name, icon }) {
     slug,
   });
   return mapCategory(categories[0]);
+}
+
+// ---- serviceable locations (admin-managed PIN code allowlist) ----
+
+function mapServiceableLocation(l) {
+  if (!l) return l;
+  return { id: l.id, pincode: l.pincode, city: l.city, area: l.area, active: l.active, createdAt: l.createdAt };
+}
+
+async function listServiceableLocations({ activeOnly = false } = {}) {
+  const cacheKey = `serviceableLocations:${activeOnly ? "active" : "all"}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+  const gql = activeOnly
+    ? `query { serviceableLocations(where: { active: { eq: true } }, orderBy: { city: ASC }) { ${SERVICEABLE_LOCATION_FIELDS} } }`
+    : `query { serviceableLocations(orderBy: { city: ASC }) { ${SERVICEABLE_LOCATION_FIELDS} } }`;
+  const { serviceableLocations } = await query(gql, {});
+  return cacheSet(cacheKey, serviceableLocations.map(mapServiceableLocation));
+}
+
+// The single enforcement chokepoint: every serviceability check (admin
+// "check" preview, checkout-time client check, and the server-side gate in
+// createBooking below) goes through this, so there's exactly one definition
+// of "serviceable" — an active row matching the pincode digits exactly.
+async function checkServiceability(pincode) {
+  const digits = String(pincode || "").replace(/\D/g, "");
+  if (digits.length !== 6) return { serviceable: false, pincode: digits, city: null, area: null };
+  const { serviceableLocations } = await query(
+    `query($pincode: String!) { serviceableLocations(where: { pincode: { eq: $pincode }, active: { eq: true } }) { city area } }`,
+    { pincode: digits }
+  );
+  const match = serviceableLocations[0];
+  return { serviceable: !!match, pincode: digits, city: match?.city || null, area: match?.area || null };
+}
+
+async function createServiceableLocation({ pincode, city, area }) {
+  const digits = String(pincode || "").replace(/\D/g, "");
+  if (digits.length !== 6) throw Object.assign(new Error("Pincode must be exactly 6 digits"), { status: 400 });
+  if (!city || !city.trim()) throw Object.assign(new Error("City is required"), { status: 400 });
+  const { serviceableLocation_insert } = await mutate(
+    `mutation($pincode: String!, $city: String!, $area: String) {
+      serviceableLocation_insert(data: { pincode: $pincode, city: $city, area: $area, active: true })
+    }`,
+    { pincode: digits, city: city.trim(), area: area?.trim() || null }
+  ).catch((e) => {
+    throw Object.assign(new Error(`Pincode ${digits} is already in the list`), { status: 409, cause: e });
+  });
+  cacheClear("serviceableLocations");
+  await logActivity("location", `Added serviceable PIN code ${digits} (${city.trim()})`);
+  const { serviceableLocation } = await query(
+    `query($id: UUID!) { serviceableLocation(id: $id) { ${SERVICEABLE_LOCATION_FIELDS} } }`,
+    { id: serviceableLocation_insert.id }
+  );
+  return mapServiceableLocation(serviceableLocation);
+}
+
+async function updateServiceableLocation(id, patch) {
+  const fields = {};
+  const vars = { id };
+  const varDefs = [];
+  for (const key of ["city", "area", "active"]) {
+    if (patch[key] !== undefined) {
+      fields[key] = patch[key];
+      vars[key] = patch[key];
+      varDefs.push(`$${key}: ${key === "active" ? "Boolean" : "String"}`);
+    }
+  }
+  if (varDefs.length > 0) {
+    await mutate(
+      `mutation($id: UUID!, ${varDefs.join(", ")}) { serviceableLocation_update(id: $id, data: { ${Object.keys(fields)
+        .map((k) => `${k}: $${k}`)
+        .join(", ")} }) }`,
+      vars
+    );
+    cacheClear("serviceableLocations");
+  }
+  const { serviceableLocation } = await query(
+    `query($id: UUID!) { serviceableLocation(id: $id) { ${SERVICEABLE_LOCATION_FIELDS} } }`,
+    { id }
+  );
+  return mapServiceableLocation(serviceableLocation);
+}
+
+async function deleteServiceableLocation(id) {
+  await mutate(`mutation($id: UUID!) { serviceableLocation_delete(id: $id) }`, { id });
+  cacheClear("serviceableLocations");
 }
 
 // ---- customers ----
@@ -530,6 +618,18 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
   if (!service) throw new Error("Unknown service");
   const customer = await getCustomerById(customerId);
   if (!customer) throw new Error("Unknown customer");
+
+  // Full serviceability enforcement: a booking can only be created for a
+  // PIN code the admin has explicitly marked serviceable — client-side
+  // checks in the checkout flow are just early UX, this is the real gate.
+  const serviceability = await checkServiceability(address?.pincode);
+  if (!serviceability.serviceable) {
+    throw Object.assign(
+      new Error("Tikdum isn't available in this area yet — please check your PIN code or try a different address."),
+      { status: 400 }
+    );
+  }
+
   let amount = service.price;
   if (offerCode) {
     const result = validateOffer(offerCode);
@@ -539,11 +639,11 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
 
   const now = new Date().toISOString();
   const { booking_insert } = await mutate(
-    `mutation($orderId: String, $serviceId: UUID!, $providerId: UUID!, $customerId: UUID!, $date: Date!, $time: String!, $addressLabel: String, $addressLine: String, $addressLat: Float, $addressLng: Float, $issue: String, $amount: Int!, $createdAt: Timestamp!) {
+    `mutation($orderId: String, $serviceId: UUID!, $providerId: UUID!, $customerId: UUID!, $date: Date!, $time: String!, $addressLabel: String, $addressLine: String, $addressLat: Float, $addressLng: Float, $addressPincode: String, $issue: String, $amount: Int!, $createdAt: Timestamp!) {
       booking_insert(data: {
         orderId: $orderId, serviceId: $serviceId, providerId: $providerId, customerId: $customerId,
         status: "Pending", date: $date, time: $time, addressLabel: $addressLabel, addressLine: $addressLine,
-        addressLat: $addressLat, addressLng: $addressLng, issue: $issue, amount: $amount, createdAt: $createdAt
+        addressLat: $addressLat, addressLng: $addressLng, addressPincode: $addressPincode, issue: $issue, amount: $amount, createdAt: $createdAt
       })
     }`,
     {
@@ -557,6 +657,7 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
       addressLine: address?.line || null,
       addressLat: address?.lat ?? null,
       addressLng: address?.lng ?? null,
+      addressPincode: serviceability.pincode,
       issue: issue || "",
       amount,
       createdAt: now,
@@ -1181,6 +1282,11 @@ module.exports = {
   getProvider,
   listCategories,
   createCategory,
+  listServiceableLocations,
+  checkServiceability,
+  createServiceableLocation,
+  updateServiceableLocation,
+  deleteServiceableLocation,
   listServices,
   getService,
   listProviderServices,
