@@ -6,7 +6,6 @@ import {
   UsersIcon,
   ShieldCheckIcon,
   GridIcon,
-  RequestIcon,
   MapPinIcon,
   CalendarIcon,
   WalletIcon,
@@ -33,7 +32,6 @@ const sections = [
     items: [
       { label: "Providers Verification", icon: ShieldCheckIcon, to: "/providers" },
       { label: "Services & Categories", icon: GridIcon, to: "/services" },
-      { label: "Service Requests", icon: RequestIcon, to: "/bookings" },
       { label: "Locations", icon: MapPinIcon, sub: "Cities / Areas / PIN Codes" },
       { label: "Bookings", icon: CalendarIcon, to: "/bookings" },
       { label: "Payments & Transactions", icon: WalletIcon, to: "/payments" },
