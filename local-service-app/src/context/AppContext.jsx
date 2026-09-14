@@ -68,7 +68,19 @@ export function AppProvider({ children }) {
   const [notifications, setNotifications] = useState([]);
   const [location, setLocation] = useState(loadLocation);
   const [locationStatus, setLocationStatus] = useState("idle"); // idle | detecting | ready | denied | error
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const loadedThreads = useRef(new Set());
+
+  useEffect(() => {
+    const onOffline = () => setIsOffline(true);
+    const onOnline = () => setIsOffline(false);
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("online", onOnline);
+    return () => {
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("online", onOnline);
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(CART_KEY, JSON.stringify(cart));
@@ -154,7 +166,16 @@ export function AppProvider({ children }) {
         if (cancelled) return;
         setCustomer(user);
       } catch (e) {
-        if (!cancelled) logout();
+        if (cancelled) return;
+        // A real 401/403 means the token itself is invalid — log out. A
+        // network failure (offline, unreachable) just means we can't verify
+        // it right now, so keep the cached session and let the app work
+        // offline with what it already has.
+        if (e.status === 401 || e.status === 403) {
+          logout();
+        } else {
+          setCustomer(initialAuth.user);
+        }
       } finally {
         if (!cancelled) setAuthLoading(false);
       }
@@ -405,6 +426,7 @@ export function AppProvider({ children }) {
       messages,
       loading,
       connected,
+      isOffline,
       toast,
       showToast,
       getService,
@@ -445,6 +467,7 @@ export function AppProvider({ children }) {
       messages,
       loading,
       connected,
+      isOffline,
       toast,
       showToast,
       getService,

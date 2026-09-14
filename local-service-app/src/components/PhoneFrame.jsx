@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import BottomNav from "./BottomNav";
 import DesktopHeader from "./DesktopHeader";
 import Toast from "../components/Toast";
+import OfflineBanner from "./OfflineBanner";
 import { useApp } from "../context/AppContext";
 
 function LoadingState() {
@@ -14,8 +15,10 @@ function LoadingState() {
 }
 
 function ConnectionBanner() {
-  const { connected } = useApp();
-  if (connected) return null;
+  const { connected, isOffline } = useApp();
+  // The offline banner already covers "no network" more precisely — don't
+  // also show "reconnecting" underneath it.
+  if (connected || isOffline) return null;
   return (
     <div className="flex-shrink-0 bg-amber-100 px-4 py-1.5 text-center text-[10.5px] font-medium text-amber-700">
       Reconnecting to server…
@@ -30,6 +33,7 @@ export function MainLayout() {
       <DesktopHeader />
       <div className="app-body">
         <div className="phone-frame">
+          <OfflineBanner />
           <ConnectionBanner />
           <div className="screen no-scrollbar">{loading ? <LoadingState /> : <Outlet />}</div>
           <BottomNav />
@@ -47,6 +51,7 @@ export function DetailLayout() {
       <DesktopHeader />
       <div className="app-body">
         <div className="phone-frame">
+          <OfflineBanner />
           <ConnectionBanner />
           <div className="screen no-scrollbar">{loading ? <LoadingState /> : <Outlet />}</div>
           <Toast />

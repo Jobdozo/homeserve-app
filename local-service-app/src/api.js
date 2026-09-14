@@ -7,6 +7,9 @@ export function setAuthToken(token) {
 }
 
 async function request(path, options) {
+  // Network-level failures (offline, DNS, etc.) throw here with no `status`
+  // attached — callers use that to tell "can't reach the server" apart from
+  // a real HTTP error response (see AppContext's session restore).
   const res = await fetch(`${API_BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",
@@ -16,7 +19,9 @@ async function request(path, options) {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed: ${res.status}`);
+    const err = new Error(body.error || `Request failed: ${res.status}`);
+    err.status = res.status;
+    throw err;
   }
   if (res.status === 204) return null;
   return res.json();
