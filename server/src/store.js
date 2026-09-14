@@ -91,7 +91,10 @@ function mapCategory(c) {
 
 function mapProvider(p) {
   if (!p) return p;
-  return { ...p };
+  // responseRate is never written at signup (no rejected/late responses yet
+  // to compute it from) — default a brand-new provider to 100% rather than
+  // showing a raw null (renders as the literal string "null%" in the UI).
+  return { ...p, responseRate: p.responseRate ?? 100 };
 }
 
 function mapService(s) {
