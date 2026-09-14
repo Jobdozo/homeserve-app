@@ -58,6 +58,7 @@ export function AppProvider({ children }) {
   const [providers, setProviders] = useState({});
   const [categories, setCategories] = useState([]);
   const [services, setServices] = useState([]);
+  const [banners, setBanners] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [messages, setMessages] = useState({});
   const [loading, setLoading] = useState(true);
@@ -170,11 +171,12 @@ export function AppProvider({ children }) {
     let cancelled = false;
     async function loadCatalog() {
       try {
-        const boot = await api.bootstrap();
+        const [boot, bannerData] = await Promise.all([api.bootstrap(), api.listBanners().catch(() => [])]);
         if (cancelled) return;
         setProviders(Object.fromEntries(boot.providers.map((p) => [p.id, p])));
         setCategories(boot.categories);
         setServices(boot.services);
+        setBanners(bannerData);
       } catch (e) {
         console.error("Failed to load catalog", e);
       }
@@ -343,17 +345,39 @@ export function AppProvider({ children }) {
     setCart((prev) => prev.filter((item) => item.serviceId !== serviceId));
   }, []);
 
+  const [appliedOffer, setAppliedOffer] = useState(null);
+  const [offerError, setOfferError] = useState("");
+
+  const applyOfferCode = useCallback(async (code) => {
+    setOfferError("");
+    try {
+      const offer = await api.validateOffer(code);
+      setAppliedOffer(offer);
+      return offer;
+    } catch (e) {
+      setAppliedOffer(null);
+      setOfferError(e.message || "Invalid offer code");
+      throw e;
+    }
+  }, []);
+
+  const clearOffer = useCallback(() => {
+    setAppliedOffer(null);
+    setOfferError("");
+  }, []);
+
   const checkout = useCallback(
     async (address) => {
       if (cart.length === 0) return [];
       const items = cart.map(({ serviceId, date, time, issue }) => ({ serviceId, date, time, issue }));
-      const created = await api.createOrder({ items, address: address || defaultAddress });
+      const created = await api.createOrder({ items, address: address || defaultAddress, offerCode: appliedOffer?.code });
       setBookings((prev) => created.reduce((acc, b) => upsertById(acc, b), prev));
       setCart([]);
+      setAppliedOffer(null);
       showToast(`Order placed! ${created.length} service${created.length > 1 ? "s" : ""} booked`);
       return created;
     },
-    [cart, showToast]
+    [cart, showToast, appliedOffer]
   );
 
   const markNotificationRead = useCallback(async (id) => {
@@ -376,6 +400,7 @@ export function AppProvider({ children }) {
       providers,
       categories,
       services,
+      banners,
       bookings,
       messages,
       loading,
@@ -396,6 +421,10 @@ export function AppProvider({ children }) {
       updateCartItem,
       removeFromCart,
       checkout,
+      appliedOffer,
+      offerError,
+      applyOfferCode,
+      clearOffer,
       notifications,
       markNotificationRead,
       markAllNotificationsRead,
@@ -411,6 +440,7 @@ export function AppProvider({ children }) {
       providers,
       categories,
       services,
+      banners,
       bookings,
       messages,
       loading,
@@ -431,6 +461,10 @@ export function AppProvider({ children }) {
       updateCartItem,
       removeFromCart,
       checkout,
+      appliedOffer,
+      offerError,
+      applyOfferCode,
+      clearOffer,
       notifications,
       markNotificationRead,
       markAllNotificationsRead,

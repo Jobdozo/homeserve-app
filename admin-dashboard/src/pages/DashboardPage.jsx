@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import QuickActionModal from "../components/QuickActionModal";
 import {
   AreaChart,
   Area,
@@ -23,17 +25,18 @@ const statusStyles = {
 };
 
 const quickActions = [
-  { icon: "🗂️", label: "Add Category" },
-  { icon: "🧰", label: "Add Service" },
-  { icon: "🧑‍🔧", label: "Add Provider" },
-  { icon: "🖼️", label: "Add Banner" },
-  { icon: "🔔", label: "Send Notification" },
-  { icon: "🎟️", label: "Manage Offers" },
+  { icon: "🗂️", label: "Add Category", type: "category" },
+  { icon: "🧰", label: "Add Service", type: "service" },
+  { icon: "🧑‍🔧", label: "Add Provider", type: "provider" },
+  { icon: "🖼️", label: "Add Banner", type: "banner" },
+  { icon: "🔔", label: "Send Notification", type: "notification" },
+  { icon: "🎟️", label: "Manage Offers", type: "offer" },
 ];
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const { overview, activities, showToast } = useApp();
+  const { overview, activities } = useApp();
+  const [activeModal, setActiveModal] = useState(null);
   if (!overview) return null;
 
   const { totals, bookingsByDay, recentBookings, verification, topServices, systemOverview } = overview;
@@ -174,7 +177,7 @@ export default function DashboardPage() {
             {quickActions.map((a) => (
               <button
                 key={a.label}
-                onClick={() => showToast(`${a.label} — coming soon`)}
+                onClick={() => setActiveModal(a.type)}
                 className="flex flex-col items-center gap-1.5 rounded-xl bg-gray-50 py-3 text-center hover:bg-gray-100"
               >
                 <span className="text-lg">{a.icon}</span>
@@ -211,6 +214,8 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {activeModal && <QuickActionModal type={activeModal} onClose={() => setActiveModal(null)} />}
     </div>
   );
 }

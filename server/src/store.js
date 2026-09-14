@@ -1,4 +1,13 @@
 const { query, mutate } = require("./dataconnect");
+const jsonStore = require("./jsonStore");
+
+function slugify(text) {
+  return String(text || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
 
 // Phones are compared digits-only so formatting differences (spacing, missing
 // "+", etc.) between the number typed at signup and at a later login never
@@ -124,6 +133,19 @@ async function listCategories() {
   return categories.map(mapCategory);
 }
 
+async function createCategory({ name, icon }) {
+  const slug = slugify(name);
+  await mutate(
+    `mutation($slug: String!, $name: String!, $icon: String) { category_insert(data: { slug: $slug, name: $name, icon: $icon }) }`,
+    { slug, name, icon: icon || null }
+  );
+  await logActivity("category", `New category added: ${name}`);
+  const { categories } = await query(`query($slug: String!) { categories(where: { slug: { eq: $slug } }) { slug name icon } }`, {
+    slug,
+  });
+  return mapCategory(categories[0]);
+}
+
 // ---- customers ----
 
 async function getCustomerById(id) {
@@ -136,6 +158,11 @@ async function getCustomerByPhone(phone) {
   if (!target) return undefined;
   const { customers } = await query(`query { customers { id name avatar phone email } }`, {});
   return customers.find((c) => normalizePhone(c.phone) === target);
+}
+
+async function listCustomerIds() {
+  const { customers } = await query(`query { customers { id } }`, {});
+  return customers.map((c) => c.id);
 }
 
 async function createCustomer({ phone, name }) {
@@ -153,6 +180,24 @@ async function getProviderByPhone(phone) {
   if (!target) return undefined;
   const { providers } = await query(`query { providers { ${PROVIDER_FIELDS} } }`, {});
   return mapProvider(providers.find((p) => normalizePhone(p.phone) === target));
+}
+
+// Admin manually onboards a provider (no WhatsApp signup yet) — pre-verified
+// since an admin is directly vetting them; `live: false` until they actually
+// log in via the Provider App with this same phone number, which the login
+// flow resolves to this same record (getProviderByPhone matches by phone).
+async function adminCreateProvider({ name, phone, category }) {
+  const { provider_insert } = await mutate(
+    `mutation($name: String!, $phone: String!, $category: String) {
+      provider_insert(data: {
+        name: $name, phone: $phone, avatar: "🧑‍🔧", category: $category,
+        live: false, verified: true, verificationStatus: "approved"
+      })
+    }`,
+    { name, phone, category: category || "Not set" }
+  );
+  await logActivity("provider", `Admin added a new provider: ${name}`);
+  return getProvider(provider_insert.id);
 }
 
 async function createProviderSignup({ phone, name }) {
@@ -271,6 +316,25 @@ async function addProviderService(providerId, data) {
   return getService(serviceId);
 }
 
+// Admin adding a service on a provider's behalf — unlike the provider app's
+// own addProviderService (which currently hardcodes "ac-repair"), this
+// resolves the real category the admin picked.
+async function adminCreateService(providerId, { categorySlug, name, price, originalPrice }) {
+  const categoryId = (await getCategoryUuidBySlug(categorySlug)) || null;
+  const { service_insert } = await mutate(
+    `mutation($providerId: UUID!, $categoryId: UUID, $name: String!, $price: Int!, $originalPrice: Int) {
+      service_insert(data: {
+        providerId: $providerId, categoryId: $categoryId, name: $name, price: $price,
+        originalPrice: $originalPrice, icon: "🛠️", distanceLabel: "3.2 km away", status: "active"
+      })
+    }`,
+    { providerId, categoryId, name, price: Number(price) || 0, originalPrice: originalPrice ? Number(originalPrice) : null }
+  );
+  const provider = await getProvider(providerId);
+  await logActivity("service", `Admin added a new service for ${provider?.name || "a provider"}: ${name}`);
+  return getService(service_insert.id);
+}
+
 async function updateProviderService(providerId, serviceId, patch) {
   const existing = await getService(serviceId);
   if (!existing || existing.providerId !== providerId) return undefined;
@@ -368,11 +432,19 @@ async function getMessages(bookingId) {
   return messages.map(mapMessage);
 }
 
-async function createBooking({ serviceId, date, time, address, issue, customerId, orderId }) {
+// `offerCode` (never a raw discount percentage) is re-validated here server-side
+// on every call — a client can never supply its own discount amount directly.
+async function createBooking({ serviceId, date, time, address, issue, customerId, orderId, offerCode }) {
   const service = await getService(serviceId);
   if (!service) throw new Error("Unknown service");
   const customer = await getCustomerById(customerId);
   if (!customer) throw new Error("Unknown customer");
+  let amount = service.price;
+  if (offerCode) {
+    const result = validateOffer(offerCode);
+    if (!result.valid) throw new Error(result.error);
+    amount = Math.max(0, Math.round(service.price * (1 - result.offer.discountPercent / 100)));
+  }
 
   const now = new Date().toISOString();
   const { booking_insert } = await mutate(
@@ -395,7 +467,7 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
       addressLat: address?.lat ?? null,
       addressLng: address?.lng ?? null,
       issue: issue || "",
-      amount: service.price,
+      amount,
       createdAt: now,
     }
   );
@@ -419,9 +491,13 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
   return fetchBookingWithRelations(bookingId);
 }
 
-async function createOrder({ items, address, customerId }) {
+async function createOrder({ items, address, customerId, offerCode }) {
   if (!Array.isArray(items) || items.length === 0) throw new Error("Order must have at least one item");
   const orderId = `ORD-${Date.now().toString(36)}`;
+  if (offerCode) {
+    const result = validateOffer(offerCode);
+    if (!result.valid) throw new Error(result.error);
+  }
   const created = [];
   for (const item of items) {
     created.push(
@@ -433,6 +509,7 @@ async function createOrder({ items, address, customerId }) {
         address,
         customerId,
         orderId,
+        offerCode,
       })
     );
   }
@@ -927,15 +1004,92 @@ async function getAdminReports() {
   return { revenueByCategory, statusDistribution, providerLeaderboard, platformRevenue };
 }
 
+// ---- banners (admin-managed promo carousel — small, low-volume config data,
+// stored as flat JSON rather than a Postgres table; see jsonStore.js) ----
+
+function listBanners() {
+  return jsonStore.readAll("banners").sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+function listActiveBanners() {
+  return listBanners().filter((b) => b.active !== false);
+}
+
+async function createBanner({ title, subtitle, icon, active = true }) {
+  const banners = jsonStore.readAll("banners");
+  const banner = jsonStore.insert("banners", {
+    title,
+    subtitle: subtitle || "",
+    icon: icon || "📣",
+    active,
+    order: banners.length,
+    createdAt: new Date().toISOString(),
+  });
+  // Best-effort only — banners are deliberately independent of Data Connect,
+  // so an outage there (e.g. quota) must never block banner management.
+  logActivity("banner", `New banner added: ${title}`).catch((e) => console.error("logActivity failed", e));
+  return banner;
+}
+
+function updateBanner(id, patch) {
+  return jsonStore.update("banners", id, patch);
+}
+
+function deleteBanner(id) {
+  return jsonStore.remove("banners", id);
+}
+
+// ---- offers / discount codes (same storage approach as banners) ----
+
+function listOffers() {
+  return jsonStore.readAll("offers");
+}
+
+async function createOffer({ code, discountPercent, description, active = true, expiresAt }) {
+  const offer = jsonStore.insert("offers", {
+    code: code.trim().toUpperCase(),
+    discountPercent: Number(discountPercent),
+    description: description || "",
+    active,
+    expiresAt: expiresAt || null,
+    createdAt: new Date().toISOString(),
+  });
+  // Best-effort only — see createBanner.
+  logActivity("offer", `New offer created: ${offer.code} (${offer.discountPercent}% off)`).catch((e) =>
+    console.error("logActivity failed", e)
+  );
+  return offer;
+}
+
+function updateOffer(id, patch) {
+  return jsonStore.update("offers", id, patch);
+}
+
+function deleteOffer(id) {
+  return jsonStore.remove("offers", id);
+}
+
+function validateOffer(code) {
+  const offers = jsonStore.readAll("offers");
+  const offer = offers.find((o) => o.code === String(code || "").trim().toUpperCase());
+  if (!offer) return { valid: false, error: "Invalid offer code" };
+  if (offer.active === false) return { valid: false, error: "This offer is no longer active" };
+  if (offer.expiresAt && new Date(offer.expiresAt) < new Date()) return { valid: false, error: "This offer has expired" };
+  return { valid: true, offer };
+}
+
 module.exports = {
   getCustomerById,
   getCustomerByPhone,
   createCustomer,
+  listCustomerIds,
   getProviderByPhone,
   createProviderSignup,
+  adminCreateProvider,
   listProviders,
   getProvider,
   listCategories,
+  createCategory,
   listServices,
   getService,
   listProviderServices,
@@ -949,12 +1103,14 @@ module.exports = {
   addMessage,
   addReview,
   addProviderService,
+  adminCreateService,
   updateProviderService,
   updateServiceStatus,
   setProviderVerification,
   updateProviderProfile,
   getEarnings,
   listActivities,
+  logActivity,
   getAdminOverview,
   getProviderReviews,
   addNotification,
@@ -964,4 +1120,14 @@ module.exports = {
   markAllNotificationsRead,
   getTransactions,
   getAdminReports,
+  listBanners,
+  listActiveBanners,
+  createBanner,
+  updateBanner,
+  deleteBanner,
+  listOffers,
+  createOffer,
+  updateOffer,
+  deleteOffer,
+  validateOffer,
 };

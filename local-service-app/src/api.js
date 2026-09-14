@@ -45,4 +45,6 @@ export const api = {
   reportLocation: (lat, lng, accuracy) =>
     request("/location", { method: "POST", body: JSON.stringify({ lat, lng, accuracy }) }),
   getBookingLiveLocation: (bookingId) => request(`/bookings/${bookingId}/live-location`),
+  listBanners: () => request("/banners"),
+  validateOffer: (code) => request("/offers/validate", { method: "POST", body: JSON.stringify({ code }) }),
 };

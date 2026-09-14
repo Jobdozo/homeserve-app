@@ -245,6 +245,131 @@ app.get("/api/providers/:id/reviews", ah(async (req, res) => {
 // ---- categories ----
 app.get("/api/categories", ah(async (req, res) => res.json(await store.listCategories())));
 
+app.post("/api/admin/categories", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { name, icon } = req.body || {};
+  if (!name || !name.trim()) return res.status(400).json({ error: "name is required" });
+  const existing = await store.listCategories();
+  if (existing.some((c) => c.name.toLowerCase() === name.trim().toLowerCase())) {
+    return res.status(409).json({ error: "A category with this name already exists" });
+  }
+  const category = await store.createCategory({ name: name.trim(), icon });
+  io.emit("activity:created", (await store.listActivities(1))[0]);
+  res.status(201).json(category);
+}));
+
+// ---- admin: onboard a provider directly (skips WhatsApp self-signup) ----
+app.post("/api/admin/providers", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { name, phone, category } = req.body || {};
+  if (!name || !name.trim() || !phone || !phone.trim()) {
+    return res.status(400).json({ error: "name and phone are required" });
+  }
+  const existing = await store.getProviderByPhone(phone);
+  if (existing) return res.status(409).json({ error: "A provider with this phone number already exists" });
+  const provider = await store.adminCreateProvider({ name: name.trim(), phone: phone.trim(), category });
+  io.emit("activity:created", (await store.listActivities(1))[0]);
+  res.status(201).json(provider);
+}));
+
+// ---- admin: add a service on behalf of a provider ----
+app.post("/api/admin/services", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { providerId, categorySlug, name, price, originalPrice } = req.body || {};
+  if (!providerId || !categorySlug || !name || price == null) {
+    return res.status(400).json({ error: "providerId, categorySlug, name and price are required" });
+  }
+  const provider = await store.getProvider(providerId);
+  if (!provider) return res.status(404).json({ error: "Provider not found" });
+  const service = await store.adminCreateService(providerId, { categorySlug, name, price, originalPrice });
+  io.emit("service:created", service);
+  io.emit("activity:created", (await store.listActivities(1))[0]);
+  res.status(201).json(service);
+}));
+
+// ---- admin: broadcast a notification ----
+app.post("/api/admin/notifications/broadcast", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { audience, recipientId, title, message } = req.body || {};
+  if (!["customers", "providers", "single"].includes(audience) || !title || !message) {
+    return res.status(400).json({ error: "audience (customers|providers|single), title and message are required" });
+  }
+  let recipientIds = [];
+  let recipientType;
+  if (audience === "customers") {
+    recipientType = "customer";
+    recipientIds = await store.listCustomerIds();
+  } else if (audience === "providers") {
+    recipientType = "provider";
+    recipientIds = (await store.listProviders()).map((p) => p.id);
+  } else {
+    if (!recipientId) return res.status(400).json({ error: "recipientId is required for a single recipient" });
+    const [type, id] = recipientId.split(":");
+    if (!["customer", "provider"].includes(type) || !id) {
+      return res.status(400).json({ error: 'recipientId must be formatted as "customer:<id>" or "provider:<id>"' });
+    }
+    recipientType = type;
+    recipientIds = [id];
+  }
+  for (const id of recipientIds) {
+    await store.addNotification({ recipientType, recipientId: id, type: "announcement", title, message });
+  }
+  await store.logActivity("notification", `Admin broadcast "${title}" to ${recipientIds.length} ${recipientType}(s)`);
+  res.status(201).json({ sent: recipientIds.length });
+}));
+
+// ---- banners (admin-managed promo carousel on the customer app home screen) ----
+app.get("/api/banners", ah(async (req, res) => res.json(store.listActiveBanners())));
+
+app.get("/api/admin/banners", auth.requireAuth("admin"), ah(async (req, res) => res.json(store.listBanners())));
+
+app.post("/api/admin/banners", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { title, subtitle, icon, active } = req.body || {};
+  if (!title || !title.trim()) return res.status(400).json({ error: "title is required" });
+  const banner = await store.createBanner({ title: title.trim(), subtitle, icon, active });
+  res.status(201).json(banner);
+}));
+
+app.patch("/api/admin/banners/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const banner = store.updateBanner(req.params.id, req.body || {});
+  if (!banner) return res.status(404).json({ error: "Banner not found" });
+  res.json(banner);
+}));
+
+app.delete("/api/admin/banners/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const ok = store.deleteBanner(req.params.id);
+  if (!ok) return res.status(404).json({ error: "Banner not found" });
+  res.status(204).end();
+}));
+
+// ---- offers / discount codes ----
+app.post("/api/offers/validate", ah(async (req, res) => {
+  const { code } = req.body || {};
+  if (!code) return res.status(400).json({ error: "code is required" });
+  const result = store.validateOffer(code);
+  if (!result.valid) return res.status(400).json({ error: result.error });
+  res.json({ code: result.offer.code, discountPercent: result.offer.discountPercent, description: result.offer.description });
+}));
+
+app.get("/api/admin/offers", auth.requireAuth("admin"), ah(async (req, res) => res.json(store.listOffers())));
+
+app.post("/api/admin/offers", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { code, discountPercent, description, active, expiresAt } = req.body || {};
+  if (!code || !code.trim() || !discountPercent) {
+    return res.status(400).json({ error: "code and discountPercent are required" });
+  }
+  const offer = await store.createOffer({ code: code.trim(), discountPercent, description, active, expiresAt });
+  res.status(201).json(offer);
+}));
+
+app.patch("/api/admin/offers/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const offer = store.updateOffer(req.params.id, req.body || {});
+  if (!offer) return res.status(404).json({ error: "Offer not found" });
+  res.json(offer);
+}));
+
+app.delete("/api/admin/offers/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const ok = store.deleteOffer(req.params.id);
+  if (!ok) return res.status(404).json({ error: "Offer not found" });
+  res.status(204).end();
+}));
+
 // ---- services (catalog) ----
 app.get("/api/services", ah(async (req, res) => {
   const activeOnly = req.query.activeOnly === "true";

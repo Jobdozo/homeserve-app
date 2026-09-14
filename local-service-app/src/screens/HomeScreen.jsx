@@ -8,7 +8,7 @@ import CartBar from "../components/CartBar";
 
 export default function HomeScreen() {
   const navigate = useNavigate();
-  const { categories, services, cart, notifications, location, locationStatus, detectLocation } = useApp();
+  const { categories, services, banners, cart, notifications, location, locationStatus, detectLocation } = useApp();
   const unreadCount = notifications.filter((n) => !n.read).length;
   const topCategories = categories.slice(0, 4);
   const popular = [...services].sort((a, b) => b.reviewCount - a.reviewCount);
@@ -75,6 +75,25 @@ export default function HomeScreen() {
           Search for services...
         </button>
       </div>
+
+      {/* Admin-managed promo carousel — supplements (doesn't replace) the real
+          computed-discount hero banner below. */}
+      {banners.length > 0 && (
+        <div className="no-scrollbar mt-4 flex gap-2.5 overflow-x-auto px-4 lg:mt-6 lg:px-0">
+          {banners.map((b) => (
+            <div
+              key={b.id}
+              className="flex flex-shrink-0 items-center gap-2.5 rounded-2xl border border-gray-100 bg-white px-3.5 py-3 shadow-card"
+            >
+              <span className="text-xl">{b.icon}</span>
+              <div className="min-w-0">
+                <p className="whitespace-nowrap text-[12.5px] font-semibold text-gray-900">{b.title}</p>
+                {b.subtitle && <p className="whitespace-nowrap text-[11px] text-gray-400">{b.subtitle}</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Hero banner — real, live discount instead of generic marketing copy */}
       {bestOffer ? (

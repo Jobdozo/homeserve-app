@@ -9,9 +9,25 @@ import CategoryIcon from "../components/CategoryIcon";
 
 export default function CartScreen() {
   const navigate = useNavigate();
-  const { cart, services, getService, updateCartItem, removeFromCart, checkout, showToast, location, locationStatus, detectLocation } =
-    useApp();
+  const {
+    cart,
+    services,
+    getService,
+    updateCartItem,
+    removeFromCart,
+    checkout,
+    appliedOffer,
+    offerError,
+    applyOfferCode,
+    clearOffer,
+    showToast,
+    location,
+    locationStatus,
+    detectLocation,
+  } = useApp();
   const [submitting, setSubmitting] = useState(false);
+  const [couponInput, setCouponInput] = useState("");
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
 
   const lines = useMemo(
     () => cart.map((item) => ({ item, service: getService(item.serviceId) })).filter((l) => l.service),
@@ -19,6 +35,20 @@ export default function CartScreen() {
   );
   const total = lines.reduce((sum, l) => sum + l.service.price, 0);
   const savings = lines.reduce((sum, l) => sum + (l.service.originalPrice ? l.service.originalPrice - l.service.price : 0), 0);
+  const discountAmount = appliedOffer ? Math.round(total * (appliedOffer.discountPercent / 100)) : 0;
+  const payable = total - discountAmount;
+
+  const handleApplyCoupon = async () => {
+    if (!couponInput.trim() || applyingCoupon) return;
+    setApplyingCoupon(true);
+    try {
+      await applyOfferCode(couponInput.trim());
+    } catch (e) {
+      // offerError is already set by the context; nothing else to do here.
+    } finally {
+      setApplyingCoupon(false);
+    }
+  };
   const bookingAddress = location
     ? { label: location.label, line: location.line, lat: location.lat, lng: location.lng }
     : defaultAddress;
@@ -134,6 +164,42 @@ export default function CartScreen() {
             </div>
           </div>
         </div>
+
+        <div>
+          <h2 className="mb-1.5 text-[13px] font-semibold text-gray-900">Offer Code</h2>
+          {appliedOffer ? (
+            <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-3 py-2.5">
+              <div>
+                <p className="text-[12.5px] font-semibold text-emerald-700">
+                  {appliedOffer.code} applied — {appliedOffer.discountPercent}% off
+                </p>
+                {appliedOffer.description && <p className="text-[11px] text-emerald-600">{appliedOffer.description}</p>}
+              </div>
+              <button onClick={clearOffer} className="text-[11.5px] font-semibold text-emerald-700 underline">
+                Remove
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div className="flex gap-2">
+                <input
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                  placeholder="Enter offer code"
+                  className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-[13px] uppercase text-gray-800 outline-none focus:border-brand"
+                />
+                <button
+                  onClick={handleApplyCoupon}
+                  disabled={!couponInput.trim() || applyingCoupon}
+                  className="flex-shrink-0 rounded-xl bg-gray-900 px-4 py-2.5 text-[12.5px] font-semibold text-white disabled:opacity-50"
+                >
+                  {applyingCoupon ? "Checking…" : "Apply"}
+                </button>
+              </div>
+              {offerError && <p className="mt-1.5 text-[11.5px] font-medium text-red-500">{offerError}</p>}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex-shrink-0 border-t border-gray-100 bg-white px-4 py-3 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:py-4">
@@ -147,12 +213,18 @@ export default function CartScreen() {
             <span className="font-semibold text-emerald-600">₹{savings}</span>
           </div>
         )}
+        {discountAmount > 0 && (
+          <div className="mb-2.5 flex items-center justify-between text-[12.5px]">
+            <span className="text-emerald-600">{appliedOffer.code} discount</span>
+            <span className="font-semibold text-emerald-600">-₹{discountAmount}</span>
+          </div>
+        )}
         <button
           onClick={handleCheckout}
           disabled={submitting}
           className="w-full rounded-xl bg-brand py-3.5 text-sm font-semibold text-white shadow-card hover:bg-brand-dark active:scale-[0.98] disabled:opacity-60"
         >
-          {submitting ? "Placing order..." : `Checkout · ₹${total}`}
+          {submitting ? "Placing order..." : `Checkout · ₹${payable}`}
         </button>
         <p className="mt-2 text-center text-[10.5px] text-gray-400">
           You won't be charged now. Payment after service completion.

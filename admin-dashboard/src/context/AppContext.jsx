@@ -28,6 +28,7 @@ export function AppProvider({ children }) {
   const [admin, setAdmin] = useState(initialAuth?.user || null);
   const [authLoading, setAuthLoading] = useState(true);
   const [overview, setOverview] = useState(null);
+  const [categories, setCategories] = useState([]);
   const [providers, setProviders] = useState([]);
   const [services, setServices] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -55,14 +56,16 @@ export function AppProvider({ children }) {
   }, []);
 
   const loadAll = useCallback(async () => {
-    const [overviewData, providerData, serviceData, bookingData, activityData] = await Promise.all([
+    const [overviewData, categoryData, providerData, serviceData, bookingData, activityData] = await Promise.all([
       api.getOverview(),
+      api.listCategories(),
       api.listProviders(),
       api.listServices(),
       api.listBookings(),
       api.listActivities(20),
     ]);
     setOverview(overviewData);
+    setCategories(categoryData);
     setProviders(providerData);
     setServices(serviceData);
     setBookings(bookingData);
@@ -205,6 +208,47 @@ export function AppProvider({ children }) {
     [showToast, scheduleRefresh]
   );
 
+  const addCategory = useCallback(
+    async (data) => {
+      const category = await api.createCategory(data);
+      setCategories((prev) => [...prev, category]);
+      showToast("Category added");
+      return category;
+    },
+    [showToast]
+  );
+
+  const addProvider = useCallback(
+    async (data) => {
+      const provider = await api.createProvider(data);
+      setProviders((prev) => upsertById(prev, provider));
+      showToast("Provider added");
+      scheduleRefresh();
+      return provider;
+    },
+    [showToast, scheduleRefresh]
+  );
+
+  const addService = useCallback(
+    async (data) => {
+      const service = await api.createService(data);
+      setServices((prev) => upsertById(prev, service));
+      showToast("Service added");
+      scheduleRefresh();
+      return service;
+    },
+    [showToast, scheduleRefresh]
+  );
+
+  const sendBroadcastNotification = useCallback(
+    async (data) => {
+      const result = await api.broadcastNotification(data);
+      showToast(`Sent to ${result.sent} recipient${result.sent === 1 ? "" : "s"}`);
+      return result;
+    },
+    [showToast]
+  );
+
   const value = useMemo(
     () => ({
       admin,
@@ -212,6 +256,7 @@ export function AppProvider({ children }) {
       login,
       logout,
       overview,
+      categories,
       providers,
       services,
       bookings,
@@ -223,6 +268,10 @@ export function AppProvider({ children }) {
       approveProvider,
       rejectProvider,
       toggleServiceStatus,
+      addCategory,
+      addProvider,
+      addService,
+      sendBroadcastNotification,
     }),
     [
       admin,
@@ -230,6 +279,7 @@ export function AppProvider({ children }) {
       login,
       logout,
       overview,
+      categories,
       providers,
       services,
       bookings,
@@ -241,6 +291,10 @@ export function AppProvider({ children }) {
       approveProvider,
       rejectProvider,
       toggleServiceStatus,
+      addCategory,
+      addProvider,
+      addService,
+      sendBroadcastNotification,
     ]
   );
 

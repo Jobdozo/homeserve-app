@@ -40,4 +40,20 @@ export const api = {
     request(`/services/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
   getTransactions: () => request("/admin/transactions"),
   getReports: () => request("/admin/reports"),
+
+  createCategory: (data) => request("/admin/categories", { method: "POST", body: JSON.stringify(data) }),
+  createProvider: (data) => request("/admin/providers", { method: "POST", body: JSON.stringify(data) }),
+  createService: (data) => request("/admin/services", { method: "POST", body: JSON.stringify(data) }),
+  broadcastNotification: (data) =>
+    request("/admin/notifications/broadcast", { method: "POST", body: JSON.stringify(data) }),
+
+  listBanners: () => request("/admin/banners"),
+  createBanner: (data) => request("/admin/banners", { method: "POST", body: JSON.stringify(data) }),
+  updateBanner: (id, patch) => request(`/admin/banners/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deleteBanner: (id) => request(`/admin/banners/${id}`, { method: "DELETE" }),
+
+  listOffers: () => request("/admin/offers"),
+  createOffer: (data) => request("/admin/offers", { method: "POST", body: JSON.stringify(data) }),
+  updateOffer: (id, patch) => request(`/admin/offers/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deleteOffer: (id) => request(`/admin/offers/${id}`, { method: "DELETE" }),
 };

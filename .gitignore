@@ -3,6 +3,7 @@ dist
 *.log
 .DS_Store
 server/data.json
+server/data/
 server/.env
 *service-account*.json
 
