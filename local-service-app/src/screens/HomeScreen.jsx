@@ -4,7 +4,6 @@ import { BellIcon, SearchIcon, StarIcon, ChevronRightIcon, CartIcon } from "../c
 import { useApp } from "../context/AppContext";
 import { formatCount, discountPct } from "../utils/format";
 import CategoryIcon from "../components/CategoryIcon";
-import ServiceCardMedia from "../components/ServiceCardMedia";
 import CartBar from "../components/CartBar";
 
 export default function HomeScreen() {
@@ -186,7 +185,7 @@ export default function HomeScreen() {
                 </span>
               )}
               <div className="flex h-24 items-center justify-center lg:h-36">
-                <ServiceCardMedia service={s} size={96} />
+                <CategoryIcon categoryId={s.categoryId} size={96} variant="vivid" fill rounded="rounded-none" />
               </div>
               <div className="p-2.5 lg:p-4">
                 <p className="text-[12.5px] font-semibold text-gray-900 lg:text-[15px]">{s.name}</p>
