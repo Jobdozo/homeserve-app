@@ -16,40 +16,44 @@ const palette = {
   "more-services": { bg: "#F3F4F6", fg: "#4B5563" },
 };
 
+// Each glyph takes (primary, accent) — accent is the inner-detail color,
+// which needs to invert along with primary so highlight details never
+// disappear (e.g. a white highlight drawn on a now-white icon in vivid
+// mode) — see the component below for how the two modes assign them.
 const glyphs = {
-  "home-cleaning": (c) => (
+  "home-cleaning": (c, a) => (
     <>
       <path d="M12 3.5c1 1.6 3.2 4.7 3.2 7.2a3.2 3.2 0 1 1-6.4 0c0-2.5 2.2-5.6 3.2-7.2Z" fill={c} />
       <circle cx="7" cy="16.5" r="1" fill={c} opacity="0.6" />
       <circle cx="17" cy="15" r="1.3" fill={c} opacity="0.6" />
     </>
   ),
-  "ac-repair": (c) => (
+  "ac-repair": (c, a) => (
     <>
       <rect x="3.5" y="8" width="17" height="7" rx="2" fill={c} />
       <rect x="6" y="15.3" width="3" height="4.2" rx="1" fill={c} opacity="0.55" />
       <rect x="10.5" y="15.3" width="3" height="5.4" rx="1" fill={c} opacity="0.55" />
       <rect x="15" y="15.3" width="3" height="4.2" rx="1" fill={c} opacity="0.55" />
-      <circle cx="17" cy="11.5" r="1.6" fill="#fff" />
+      <circle cx="17" cy="11.5" r="1.6" fill={a} />
     </>
   ),
-  plumbing: (c) => (
+  plumbing: (c, a) => (
     <>
       <path
         d="M12 3.8c1.6 2.4 4.6 6.9 4.6 9.9a4.6 4.6 0 1 1-9.2 0c0-3 3-7.5 4.6-9.9Z"
         fill={c}
       />
-      <path d="M9.6 14.6a2.5 2.5 0 0 0 2.4 2" stroke="#fff" strokeWidth="1.2" strokeLinecap="round" fill="none" />
+      <path d="M9.6 14.6a2.5 2.5 0 0 0 2.4 2" stroke={a} strokeWidth="1.2" strokeLinecap="round" fill="none" />
     </>
   ),
   electrician: (c) => <path d="M13 2 4.5 13.5h5.2L10.6 22 19.5 10h-5.3L13 2Z" fill={c} />,
-  "appliance-repair": (c) => (
+  "appliance-repair": (c, a) => (
     <>
       <rect x="4" y="3.5" width="16" height="17" rx="2.5" fill={c} />
-      <circle cx="12" cy="13.2" r="4.5" fill="#fff" />
+      <circle cx="12" cy="13.2" r="4.5" fill={a} />
       <circle cx="12" cy="13.2" r="2.6" fill={c} />
-      <circle cx="7" cy="6.3" r="1" fill="#fff" />
-      <circle cx="10.4" cy="6.3" r="1" fill="#fff" />
+      <circle cx="7" cy="6.3" r="1" fill={a} />
+      <circle cx="10.4" cy="6.3" r="1" fill={a} />
     </>
   ),
   carpentry: (c) => (
@@ -81,17 +85,17 @@ const glyphs = {
       <path d="M19 5 9.6 12 19 19" stroke={c} strokeWidth="1.6" strokeLinecap="round" fill="none" />
     </>
   ),
-  "packers-movers": (c) => (
+  "packers-movers": (c, a) => (
     <>
       <rect x="3.5" y="9" width="17" height="10.5" rx="1.5" fill={c} />
       <path d="M3.5 9 7 4.5h10L20.5 9" fill="none" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
-      <rect x="10.5" y="9" width="3" height="10.5" fill="#fff" opacity="0.5" />
+      <rect x="10.5" y="9" width="3" height="10.5" fill={a} opacity="0.5" />
     </>
   ),
-  "computer-repair": (c) => (
+  "computer-repair": (c, a) => (
     <>
       <rect x="3.5" y="4.5" width="17" height="11" rx="1.5" fill={c} />
-      <rect x="6" y="7" width="12" height="6" rx="0.5" fill="#fff" opacity="0.85" />
+      <rect x="6" y="7" width="12" height="6" rx="0.5" fill={a} opacity="0.85" />
       <rect x="8" y="18" width="8" height="1.8" rx="0.9" fill={c} />
     </>
   ),
@@ -104,17 +108,40 @@ const glyphs = {
   ),
 };
 
-export default function CategoryIcon({ categoryId, size = 40, rounded = "rounded-2xl", className = "", transparent = false }) {
+// "soft" (default) is the pastel-tile treatment used for small in-context
+// icons (category grid, list rows). "vivid" is the full-bleed card treatment
+// — a gradient built from the category's own color with a white glyph on
+// top, the same color+white-icon language as the Tikdum logo itself — used
+// wherever a service/category gets real visual real estate (service cards,
+// detail headers) instead of every card collapsing into one flat brand-light
+// box regardless of category.
+export default function CategoryIcon({
+  categoryId,
+  size = 40,
+  rounded = "rounded-2xl",
+  className = "",
+  transparent = false,
+  variant = "soft",
+  fill = false,
+}) {
   const { bg, fg } = palette[categoryId] || palette["more-services"];
   const draw = glyphs[categoryId] || glyphs["more-services"];
+  const vivid = variant === "vivid";
+  const glyphSize = size * (vivid ? 0.42 : 0.56);
+
+  const background = vivid
+    ? `linear-gradient(135deg, ${fg}b3, ${fg})`
+    : transparent
+      ? "transparent"
+      : bg;
 
   return (
     <span
-      className={`flex flex-shrink-0 items-center justify-center ${rounded} ${className}`}
-      style={{ width: size, height: size, background: transparent ? "transparent" : bg }}
+      className={`flex flex-shrink-0 items-center justify-center ${rounded} ${fill ? "h-full w-full" : ""} ${className}`}
+      style={fill ? { background } : { width: size, height: size, background }}
     >
-      <svg width={size * 0.56} height={size * 0.56} viewBox="0 0 24 24" fill="none">
-        {draw(fg)}
+      <svg width={glyphSize} height={glyphSize} viewBox="0 0 24 24" fill="none">
+        {draw(vivid ? "#fff" : fg, vivid ? fg : "#fff")}
       </svg>
     </span>
   );

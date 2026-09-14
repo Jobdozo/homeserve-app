@@ -184,8 +184,8 @@ export default function HomeScreen() {
                   {pct}% OFF
                 </span>
               )}
-              <div className="flex h-24 items-center justify-center bg-brand-light lg:h-36">
-                <CategoryIcon categoryId={s.categoryId} size={56} transparent className="lg:scale-125" />
+              <div className="flex h-24 items-center justify-center lg:h-36">
+                <CategoryIcon categoryId={s.categoryId} size={96} variant="vivid" fill rounded="rounded-none" />
               </div>
               <div className="p-2.5 lg:p-4">
                 <p className="text-[12.5px] font-semibold text-gray-900 lg:text-[15px]">{s.name}</p>
