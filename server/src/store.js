@@ -1,5 +1,6 @@
 const { query, mutate } = require("./dataconnect");
 const jsonStore = require("./jsonStore");
+const heroImage = require("./heroImage");
 
 // Short-lived in-memory cache for the catalog reads that hit almost every
 // page load (categories/services/providers) — Data Connect is a remote
@@ -66,7 +67,7 @@ const PROVIDER_FIELDS = `
 `;
 
 const SERVICE_FIELDS = `
-  id name icon tagline price originalPrice rating reviewCount distanceLabel status
+  id name icon tagline price originalPrice rating reviewCount distanceLabel status heroImage
   category { slug }
   provider { id }
   serviceHighlights_on_service { icon label }
@@ -105,6 +106,7 @@ function mapService(s) {
     reviewCount: s.reviewCount,
     distanceLabel: s.distanceLabel,
     status: s.status,
+    heroImage: s.heroImage || null,
     categoryId: s.category?.slug,
     providerId: s.provider?.id,
     highlights: (s.serviceHighlights_on_service || []).map((h) => ({ icon: h.icon, label: h.label })),
@@ -417,6 +419,33 @@ async function updateProviderService(providerId, serviceId, patch) {
     cacheClear("service");
   }
   return getService(serviceId);
+}
+
+async function setServiceHeroImage(serviceId, heroImage) {
+  await mutate(`mutation($id: UUID!, $heroImage: String!) { service_update(id: $id, data: { heroImage: $heroImage }) }`, {
+    id: serviceId,
+    heroImage,
+  });
+  cacheClear("service");
+  return getService(serviceId);
+}
+
+// Fire-and-forget from the route handler — generation takes a few seconds,
+// so the create-service response returns immediately (card shows the
+// CategoryIcon fallback) and this patches in the real photo once it's ready.
+async function generateServiceHeroImage(serviceId) {
+  try {
+    const service = await getService(serviceId);
+    if (!service) return undefined;
+    const categories = await listCategories();
+    const category = categories.find((c) => c.id === service.categoryId);
+    const buffer = await heroImage.generateImageBuffer(service.name, category?.name || "General Service");
+    const url = heroImage.saveServiceImage(serviceId, buffer);
+    return await setServiceHeroImage(serviceId, url);
+  } catch (e) {
+    console.error(`generateServiceHeroImage failed for service ${serviceId}:`, e.message);
+    return undefined;
+  }
 }
 
 async function updateServiceStatus(serviceId, status) {
@@ -1194,6 +1223,8 @@ module.exports = {
   adminCreateService,
   updateProviderService,
   updateServiceStatus,
+  setServiceHeroImage,
+  generateServiceHeroImage,
   setProviderVerification,
   updateProviderProfile,
   getEarnings,

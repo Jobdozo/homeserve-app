@@ -49,6 +49,10 @@ type Service @table {
   status: String! @default(value: "active")
   extraCharges: String
   serviceArea: String
+  # Brand-ambassador photo generated per service (Gemini) — a URL path under
+  # /uploads/services/, or null until generation finishes. Falls back to the
+  # CategoryIcon vivid-variant card on the frontend while null.
+  heroImage: String
 }
 
 # `highlights` on a service — one row per {icon, label} pair.

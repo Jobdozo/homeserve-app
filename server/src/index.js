@@ -2,6 +2,7 @@ require("dotenv").config({ override: true });
 const express = require("express");
 const cors = require("cors");
 const compression = require("compression");
+const path = require("path");
 const http = require("http");
 const { Server } = require("socket.io");
 const store = require("./store");
@@ -27,6 +28,9 @@ const app = express();
 app.use(compression());
 app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json());
+
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", "data");
+app.use("/uploads", express.static(path.join(DATA_DIR, "uploads")));
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: ALLOWED_ORIGINS } });
@@ -215,6 +219,9 @@ app.post("/api/providers/:id/services", auth.requireAuth("provider"), ah(async (
   io.emit("service:created", service);
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.status(201).json(service);
+  store.generateServiceHeroImage(service.id).then((updated) => {
+    if (updated) io.emit("service:updated", updated);
+  });
 }));
 
 app.patch("/api/providers/:id/profile", auth.requireAuth("provider"), ah(async (req, res) => {
@@ -296,6 +303,9 @@ app.post("/api/admin/services", auth.requireAuth("admin"), ah(async (req, res) =
   io.emit("service:created", service);
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.status(201).json(service);
+  store.generateServiceHeroImage(service.id).then((updated) => {
+    if (updated) io.emit("service:updated", updated);
+  });
 }));
 
 // ---- admin: broadcast a notification ----
