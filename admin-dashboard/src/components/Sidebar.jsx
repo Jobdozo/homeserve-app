@@ -27,10 +27,7 @@ const sections = [
   },
   {
     title: "Users",
-    items: [
-      { label: "Customers", icon: UsersIcon },
-      { label: "Service Providers", icon: UsersIcon, to: "/providers" },
-    ],
+    items: [{ label: "Customers", icon: UsersIcon }],
   },
   {
     items: [
