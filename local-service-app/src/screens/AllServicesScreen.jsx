@@ -4,7 +4,7 @@ import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
 import { StarIcon } from "../components/icons";
 import { formatCount, discountPct } from "../utils/format";
-import CategoryIcon from "../components/CategoryIcon";
+import CategoryPhoto from "../components/CategoryPhoto";
 import CartBar from "../components/CartBar";
 
 const SORTS = [
@@ -72,7 +72,7 @@ export default function AllServicesScreen() {
                   </span>
                 )}
                 <div className="flex h-24 items-center justify-center lg:h-36">
-                  <CategoryIcon categoryId={s.categoryId} size={96} variant="vivid" fill rounded="rounded-none" />
+                  <CategoryPhoto categoryId={s.categoryId} size={96} />
                 </div>
                 <div className="p-2.5 lg:p-4">
                   <p className="text-[12.5px] font-semibold text-gray-900 lg:text-[15px]">{s.name}</p>
