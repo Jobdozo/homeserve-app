@@ -173,6 +173,27 @@ export function AppProvider({ children }) {
     if (provider) ensurePushSubscribed();
   }, [provider]);
 
+  // The service worker's push handler postMessages every open tab the
+  // moment a booking comes in — this tab may have been backgrounded with a
+  // dead socket connection and never heard about it any other way. Re-fetch
+  // and ring for real, the same as the live socket path does.
+  useEffect(() => {
+    if (!provider || !("serviceWorker" in navigator)) return;
+    const onMessage = (event) => {
+      if (event.data?.type !== "tikdum-push") return;
+      api
+        .listBookings()
+        .then((data) => {
+          setRequests(data);
+          const booking = data.find((r) => r.id === event.data.bookingId);
+          if (booking && booking.status === "Pending") setRingingRequest(booking);
+        })
+        .catch((e) => console.error("Failed to refresh after push", e));
+    };
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, [provider]);
+
   useEffect(() => {
     const onConnect = () => setConnected(true);
     const onDisconnect = () => setConnected(false);
