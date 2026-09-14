@@ -149,12 +149,9 @@ export function AppProvider({ children }) {
         const stillPending = requestData.find((r) => r.status === "Pending");
         if (stillPending) setRingingRequest(stillPending);
 
-        const threads = await Promise.all(
-          requestData.map((r) => api.getMessages(r.id).then((thread) => [r.id, thread]))
-        );
-        if (cancelled) return;
-        threads.forEach(([id]) => loadedThreads.current.add(id));
-        setMessages(Object.fromEntries(threads));
+        // Chat threads load lazily per-request (see loadMessages, used by
+        // ChatScreen) — prefetching all of them here used to mean one extra
+        // network round trip per request on every app open.
       } catch (e) {
         console.error("Failed to load provider data", e);
       } finally {

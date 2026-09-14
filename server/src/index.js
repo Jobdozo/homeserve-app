@@ -1,6 +1,7 @@
 require("dotenv").config({ override: true });
 const express = require("express");
 const cors = require("cors");
+const compression = require("compression");
 const http = require("http");
 const { Server } = require("socket.io");
 const store = require("./store");
@@ -23,6 +24,7 @@ if (!process.env.ALLOWED_ORIGINS) {
 }
 
 const app = express();
+app.use(compression());
 app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json());
 

@@ -1,6 +1,32 @@
 const { query, mutate } = require("./dataconnect");
 const jsonStore = require("./jsonStore");
 
+// Short-lived in-memory cache for the catalog reads that hit almost every
+// page load (categories/services/providers) — Data Connect is a remote
+// service (us-central1) so every round trip carries real cross-region
+// latency, and this data changes rarely enough that a short TTL, busted
+// immediately on any write, makes the common case near-free without ever
+// serving something stale to the person who just changed it.
+const CACHE_TTL_MS = 30 * 1000;
+const cache = new Map();
+
+function cacheGet(key) {
+  const entry = cache.get(key);
+  if (entry && entry.expiresAt > Date.now()) return entry.data;
+  return undefined;
+}
+
+function cacheSet(key, data) {
+  cache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+  return data;
+}
+
+function cacheClear(prefix) {
+  for (const key of cache.keys()) {
+    if (key.startsWith(prefix)) cache.delete(key);
+  }
+}
+
 function slugify(text) {
   return String(text || "")
     .toLowerCase()
@@ -129,8 +155,10 @@ async function getCategoryUuidBySlug(slug) {
 }
 
 async function listCategories() {
+  const cached = cacheGet("categories");
+  if (cached) return cached;
   const { categories } = await query(`query { categories { slug name icon } }`, {});
-  return categories.map(mapCategory);
+  return cacheSet("categories", categories.map(mapCategory));
 }
 
 async function createCategory({ name, icon }) {
@@ -139,6 +167,7 @@ async function createCategory({ name, icon }) {
     `mutation($slug: String!, $name: String!, $icon: String) { category_insert(data: { slug: $slug, name: $name, icon: $icon }) }`,
     { slug, name, icon: icon || null }
   );
+  cacheClear("categories");
   await logActivity("category", `New category added: ${name}`);
   const { categories } = await query(`query($slug: String!) { categories(where: { slug: { eq: $slug } }) { slug name icon } }`, {
     slug,
@@ -196,6 +225,7 @@ async function adminCreateProvider({ name, phone, category }) {
     }`,
     { name, phone, category: category || "Not set" }
   );
+  cacheClear("providers");
   await logActivity("provider", `Admin added a new provider: ${name}`);
   return getProvider(provider_insert.id);
 }
@@ -210,13 +240,16 @@ async function createProviderSignup({ phone, name }) {
     }`,
     { name: name || "New Provider", phone }
   );
+  cacheClear("providers");
   await logActivity("provider", `New provider registration: ${name || "New Provider"}`);
   return getProvider(provider_insert.id);
 }
 
 async function listProviders() {
+  const cached = cacheGet("providers");
+  if (cached) return cached;
   const { providers } = await query(`query { providers { ${PROVIDER_FIELDS} } }`, {});
-  return providers.map(mapProvider);
+  return cacheSet("providers", providers.map(mapProvider));
 }
 
 async function getProvider(id) {
@@ -231,6 +264,7 @@ async function setProviderVerification(providerId, status) {
     }`,
     { id: providerId, status, verified: status === "approved" }
   );
+  cacheClear("providers");
   const provider = await getProvider(providerId);
   if (!provider) return undefined;
   await logActivity("provider", `Provider ${status}: ${provider.name} (${provider.category})`);
@@ -252,22 +286,29 @@ async function updateProviderProfile(providerId, patch) {
     `mutation($id: UUID!, ${varDefs}) { provider_update(id: $id, data: { ${dataFields} }) }`,
     { id: providerId, ...fields }
   );
+  cacheClear("providers");
   return getProvider(providerId);
 }
 
 // ---- services ----
 
 async function listServices({ activeOnly = false } = {}) {
+  const cacheKey = `services:${activeOnly ? "active" : "all"}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
   const gql = activeOnly
     ? `query { services(where: { status: { eq: "active" } }) { ${SERVICE_FIELDS} } }`
     : `query { services { ${SERVICE_FIELDS} } }`;
   const { services } = await query(gql, {});
-  return services.map(mapService);
+  return cacheSet(cacheKey, services.map(mapService));
 }
 
 async function getService(id) {
+  const cacheKey = `service:${id}`;
+  const cached = cacheGet(cacheKey);
+  if (cached !== undefined) return cached;
   const { service } = await query(`query($id: UUID!) { service(id: $id) { ${SERVICE_FIELDS} } }`, { id });
-  return service ? mapService(service) : undefined;
+  return cacheSet(cacheKey, service ? mapService(service) : undefined);
 }
 
 async function listProviderServices(providerId) {
@@ -298,6 +339,7 @@ async function addProviderService(providerId, data) {
     }
   );
   const serviceId = service_insert.id;
+  cacheClear("service");
   const defaultHighlights = [
     { icon: "🧑‍🔧", label: "Experienced Technicians" },
     { icon: "⏱️", label: "On-time Service" },
@@ -330,6 +372,7 @@ async function adminCreateService(providerId, { categorySlug, name, price, origi
     }`,
     { providerId, categoryId, name, price: Number(price) || 0, originalPrice: originalPrice ? Number(originalPrice) : null }
   );
+  cacheClear("service");
   const provider = await getProvider(providerId);
   await logActivity("service", `Admin added a new service for ${provider?.name || "a provider"}: ${name}`);
   return getService(service_insert.id);
@@ -356,6 +399,7 @@ async function updateProviderService(providerId, serviceId, patch) {
         .join(", ")} }) }`,
       vars
     );
+    cacheClear("service");
   }
   return getService(serviceId);
 }
@@ -365,6 +409,7 @@ async function updateServiceStatus(serviceId, status) {
     id: serviceId,
     status,
   });
+  cacheClear("service");
   const service = await getService(serviceId);
   if (!service) return undefined;
   await logActivity("service", `Service "${service.name}" set to ${status} by admin`);
@@ -417,6 +462,29 @@ async function listBookings({ customerId, providerId } = {}) {
     }
     results.push(mapBooking(b, b.customer, service));
   }
+
+  // One batched query for a message preview per booking, instead of the
+  // apps eagerly fetching every full thread individually on every load —
+  // the Messages tab only needs the last line, not the whole conversation.
+  if (results.length > 0) {
+    const { messages } = await query(
+      `query($ids: [UUID!]) {
+        messages(where: { booking: { id: { in: $ids } } }, orderBy: { sentAt: ASC }) {
+          booking { id }
+          sender
+          text
+          sentAt
+        }
+      }`,
+      { ids: results.map((b) => b.id) }
+    );
+    const lastByBooking = {};
+    for (const m of messages) lastByBooking[m.booking.id] = { from: m.sender, text: m.text, time: m.sentAt };
+    for (const b of results) {
+      if (lastByBooking[b.id]) b.lastMessage = lastByBooking[b.id];
+    }
+  }
+
   return results;
 }
 

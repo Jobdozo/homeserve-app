@@ -222,12 +222,10 @@ export function AppProvider({ children }) {
         if (cancelled) return;
         setBookings(myBookings);
 
-        const threads = await Promise.all(
-          myBookings.map((b) => api.getMessages(b.id).then((thread) => [b.id, thread]))
-        );
-        if (cancelled) return;
-        threads.forEach(([id]) => loadedThreads.current.add(id));
-        setMessages(Object.fromEntries(threads));
+        // Chat threads load lazily per-booking (see loadMessages, used by
+        // ChatScreen) — prefetching all of them here used to mean one extra
+        // network round trip per booking on every app open, for chats most
+        // people never look at.
 
         const myNotifications = await api.listNotifications();
         if (cancelled) return;

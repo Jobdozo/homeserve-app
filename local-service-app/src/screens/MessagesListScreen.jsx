@@ -5,18 +5,14 @@ import { SearchIcon } from "../components/icons";
 
 export default function MessagesListScreen() {
   const navigate = useNavigate();
-  const { bookings, messages, getService, getProvider } = useApp();
+  const { bookings, getService, getProvider } = useApp();
 
   const threads = useMemo(() => {
     return bookings
-      .filter((b) => messages[b.id]?.length)
-      .map((b) => {
-        const thread = messages[b.id];
-        const last = thread[thread.length - 1];
-        return { booking: b, last, service: getService(b.serviceId), provider: getProvider(b.providerId) };
-      })
+      .filter((b) => b.lastMessage)
+      .map((b) => ({ booking: b, last: b.lastMessage, service: getService(b.serviceId), provider: getProvider(b.providerId) }))
       .sort((a, b) => new Date(b.last.time) - new Date(a.last.time));
-  }, [bookings, messages, getService, getProvider]);
+  }, [bookings, getService, getProvider]);
 
   return (
     <div className="flex flex-1 flex-col lg:mx-auto lg:w-full lg:max-w-3xl lg:px-8 lg:pb-16 lg:pt-8">
