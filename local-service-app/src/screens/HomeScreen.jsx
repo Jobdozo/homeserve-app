@@ -66,13 +66,6 @@ export default function HomeScreen() {
       </div>
       {location?.pincode && <p className="px-4 pb-3 text-xs text-gray-400 lg:hidden">{location.pincode}</p>}
 
-      {location?.serviceable === false && (
-        <div className="mx-4 mb-3 rounded-xl bg-red-50 px-3.5 py-2.5 text-[12.5px] font-medium text-red-600 lg:mx-0">
-          Tikdum isn't available at PIN {location.pincode} yet — you can still browse, but you'll need a serviceable
-          address to book.
-        </div>
-      )}
-
       {/* Search */}
       <div className="px-4 lg:hidden">
         <button

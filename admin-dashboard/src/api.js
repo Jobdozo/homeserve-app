@@ -56,11 +56,4 @@ export const api = {
   createOffer: (data) => request("/admin/offers", { method: "POST", body: JSON.stringify(data) }),
   updateOffer: (id, patch) => request(`/admin/offers/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteOffer: (id) => request(`/admin/offers/${id}`, { method: "DELETE" }),
-
-  listServiceableLocations: () => request("/admin/serviceable-locations"),
-  createServiceableLocation: (data) =>
-    request("/admin/serviceable-locations", { method: "POST", body: JSON.stringify(data) }),
-  updateServiceableLocation: (id, patch) =>
-    request(`/admin/serviceable-locations/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
-  deleteServiceableLocation: (id) => request(`/admin/serviceable-locations/${id}`, { method: "DELETE" }),
 };

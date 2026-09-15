@@ -9,7 +9,6 @@ const TITLES = {
   "/dashboard": { title: "Dashboard", subtitle: "Welcome back, Super Admin 👋" },
   "/providers": { title: "Providers Verification", subtitle: "Review and manage service providers" },
   "/services": { title: "Services & Categories", subtitle: "Moderate the live service catalog" },
-  "/locations": { title: "Locations", subtitle: "Serviceable cities, areas, and PIN codes" },
   "/bookings": { title: "Bookings", subtitle: "All bookings across every provider" },
   "/reviews": { title: "Reviews & Ratings", subtitle: "Customer feedback across the platform" },
   "/payments": { title: "Payments & Transactions", subtitle: "Revenue, platform fees, and provider payouts" },

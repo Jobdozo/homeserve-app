@@ -64,17 +64,6 @@ type ServiceInclude @table {
   text: String!
 }
 
-# Admin-managed serviceability — a PIN code is bookable only if it has an
-# active row here. Enforced server-side in store.createBooking, not just as
-# client-side UX (see local-service-app's checkout flow).
-type ServiceableLocation @table {
-  pincode: String! @unique
-  city: String!
-  area: String
-  active: Boolean! @default(value: true)
-  createdAt: Timestamp! @default(expr: "request.time")
-}
-
 type Booking @table {
   orderId: String
   service: Service!
@@ -87,7 +76,6 @@ type Booking @table {
   addressLine: String
   addressLat: Float
   addressLng: Float
-  addressPincode: String
   issue: String
   amount: Int!
   createdAt: Timestamp! @default(expr: "request.time")

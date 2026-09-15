@@ -52,5 +52,4 @@ export const api = {
   getBookingLiveLocation: (bookingId) => request(`/bookings/${bookingId}/live-location`),
   listBanners: () => request("/banners"),
   validateOffer: (code) => request("/offers/validate", { method: "POST", body: JSON.stringify({ code }) }),
-  checkServiceability: (pincode) => request(`/serviceable-locations/check?pincode=${encodeURIComponent(pincode)}`),
 };

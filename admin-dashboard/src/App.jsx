@@ -10,7 +10,6 @@ import ReviewsPage from "./pages/ReviewsPage";
 import PaymentsPage from "./pages/PaymentsPage";
 import ReportsPage from "./pages/ReportsPage";
 import AuditLogsPage from "./pages/AuditLogsPage";
-import LocationsPage from "./pages/LocationsPage";
 
 function AppRoutes() {
   const { admin, authLoading } = useApp();
@@ -31,7 +30,6 @@ function AppRoutes() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/providers" element={<ProvidersPage />} />
         <Route path="/services" element={<ServicesPage />} />
-        <Route path="/locations" element={<LocationsPage />} />
         <Route path="/bookings" element={<BookingsPage />} />
         <Route path="/reviews" element={<ReviewsPage />} />
         <Route path="/payments" element={<PaymentsPage />} />

@@ -86,54 +86,18 @@ export function AppProvider({ children }) {
     localStorage.setItem(CART_KEY, JSON.stringify(cart));
   }, [cart]);
 
-  // Serviceability is checked against the admin-managed PIN code allowlist
-  // right after we have one, from either GPS or manual entry — the actual
-  // enforcement happens server-side at checkout, this is just early UX so
-  // the customer isn't surprised by a rejected order.
-  const checkAndSetLocation = useCallback(async (loc) => {
-    let serviceable;
-    try {
-      const result = await api.checkServiceability(loc.pincode);
-      serviceable = result.serviceable;
-    } catch (e) {
-      serviceable = undefined; // couldn't verify — let checkout's server-side check be the judge
-    }
-    const withServiceability = { ...loc, serviceable };
-    setLocation(withServiceability);
-    localStorage.setItem(LOCATION_KEY, JSON.stringify(withServiceability));
-    return withServiceability;
-  }, []);
-
   const detectLocation = useCallback(async () => {
     setLocationStatus("detecting");
     try {
       const loc = await detectCurrentLocation();
-      await checkAndSetLocation(loc);
+      setLocation(loc);
+      localStorage.setItem(LOCATION_KEY, JSON.stringify(loc));
       setLocationStatus("ready");
     } catch (e) {
       console.error("Failed to detect location", e);
       setLocationStatus(e.code === 1 ? "denied" : "error");
     }
-  }, [checkAndSetLocation]);
-
-  // Manual fallback for when GPS is denied/unavailable — lets the customer
-  // type their PIN code directly instead of being stuck on the placeholder
-  // address (which checkout no longer accepts silently).
-  const checkPincode = useCallback(
-    async (pincode) => {
-      const result = await api.checkServiceability(pincode);
-      const loc = await checkAndSetLocation({
-        lat: null,
-        lng: null,
-        label: result.city ? [result.area, result.city].filter(Boolean).join(", ") : `PIN ${result.pincode}`,
-        line: result.city ? [result.area, result.city].filter(Boolean).join(", ") : `PIN ${result.pincode}`,
-        pincode: result.pincode,
-      });
-      setLocationStatus("ready");
-      return loc;
-    },
-    [checkAndSetLocation]
-  );
+  }, []);
 
   // Ask for location once per login if we don't already have one saved.
   useEffect(() => {
@@ -489,7 +453,6 @@ export function AppProvider({ children }) {
       location,
       locationStatus,
       detectLocation,
-      checkPincode,
     }),
     [
       customer,
@@ -531,7 +494,6 @@ export function AppProvider({ children }) {
       location,
       locationStatus,
       detectLocation,
-      checkPincode,
     ]
   );
 
