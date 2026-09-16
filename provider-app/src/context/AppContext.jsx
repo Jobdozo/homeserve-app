@@ -33,7 +33,15 @@ export function AppProvider({ children }) {
   const [services, setServices] = useState([]);
   const [categories, setCategories] = useState([]);
   const [messages, setMessages] = useState({});
-  const [earnings, setEarnings] = useState(null);
+  // A real zero-state default, not null — the dashboard/earnings screens
+  // read straight through this (earnings.thisMonth etc.) with no loading
+  // guard, so a failed fetch must never leave it null.
+  const [earnings, setEarnings] = useState({
+    thisMonth: 0,
+    changePct: 0,
+    breakdown: { completedJobs: 0, inProgressJobs: 0, cancelledJobs: 0, platformFeePct: 0, platformFeeAmt: 0 },
+    transactions: [],
+  });
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(socket.connected);
   const [toast, setToast] = useState(null);

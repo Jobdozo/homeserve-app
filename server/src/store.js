@@ -947,7 +947,7 @@ async function getEarnings(providerId) {
   const inProgress = bookings.filter((b) => b.status === "In Progress");
   const total = completed.reduce((sum, b) => sum + b.amount, 0);
   const inProgressTotal = inProgress.reduce((sum, b) => sum + b.amount, 0);
-  const platformFeePct = 10;
+  const { platformFeePct } = getSettings();
   const platformFeeAmt = Math.round(total * (platformFeePct / 100));
   const transactions = [...completed]
     .sort((a, b) => new Date(b.statusHistory.Completed || b.createdAt) - new Date(a.statusHistory.Completed || a.createdAt))
