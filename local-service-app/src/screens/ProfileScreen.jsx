@@ -7,7 +7,7 @@ const menuItems = [
   { icon: "🎟️", label: "Coupons & Offers" },
   { icon: "🔔", label: "Notification Settings" },
   { icon: "❓", label: "Help & Support" },
-  { icon: "📄", label: "Terms & Privacy Policy" },
+  { icon: "📄", label: "Terms & Privacy Policy", href: "/privacy.html" },
 ];
 
 export default function ProfileScreen() {
@@ -50,7 +50,7 @@ export default function ProfileScreen() {
         {menuItems.map((item) => (
           <button
             key={item.label}
-            onClick={() => showToast(`${item.label} coming soon`)}
+            onClick={() => (item.href ? window.open(item.href, "_blank") : showToast(`${item.label} coming soon`))}
             className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50 lg:px-5 lg:py-4"
           >
             <span className="text-lg">{item.icon}</span>

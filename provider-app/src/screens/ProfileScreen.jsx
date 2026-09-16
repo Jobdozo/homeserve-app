@@ -18,6 +18,7 @@ export default function ProfileScreen() {
     { icon: "🗓️", label: "Manage Availability", path: "/profile/availability" },
     { icon: "🔔", label: "Notification Settings", path: "/profile/notifications" },
     { icon: "❓", label: "Help & Support", path: "/profile/help" },
+    { icon: "📄", label: "Terms & Privacy Policy", href: "/privacy.html" },
   ];
 
   return (
@@ -62,7 +63,9 @@ export default function ProfileScreen() {
         {menuItems.map((item) => (
           <button
             key={item.label}
-            onClick={() => (item.path ? navigate(item.path) : showToast(`${item.label} coming soon`))}
+            onClick={() =>
+              item.path ? navigate(item.path) : item.href ? window.open(item.href, "_blank") : showToast(`${item.label} coming soon`)
+            }
             className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50 lg:px-5 lg:py-4"
           >
             <span className="text-lg">{item.icon}</span>
