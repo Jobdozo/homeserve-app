@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 
-const TABS = ["All", "booking", "provider", "service", "review", "dispute"];
-const TAB_LABEL = { All: "All", booking: "Bookings", provider: "Providers", service: "Services", review: "Reviews", dispute: "Disputes" };
+const TABS = ["All", "booking", "provider", "service", "review"];
+const TAB_LABEL = { All: "All", booking: "Bookings", provider: "Providers", service: "Services", review: "Reviews" };
 const TYPE_STYLES = {
   booking: "bg-blue-100 text-blue-700",
   provider: "bg-violet-100 text-violet-700",
   service: "bg-emerald-100 text-emerald-700",
   review: "bg-amber-100 text-amber-700",
-  dispute: "bg-red-100 text-red-700",
 };
 
 export default function AuditLogsPage() {

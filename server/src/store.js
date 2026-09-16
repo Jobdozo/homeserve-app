@@ -80,7 +80,6 @@ const BOOKING_FIELDS = `
   provider { id }
   customer { id name avatar phone email }
   bookingStatusEvents_on_booking { status at }
-  disputes_on_booking { id raisedBy category description status resolutionNote createdAt resolvedAt }
 `;
 
 // ---- mappers: raw GraphQL rows -> the exact shapes the rest of the app expects ----
@@ -116,25 +115,9 @@ function mapService(s) {
   };
 }
 
-function mapDispute(d) {
-  return {
-    id: d.id,
-    raisedBy: d.raisedBy,
-    category: d.category,
-    description: d.description,
-    status: d.status,
-    resolutionNote: d.resolutionNote,
-    createdAt: d.createdAt,
-    resolvedAt: d.resolvedAt,
-  };
-}
-
 function mapBooking(b, customer, service) {
   const statusHistory = {};
   for (const e of b.bookingStatusEvents_on_booking || []) statusHistory[e.status] = e.at;
-  // A booking can only ever have one dispute in practice (the client only
-  // offers filing one), but take the most recent if that ever changes.
-  const disputes = (b.disputes_on_booking || []).slice().sort((a, c) => new Date(c.createdAt) - new Date(a.createdAt));
   return {
     id: b.id,
     ...(b.orderId ? { orderId: b.orderId } : {}),
@@ -152,7 +135,6 @@ function mapBooking(b, customer, service) {
     ...(b.cancelledAt ? { cancelledAt: b.cancelledAt } : {}),
     reviewed: !!b.reviewed,
     ...(b.reviewed ? { review: { rating: b.reviewRating, text: b.reviewText } } : {}),
-    dispute: disputes[0] ? mapDispute(disputes[0]) : null,
     customer,
     service,
   };
@@ -841,77 +823,6 @@ async function addReview(bookingId, rating, text) {
   return { booking, provider: await getProvider(existing.providerId), service: await getService(existing.serviceId) };
 }
 
-// ---- disputes (a customer or provider reporting a problem with a booking) ----
-
-async function createDispute(bookingId, { raisedBy, raisedById, category, description }) {
-  const existing = await fetchBookingWithRelations(bookingId);
-  if (!existing) throw new Error("Unknown booking");
-  const partyId = raisedBy === "provider" ? existing.providerId : existing.customerId;
-  if (partyId !== raisedById) throw Object.assign(new Error("Not your booking"), { status: 403 });
-  if (existing.dispute) throw Object.assign(new Error("A dispute has already been filed for this booking"), { status: 409 });
-
-  const { dispute_insert } = await mutate(
-    `mutation($bookingId: UUID!, $raisedBy: String!, $raisedById: UUID!, $category: String!, $description: String!) {
-      dispute_insert(data: {
-        bookingId: $bookingId, raisedBy: $raisedBy, raisedById: $raisedById,
-        category: $category, description: $description, status: "open"
-      })
-    }`,
-    { bookingId, raisedBy, raisedById, category, description }
-  );
-  await logActivity(
-    "dispute",
-    `${raisedBy === "provider" ? "Provider" : "Customer"} raised a dispute on booking #${bookingId}: ${category}`
-  );
-  const updated = await fetchBookingWithRelations(bookingId);
-  return updated.dispute;
-}
-
-async function listDisputes({ status } = {}) {
-  const where = status ? `where: { status: { eq: $status } }, ` : "";
-  const gql = status
-    ? `query($status: String!) { disputes(${where}orderBy: { createdAt: DESC }) { id raisedBy raisedById category description status resolutionNote createdAt resolvedAt booking { id orderId amount service { id } provider { id } customer { id } } } }`
-    : `query { disputes(orderBy: { createdAt: DESC }) { id raisedBy raisedById category description status resolutionNote createdAt resolvedAt booking { id orderId amount service { id } provider { id } customer { id } } } }`;
-  const { disputes } = await query(gql, status ? { status } : {});
-  const [providers, customers, services] = await Promise.all([listProviders(), listCustomersRaw(), listServices()]);
-  return disputes.map((d) => ({
-    ...mapDispute(d),
-    bookingId: d.booking?.id,
-    orderId: d.booking?.orderId || null,
-    amount: d.booking?.amount,
-    serviceName: services.find((s) => s.id === d.booking?.service?.id)?.name || null,
-    providerName: providers.find((p) => p.id === d.booking?.provider?.id)?.name || null,
-    customerName: customers.find((c) => c.id === d.booking?.customer?.id)?.name || null,
-  }));
-}
-
-// Thin unmapped customer lookup for listDisputes' name join — avoids pulling
-// in the booking-stats aggregation that listCustomers() does for a case that
-// only needs id+name.
-async function listCustomersRaw() {
-  const { customers } = await query(`query { customers { id name } }`, {});
-  return customers;
-}
-
-async function updateDisputeStatus(id, { status, resolutionNote }) {
-  if (!["open", "in_review", "resolved", "rejected"].includes(status)) {
-    throw Object.assign(new Error("Invalid dispute status"), { status: 400 });
-  }
-  const resolvedAt = ["resolved", "rejected"].includes(status) ? new Date().toISOString() : null;
-  await mutate(
-    `mutation($id: UUID!, $status: String!, $resolutionNote: String, $resolvedAt: Timestamp) {
-      dispute_update(id: $id, data: { status: $status, resolutionNote: $resolutionNote, resolvedAt: $resolvedAt })
-    }`,
-    { id, status, resolutionNote: resolutionNote || null, resolvedAt }
-  );
-  await logActivity("dispute", `Dispute ${id} marked ${status}`);
-  const { dispute } = await query(
-    `query($id: UUID!) { dispute(id: $id) { id raisedBy category description status resolutionNote createdAt resolvedAt } }`,
-    { id }
-  );
-  return mapDispute(dispute);
-}
-
 async function getProviderReviews(providerId) {
   const { bookings } = await query(
     `query($providerId: UUID!) {
@@ -1036,7 +947,7 @@ async function getEarnings(providerId) {
   const inProgress = bookings.filter((b) => b.status === "In Progress");
   const total = completed.reduce((sum, b) => sum + b.amount, 0);
   const inProgressTotal = inProgress.reduce((sum, b) => sum + b.amount, 0);
-  const { platformFeePct } = getSettings();
+  const platformFeePct = 10;
   const platformFeeAmt = Math.round(total * (platformFeePct / 100));
   const transactions = [...completed]
     .sort((a, b) => new Date(b.statusHistory.Completed || b.createdAt) - new Date(a.statusHistory.Completed || a.createdAt))
@@ -1361,7 +1272,4 @@ module.exports = {
   validateOffer,
   getSettings,
   updateSettings,
-  createDispute,
-  listDisputes,
-  updateDisputeStatus,
 };

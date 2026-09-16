@@ -43,8 +43,6 @@ export const api = {
   sendMessage: (bookingId, text) => request(`/messages/${bookingId}`, { method: "POST", body: JSON.stringify({ text }) }),
   submitReview: (bookingId, rating, text) =>
     request(`/bookings/${bookingId}/review`, { method: "POST", body: JSON.stringify({ rating, text }) }),
-  raiseDispute: (bookingId, category, description) =>
-    request(`/bookings/${bookingId}/disputes`, { method: "POST", body: JSON.stringify({ category, description }) }),
   getProviderReviews: (providerId) => request(`/providers/${providerId}/reviews`),
   listNotifications: () => request("/notifications"),
   markNotificationRead: (id) => request(`/notifications/${id}/read`, { method: "PATCH" }),
