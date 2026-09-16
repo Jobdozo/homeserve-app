@@ -30,6 +30,8 @@ export const api = {
 
   getOverview: () => request("/admin/overview"),
   listCustomers: () => request("/admin/customers"),
+  getSettings: () => request("/admin/settings"),
+  updateSettings: (patch) => request("/admin/settings", { method: "PATCH", body: JSON.stringify(patch) }),
   listActivities: (limit = 20, type) => request(`/activities?limit=${limit}${type ? `&type=${type}` : ""}`),
   listProviders: () => request("/providers"),
   listCategories: () => request("/categories"),

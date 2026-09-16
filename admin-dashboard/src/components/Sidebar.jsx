@@ -45,7 +45,7 @@ const sections = [
     items: [
       { label: "Reports & Analytics", icon: ChartIcon, to: "/reports" },
       { label: "CMS", icon: FileIcon, sub: "Banners / Pages / FAQs" },
-      { label: "Settings", icon: SettingsIcon },
+      { label: "Settings", icon: SettingsIcon, to: "/settings" },
       { label: "Audit Logs", icon: ArchiveIcon, to: "/audit-logs" },
       { label: "Support", icon: SupportIcon },
     ],

@@ -1049,15 +1049,14 @@ async function getAdminOverview() {
   };
 }
 
-const PLATFORM_FEE_PCT = 10;
-
 async function getTransactions() {
   const [bookings, providers] = await Promise.all([listBookings(), listProviders()]);
+  const { platformFeePct } = getSettings();
   return bookings
     .filter((b) => b.status === "Completed")
     .map((b) => {
       const provider = providers.find((p) => p.id === b.providerId);
-      const platformFee = Math.round(b.amount * (PLATFORM_FEE_PCT / 100));
+      const platformFee = Math.round(b.amount * (platformFeePct / 100));
       return {
         id: b.id,
         service: b.service?.name,
@@ -1114,7 +1113,8 @@ async function getAdminReports() {
     })
     .sort((a, b) => b.revenue - a.revenue);
 
-  const platformRevenue = completed.reduce((sum, b) => sum + Math.round(b.amount * (PLATFORM_FEE_PCT / 100)), 0);
+  const { platformFeePct } = getSettings();
+  const platformRevenue = completed.reduce((sum, b) => sum + Math.round(b.amount * (platformFeePct / 100)), 0);
 
   return { revenueByCategory, statusDistribution, providerLeaderboard, platformRevenue };
 }
@@ -1193,6 +1193,30 @@ function validateOffer(code) {
   return { valid: true, offer };
 }
 
+// ---- platform settings (single record, same jsonStore approach as banners/offers) ----
+
+const DEFAULT_SETTINGS = { platformFeePct: 10 };
+
+function getSettings() {
+  const [existing] = jsonStore.readAll("settings");
+  return { ...DEFAULT_SETTINGS, ...existing };
+}
+
+function updateSettings(patch) {
+  if (patch.platformFeePct !== undefined) {
+    const pct = Number(patch.platformFeePct);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+      throw Object.assign(new Error("Platform fee must be a number between 0 and 100"), { status: 400 });
+    }
+    patch = { ...patch, platformFeePct: pct };
+  }
+  const [existing] = jsonStore.readAll("settings");
+  const next = { ...DEFAULT_SETTINGS, ...existing, ...patch };
+  if (existing) jsonStore.update("settings", existing.id, next);
+  else jsonStore.insert("settings", { id: "platform", ...next });
+  return getSettings();
+}
+
 module.exports = {
   getCustomerById,
   getCustomerByPhone,
@@ -1246,4 +1270,6 @@ module.exports = {
   updateOffer,
   deleteOffer,
   validateOffer,
+  getSettings,
+  updateSettings,
 };

@@ -601,6 +601,16 @@ app.get("/api/admin/customers", auth.requireAuth("admin"), ah(async (req, res) =
   res.json(await store.listCustomers());
 }));
 
+app.get("/api/admin/settings", auth.requireAuth("admin"), ah(async (req, res) => {
+  res.json(store.getSettings());
+}));
+
+app.patch("/api/admin/settings", auth.requireAuth("admin"), ah(async (req, res) => {
+  const settings = store.updateSettings(req.body || {});
+  await store.logActivity("settings", `Platform fee updated to ${settings.platformFeePct}%`);
+  res.json(settings);
+}));
+
 app.get("/api/admin/transactions", auth.requireAuth("admin"), ah(async (req, res) => {
   res.json(await store.getTransactions());
 }));
