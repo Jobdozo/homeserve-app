@@ -3,6 +3,10 @@
   "target": {
     "namespace": "android_app",
     "package_name": "com.tikdum.provider",
-    "sha256_cert_fingerprints": ["D3:D8:6E:FF:E6:0A:E4:E6:40:AE:B5:37:A9:0B:1D:1B:8C:BA:F5:45:8A:83:9E:75:74:8B:BF:8F:FD:24:74:96"]
+    "sha256_cert_fingerprints": [
+      "6A:6D:9D:43:FD:97:36:B0:03:FA:0D:20:9C:FF:10:80:D2:C4:51:9C:3B:B4:41:84:93:9C:C5:E9:3F:3E:CD:21",
+      "8D:44:13:0D:95:4B:A2:A3:58:B5:DB:E7:12:E2:C8:16:01:41:D6:C9:0A:E4:71:FA:D5:F4:66:66:92:16:71:02",
+      "43:BC:52:25:C7:7B:B8:27:94:1A:F0:32:3A:3B:A5:8C:D1:09:B8:83:A6:FE:4B:19:6E:A3:BD:9C:C6:2A:D5:6A"
+    ]
   }
 }]
