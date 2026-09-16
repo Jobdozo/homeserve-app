@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.tikdum.customer",
+    "sha256_cert_fingerprints": ["E5:1C:66:F8:BE:B4:B3:2C:40:2C:D4:1F:1A:2A:89:3E:43:30:24:E0:55:E1:F5:59:A8:3D:FE:29:60:5E:61:A3"]
+  }
+}]
