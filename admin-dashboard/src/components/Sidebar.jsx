@@ -38,7 +38,7 @@ const sections = [
       { label: "Commission", icon: PercentIcon },
       { label: "Reviews & Ratings", icon: StarIcon, to: "/reviews" },
       { label: "Disputes & Complaints", icon: AlertIcon, to: "/disputes" },
-      { label: "Notifications", icon: BellIcon },
+      { label: "Notifications", icon: BellIcon, to: "/notifications" },
     ],
   },
   {
