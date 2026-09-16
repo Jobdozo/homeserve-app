@@ -29,6 +29,7 @@ export const api = {
   me: () => request("/auth/me"),
 
   getOverview: () => request("/admin/overview"),
+  listCustomers: () => request("/admin/customers"),
   listActivities: (limit = 20) => request(`/activities?limit=${limit}`),
   listProviders: () => request("/providers"),
   listCategories: () => request("/categories"),

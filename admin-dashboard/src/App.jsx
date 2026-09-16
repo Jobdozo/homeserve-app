@@ -3,6 +3,7 @@ import { AppProvider, useApp } from "./context/AppContext";
 import Layout from "./components/Layout";
 import LoginScreen from "./screens/LoginScreen";
 import DashboardPage from "./pages/DashboardPage";
+import CustomersPage from "./pages/CustomersPage";
 import ProvidersPage from "./pages/ProvidersPage";
 import ServicesPage from "./pages/ServicesPage";
 import BookingsPage from "./pages/BookingsPage";
@@ -28,6 +29,7 @@ function AppRoutes() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/customers" element={<CustomersPage />} />
         <Route path="/providers" element={<ProvidersPage />} />
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/bookings" element={<BookingsPage />} />

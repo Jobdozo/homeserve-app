@@ -7,6 +7,7 @@ import { useApp } from "../context/AppContext";
 
 const TITLES = {
   "/dashboard": { title: "Dashboard", subtitle: "Welcome back, Super Admin 👋" },
+  "/customers": { title: "Customers", subtitle: "Everyone who's booked a service on Tikdum" },
   "/providers": { title: "Providers Verification", subtitle: "Review and manage service providers" },
   "/services": { title: "Services & Categories", subtitle: "Moderate the live service catalog" },
   "/bookings": { title: "Bookings", subtitle: "All bookings across every provider" },

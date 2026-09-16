@@ -26,7 +26,7 @@ const sections = [
   },
   {
     title: "Users",
-    items: [{ label: "Customers", icon: UsersIcon }],
+    items: [{ label: "Customers", icon: UsersIcon, to: "/customers" }],
   },
   {
     items: [

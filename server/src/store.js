@@ -220,6 +220,31 @@ async function createCustomer({ phone, name }) {
   return getCustomerById(customer_insert.id);
 }
 
+// Admin-facing customer list with booking stats — totalSpent counts only
+// Completed bookings, matching how revenue is computed everywhere else
+// (getAdminOverview, getEarnings, getAdminReports).
+async function listCustomers() {
+  const cacheKey = "customers:admin";
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+  const [{ customers }, bookings] = await Promise.all([
+    query(`query { customers { id name avatar phone email } }`, {}),
+    listBookings({}),
+  ]);
+  const statsByCustomer = new Map();
+  for (const b of bookings) {
+    const stats = statsByCustomer.get(b.customerId) || { totalBookings: 0, totalSpent: 0 };
+    stats.totalBookings += 1;
+    if (b.status === "Completed") stats.totalSpent += b.amount;
+    statsByCustomer.set(b.customerId, stats);
+  }
+  const result = customers.map((c) => {
+    const stats = statsByCustomer.get(c.id) || { totalBookings: 0, totalSpent: 0 };
+    return { id: c.id, name: c.name, phone: c.phone, email: c.email, avatar: c.avatar, ...stats };
+  });
+  return cacheSet(cacheKey, result);
+}
+
 // ---- providers ----
 
 async function getProviderByPhone(phone) {
@@ -1173,6 +1198,7 @@ module.exports = {
   getCustomerByPhone,
   createCustomer,
   listCustomerIds,
+  listCustomers,
   getProviderByPhone,
   createProviderSignup,
   adminCreateProvider,
