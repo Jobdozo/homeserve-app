@@ -338,7 +338,7 @@ async function listProviderServices(providerId) {
 }
 
 async function addProviderService(providerId, data) {
-  const categoryId = (await getCategoryUuidBySlug("ac-repair")) || null;
+  const categoryId = (await getCategoryUuidBySlug(data.categorySlug || "ac-repair")) || null;
   const { service_insert } = await mutate(
     `mutation($providerId: UUID!, $categoryId: UUID, $name: String!, $price: Int!, $originalPrice: Int, $icon: String, $distanceLabel: String) {
       service_insert(data: {
@@ -376,9 +376,8 @@ async function addProviderService(providerId, data) {
   return getService(serviceId);
 }
 
-// Admin adding a service on a provider's behalf — unlike the provider app's
-// own addProviderService (which currently hardcodes "ac-repair"), this
-// resolves the real category the admin picked.
+// Admin adding a service on a provider's behalf — same categorySlug-based
+// resolution as addProviderService above, just with the admin's own picker.
 async function adminCreateService(providerId, { categorySlug, name, price, originalPrice }) {
   const categoryId = (await getCategoryUuidBySlug(categorySlug)) || null;
   const { service_insert } = await mutate(

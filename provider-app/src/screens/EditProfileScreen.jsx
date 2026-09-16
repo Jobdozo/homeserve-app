@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
-import { serviceCategories } from "../data/mockData";
 import ScreenHeader from "../components/ScreenHeader";
 
 export default function EditProfileScreen() {
   const navigate = useNavigate();
-  const { provider, updateProfile, showToast } = useApp();
+  const { provider, categories, updateProfile, showToast } = useApp();
 
   const [name, setName] = useState(provider.name || "");
-  const [category, setCategory] = useState(provider.category && provider.category !== "Not set" ? provider.category : serviceCategories[0]);
+  const [category, setCategory] = useState(
+    provider.category && provider.category !== "Not set" ? provider.category : categories[0]?.name || ""
+  );
   const [businessName, setBusinessName] = useState(provider.businessName || "");
   const [experience, setExperience] = useState(provider.experience || "");
   const [serviceArea, setServiceArea] = useState(provider.serviceArea || "");
@@ -65,9 +66,9 @@ export default function EditProfileScreen() {
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full bg-transparent text-[13.5px] text-gray-800 outline-none"
               >
-                {serviceCategories.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                {categories.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.icon} {c.name}
                   </option>
                 ))}
               </select>

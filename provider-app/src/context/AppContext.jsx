@@ -31,6 +31,7 @@ export function AppProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(true);
   const [requests, setRequests] = useState([]);
   const [services, setServices] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [messages, setMessages] = useState({});
   const [earnings, setEarnings] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -130,17 +131,19 @@ export function AppProvider({ children }) {
     async function load() {
       setLoading(true);
       try {
-        const [requestData, serviceData, earningsData, notificationData] = await Promise.all([
+        const [requestData, serviceData, earningsData, notificationData, categoryData] = await Promise.all([
           api.listBookings(),
           api.listProviderServices(provider.id),
           api.getEarnings(provider.id),
           api.listNotifications(),
+          api.listCategories(),
         ]);
         if (cancelled) return;
         setRequests(requestData);
         setServices(serviceData);
         setEarnings(earningsData);
         setNotifications(notificationData);
+        setCategories(categoryData);
 
         // Reopening the app (e.g. tapping a push notification) should show
         // the ringing overlay for a request that's still waiting on this
@@ -362,12 +365,12 @@ export function AppProvider({ children }) {
   }, [provider, services]);
 
   const addService = useCallback(
-    async ({ name, category, description, price, originalPrice, extraCharges, serviceArea }) => {
+    async ({ name, categorySlug, description, price, originalPrice, extraCharges, serviceArea }) => {
       if (!provider) return;
       const numericOriginal = Number(originalPrice) || 0;
       const service = await api.addProviderService(provider.id, {
         name,
-        category,
+        categorySlug,
         description,
         price: Number(price) || 0,
         ...(numericOriginal > 0 ? { originalPrice: numericOriginal } : {}),
@@ -410,6 +413,7 @@ export function AppProvider({ children }) {
       logout,
       requests,
       services,
+      categories,
       messages,
       earnings,
       loading,
@@ -441,6 +445,7 @@ export function AppProvider({ children }) {
       logout,
       requests,
       services,
+      categories,
       messages,
       earnings,
       loading,

@@ -1,16 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
-import { serviceCategories } from "../data/mockData";
 import ScreenHeader from "../components/ScreenHeader";
 import { CameraIcon, XIcon } from "../components/icons";
 
 export default function AddServiceScreen() {
   const navigate = useNavigate();
-  const { addService, showToast } = useApp();
+  const { categories, addService, showToast } = useApp();
 
   const [name, setName] = useState("");
-  const [category, setCategory] = useState(serviceCategories[0]);
+  const [categorySlug, setCategorySlug] = useState("");
+
+  // categories load async (fetched alongside the rest of this provider's
+  // data) — default the select once they arrive instead of hardcoding a
+  // guess, so a fresh category never gets silently skipped.
+  useEffect(() => {
+    if (!categorySlug && categories.length > 0) setCategorySlug(categories[0].id);
+  }, [categories, categorySlug]);
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [originalPrice, setOriginalPrice] = useState("");
@@ -34,7 +40,7 @@ export default function AddServiceScreen() {
       showToast("Please fill in service name and price");
       return;
     }
-    addService({ name: name.trim(), category, description, price, originalPrice, extraCharges, serviceArea });
+    addService({ name: name.trim(), categorySlug, description, price, originalPrice, extraCharges, serviceArea });
     navigate("/services", { replace: true });
   };
 
@@ -56,13 +62,13 @@ export default function AddServiceScreen() {
             </Field>
             <Field label="Category">
               <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                value={categorySlug}
+                onChange={(e) => setCategorySlug(e.target.value)}
                 className="w-full bg-transparent text-[13.5px] text-gray-800 outline-none"
               >
-                {serviceCategories.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.icon} {c.name}
                   </option>
                 ))}
               </select>

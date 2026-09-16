@@ -33,6 +33,7 @@ export const api = {
     request("/auth/otp/verify", { method: "POST", body: JSON.stringify({ phone, code, role, name }) }),
   me: () => request("/auth/me"),
 
+  listCategories: () => request("/categories"),
   getProvider: (id) => request(`/providers/${id}`),
   updateProviderProfile: (id, patch) =>
     request(`/providers/${id}/profile`, { method: "PATCH", body: JSON.stringify(patch) }),
