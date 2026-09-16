@@ -8,6 +8,16 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // injectManifest (not the default generateSW) so src/sw.js can add its
+      // own push/notificationclick handlers — a plain generated service
+      // worker only caches, it can't wake a backgrounded/closed app for a
+      // push notification (see src/sw.js for why that matters).
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
+      injectManifest: {
+        injectionPoint: 'self.__WB_MANIFEST',
+      },
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'Tikdum — Local Services Marketplace',
@@ -23,26 +33,6 @@ export default defineConfig({
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },
           { src: 'pwa-maskable-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
           { src: 'pwa-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-        ],
-      },
-      workbox: {
-        // Cache-then-network for the read-only catalog/data GETs so the app
-        // stays browsable offline with the last data it saw; anything that
-        // isn't a plain data GET (auth, bookings writes, messages, etc.)
-        // is left alone and simply fails offline like a normal API call.
-        runtimeCaching: [
-          {
-            urlPattern: ({ url, request }) =>
-              request.method === 'GET' &&
-              /\/api\/(bootstrap|categories|services|providers|bookings|notifications|banners)(\/|\?|$)/.test(url.pathname),
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'tikdum-api-cache',
-              networkTimeoutSeconds: 4,
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
         ],
       },
     }),

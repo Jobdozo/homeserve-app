@@ -1,5 +1,6 @@
 const { query, mutate } = require("./dataconnect");
 const jsonStore = require("./jsonStore");
+const push = require("./push");
 
 // Short-lived in-memory cache for the catalog reads that hit almost every
 // page load (categories/services/providers) — Data Connect is a remote
@@ -602,6 +603,7 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
     title: "New booking request",
     message: `${customer.name} requested ${service.name} for ${date}`,
     bookingId,
+    skipPush: true, // dispatchBooking (index.js) sends this one's push
   });
   return fetchBookingWithRelations(bookingId);
 }
@@ -727,6 +729,7 @@ async function reassignBooking(bookingId, excludeProviderIds) {
       title: "New booking request",
       message: `${updated.customer?.name || "A customer"} requested ${updated.service?.name || "a service"} for ${updated.date}`,
       bookingId,
+      skipPush: true, // the caller in index.js calls dispatchBooking again, which sends this one's push
     });
     return { reassigned: true, booking: updated };
   }
@@ -877,7 +880,15 @@ function onNotification(listener) {
   notificationListeners.push(listener);
 }
 
-async function addNotification({ recipientType, recipientId, type, title, message, bookingId }) {
+// skipPush is for the two "new booking request" notifications (createBooking,
+// reassignBooking) — those already get their own richer push straight from
+// index.js's dispatchBooking (it needs bookingId+type to make the provider
+// app actually ring, which this generic path doesn't do), so pushing here
+// too would double-notify. Every other notification type has no push at all
+// otherwise, which is exactly the bug this fixes: the socket event this
+// function already fired only reaches a tab that's currently open — a
+// backgrounded or closed app never learns about it without a real push.
+async function addNotification({ recipientType, recipientId, type, title, message, bookingId, skipPush = false }) {
   const { notification_insert } = await mutate(
     `mutation($recipientType: String!, $recipientId: UUID!, $type: String!, $title: String!, $message: String!, $bookingId: UUID) {
       notification_insert(data: {
@@ -899,6 +910,11 @@ async function addNotification({ recipientType, recipientId, type, title, messag
     time: new Date().toISOString(),
   };
   notificationListeners.forEach((listener) => listener(notification));
+  if (!skipPush) {
+    push
+      .sendPush(recipientType, recipientId, { title, body: message, type, bookingId: bookingId || null })
+      .catch((e) => console.error("Push send failed for notification", notification.id, e));
+  }
   return notification;
 }
 

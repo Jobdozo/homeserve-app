@@ -499,16 +499,16 @@ app.get("/api/push/vapid-public-key", (req, res) => {
   res.json({ publicKey: push.VAPID_PUBLIC_KEY, configured: push.configured });
 });
 
-app.post("/api/push/subscribe", auth.requireAuth("provider"), ah(async (req, res) => {
+app.post("/api/push/subscribe", auth.requireAuth("provider", "customer"), ah(async (req, res) => {
   const { subscription } = req.body || {};
   if (!subscription || !subscription.endpoint) {
     return res.status(400).json({ error: "subscription is required" });
   }
-  push.saveSubscription("provider", req.user.id, subscription);
+  push.saveSubscription(req.user.role, req.user.id, subscription);
   res.status(201).json({ ok: true });
 }));
 
-app.post("/api/push/unsubscribe", auth.requireAuth("provider"), ah(async (req, res) => {
+app.post("/api/push/unsubscribe", auth.requireAuth("provider", "customer"), ah(async (req, res) => {
   const { endpoint } = req.body || {};
   if (!endpoint) return res.status(400).json({ error: "endpoint is required" });
   push.removeSubscriptionByEndpoint(endpoint);

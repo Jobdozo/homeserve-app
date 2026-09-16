@@ -51,5 +51,8 @@ export const api = {
     request("/location", { method: "POST", body: JSON.stringify({ lat, lng, accuracy }) }),
   getBookingLiveLocation: (bookingId) => request(`/bookings/${bookingId}/live-location`),
   listBanners: () => request("/banners"),
+  getVapidPublicKey: () => request("/push/vapid-public-key"),
+  subscribePush: (subscription) => request("/push/subscribe", { method: "POST", body: JSON.stringify({ subscription }) }),
+  unsubscribePush: (endpoint) => request("/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
   validateOffer: (code) => request("/offers/validate", { method: "POST", body: JSON.stringify({ code }) }),
 };

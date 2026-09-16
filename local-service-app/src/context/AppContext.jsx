@@ -3,6 +3,7 @@ import { api, setAuthToken } from "../api";
 import { socket } from "../socket";
 import { timeSlots, defaultAddress } from "../data/mockData";
 import { detectCurrentLocation } from "../utils/geolocation";
+import { ensurePushSubscribed } from "../utils/pushNotifications";
 
 const AppContext = createContext(null);
 const CART_KEY = "homeserve-cart-v1";
@@ -102,6 +103,13 @@ export function AppProvider({ children }) {
   // Ask for location once per login if we don't already have one saved.
   useEffect(() => {
     if (customer && !location) detectLocation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customer?.id]);
+
+  // Register for push once logged in, so an admin broadcast or booking
+  // update can reach this device even while the app is backgrounded/closed.
+  useEffect(() => {
+    if (customer) ensurePushSubscribed();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer?.id]);
 
