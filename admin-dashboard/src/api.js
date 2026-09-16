@@ -30,7 +30,7 @@ export const api = {
 
   getOverview: () => request("/admin/overview"),
   listCustomers: () => request("/admin/customers"),
-  listActivities: (limit = 20) => request(`/activities?limit=${limit}`),
+  listActivities: (limit = 20, type) => request(`/activities?limit=${limit}${type ? `&type=${type}` : ""}`),
   listProviders: () => request("/providers"),
   listCategories: () => request("/categories"),
   listServices: () => request("/services"),

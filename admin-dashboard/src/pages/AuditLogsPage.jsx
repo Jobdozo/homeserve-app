@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api";
 
 const TABS = ["All", "booking", "provider", "service", "review"];
@@ -14,14 +14,15 @@ export default function AuditLogsPage() {
   const [activities, setActivities] = useState([]);
   const [tab, setTab] = useState("All");
 
+  // Fetched per-tab from the server (not filtered client-side out of one
+  // capped list) — a low-volume type like "review" can otherwise have every
+  // one of its entries pushed out of the most-recent-N window by noisier
+  // types (bookings, services) long before it ever shows up.
   useEffect(() => {
-    api.listActivities(100).then(setActivities);
-  }, []);
+    api.listActivities(100, tab === "All" ? undefined : tab).then(setActivities);
+  }, [tab]);
 
-  const filtered = useMemo(() => {
-    if (tab === "All") return activities;
-    return activities.filter((a) => a.type === tab);
-  }, [activities, tab]);
+  const filtered = activities;
 
   return (
     <div className="space-y-4">

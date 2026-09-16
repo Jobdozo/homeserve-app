@@ -590,7 +590,7 @@ app.post("/api/notifications/read-all", auth.requireAuth("customer", "provider")
 // ---- activities & admin ----
 app.get("/api/activities", auth.requireAuth("admin"), ah(async (req, res) => {
   const limit = Number(req.query.limit) || 20;
-  res.json(await store.listActivities(limit));
+  res.json(await store.listActivities(limit, req.query.type));
 }));
 
 app.get("/api/admin/overview", auth.requireAuth("admin"), ah(async (req, res) => {

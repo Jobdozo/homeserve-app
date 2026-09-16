@@ -862,11 +862,11 @@ async function logActivity(type, message) {
   return activity_insert;
 }
 
-async function listActivities(limit = 20) {
-  const { activities } = await query(
-    `query($limit: Int!) { activities(orderBy: { occurredAt: DESC }, limit: $limit) { id type message occurredAt } }`,
-    { limit }
-  );
+async function listActivities(limit = 20, type) {
+  const gql = type
+    ? `query($limit: Int!, $type: String!) { activities(where: { type: { eq: $type } }, orderBy: { occurredAt: DESC }, limit: $limit) { id type message occurredAt } }`
+    : `query($limit: Int!) { activities(orderBy: { occurredAt: DESC }, limit: $limit) { id type message occurredAt } }`;
+  const { activities } = await query(gql, type ? { limit, type } : { limit });
   return activities.map(mapActivity);
 }
 
