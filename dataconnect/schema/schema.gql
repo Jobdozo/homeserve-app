@@ -118,3 +118,18 @@ type Notification @table {
   read: Boolean! @default(value: false)
   createdAt: Timestamp! @default(expr: "request.time")
 }
+
+# A customer or provider reporting a problem with a specific booking —
+# raisedById is the same polymorphic-reference pattern as Notification above
+# (a UUID resolved against Customer or Provider by raisedBy in app code).
+type Dispute @table {
+  booking: Booking!
+  raisedBy: String! # "customer" | "provider"
+  raisedById: UUID!
+  category: String!
+  description: String!
+  status: String! @default(value: "open") # "open" | "in_review" | "resolved" | "rejected"
+  resolutionNote: String
+  createdAt: Timestamp! @default(expr: "request.time")
+  resolvedAt: Timestamp
+}

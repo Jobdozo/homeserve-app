@@ -8,11 +8,24 @@ import CategoryIcon from "../components/CategoryIcon";
 
 const LOCATION_TRACKED_STATUSES = ["Pending", "Accepted", "In Progress"];
 
+const DISPUTE_CATEGORIES = ["Customer No-Show", "Unsafe Location", "Payment Issue", "Abusive Behavior", "Other"];
+const DISPUTE_STATUS_LABEL = { open: "Reported — awaiting review", in_review: "Under review", resolved: "Resolved", rejected: "Reviewed — not upheld" };
+const DISPUTE_STATUS_STYLE = {
+  open: "bg-amber-50 text-amber-700",
+  in_review: "bg-blue-50 text-blue-700",
+  resolved: "bg-emerald-50 text-emerald-700",
+  rejected: "bg-gray-100 text-gray-500",
+};
+
 export default function RequestDetailsScreen() {
   const { requestId } = useParams();
   const navigate = useNavigate();
-  const { getRequest, acceptRequest, rejectRequest, advanceRequestStatus, showToast } = useApp();
+  const { getRequest, acceptRequest, rejectRequest, advanceRequestStatus, raiseDispute, showToast } = useApp();
   const [liveLocation, setLiveLocation] = useState(null);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [category, setCategory] = useState(DISPUTE_CATEGORIES[0]);
+  const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const request = getRequest(requestId);
 
@@ -171,6 +184,79 @@ export default function RequestDetailsScreen() {
           >
             Message {customer?.name}
           </button>
+        )}
+
+        {!["Pending", "Rejected"].includes(request.status) && (
+          <>
+            {request.dispute ? (
+              <div className={`rounded-xl px-4 py-3 text-[12.5px] ${DISPUTE_STATUS_STYLE[request.dispute.status]}`}>
+                <p className="font-semibold">{DISPUTE_STATUS_LABEL[request.dispute.status]}</p>
+                <p className="mt-0.5 text-[11.5px] opacity-80">
+                  {request.dispute.category}: {request.dispute.description}
+                </p>
+                {request.dispute.resolutionNote && (
+                  <p className="mt-1.5 text-[11.5px] opacity-80">Admin note: {request.dispute.resolutionNote}</p>
+                )}
+              </div>
+            ) : reportOpen ? (
+              <div className="space-y-2.5 rounded-xl border border-gray-200 p-3">
+                <h2 className="text-[13px] font-bold text-gray-900">Report an issue</h2>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] text-gray-800 outline-none"
+                >
+                  {DISPUTE_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  placeholder="Describe what went wrong..."
+                  className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] text-gray-800 outline-none placeholder:text-gray-400"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setReportOpen(false)}
+                    className="flex-1 rounded-lg border border-gray-200 py-2 text-[12.5px] font-semibold text-gray-600"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!description.trim() || submitting) return;
+                      setSubmitting(true);
+                      try {
+                        await raiseDispute(request.id, category, description.trim());
+                        setReportOpen(false);
+                        setDescription("");
+                        showToast("Your report has been submitted — we'll review it shortly");
+                      } catch (e) {
+                        showToast(e.message || "Failed to submit report");
+                      } finally {
+                        setSubmitting(false);
+                      }
+                    }}
+                    disabled={!description.trim() || submitting}
+                    className="flex-1 rounded-lg bg-gray-900 py-2 text-[12.5px] font-semibold text-white disabled:opacity-50"
+                  >
+                    {submitting ? "Submitting…" : "Submit"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setReportOpen(true)}
+                className="w-full rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-600"
+              >
+                Report an issue
+              </button>
+            )}
+          </>
         )}
       </div>
 

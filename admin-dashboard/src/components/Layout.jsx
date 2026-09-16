@@ -16,6 +16,7 @@ const TITLES = {
   "/reports": { title: "Reports & Analytics", subtitle: "Revenue, bookings, and provider performance" },
   "/audit-logs": { title: "Audit Logs", subtitle: "Every platform event, in order" },
   "/settings": { title: "Settings", subtitle: "Platform-wide configuration" },
+  "/disputes": { title: "Disputes & Complaints", subtitle: "Issues reported by customers and providers" },
 };
 
 function ConnectionBanner() {

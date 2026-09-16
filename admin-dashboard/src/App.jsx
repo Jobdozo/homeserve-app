@@ -12,6 +12,7 @@ import PaymentsPage from "./pages/PaymentsPage";
 import ReportsPage from "./pages/ReportsPage";
 import AuditLogsPage from "./pages/AuditLogsPage";
 import SettingsPage from "./pages/SettingsPage";
+import DisputesPage from "./pages/DisputesPage";
 
 function AppRoutes() {
   const { admin, authLoading } = useApp();
@@ -39,6 +40,7 @@ function AppRoutes() {
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/audit-logs" element={<AuditLogsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/disputes" element={<DisputesPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

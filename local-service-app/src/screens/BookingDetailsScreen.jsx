@@ -18,13 +18,26 @@ const statusStyles = {
   Rejected: "bg-red-100 text-red-600",
 };
 
+const DISPUTE_CATEGORIES = ["Service Quality", "Payment Issue", "Provider No-Show", "Damage", "Other"];
+const DISPUTE_STATUS_LABEL = { open: "Reported — awaiting review", in_review: "Under review", resolved: "Resolved", rejected: "Reviewed — not upheld" };
+const DISPUTE_STATUS_STYLE = {
+  open: "bg-amber-50 text-amber-700",
+  in_review: "bg-blue-50 text-blue-700",
+  resolved: "bg-emerald-50 text-emerald-700",
+  rejected: "bg-gray-100 text-gray-500",
+};
+
 export default function BookingDetailsScreen() {
   const { bookingId } = useParams();
   const navigate = useNavigate();
-  const { getBooking, getService, getProvider, cancelBooking, advanceBookingStatus, showToast } = useApp();
+  const { getBooking, getService, getProvider, cancelBooking, advanceBookingStatus, raiseDispute, showToast } = useApp();
 
   const booking = getBooking(bookingId);
   const [liveLocation, setLiveLocation] = useState(null);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [category, setCategory] = useState(DISPUTE_CATEGORIES[0]);
+  const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   // Poll the provider's real-time position every 30s (matching how often
   // they report it) so directions target where they actually are.
@@ -74,6 +87,21 @@ export default function BookingDetailsScreen() {
     const next = STATUS_STEPS[currentIdx + 1];
     await advanceBookingStatus(booking.id, next);
     showToast("Status updated");
+  };
+
+  const handleReportIssue = async () => {
+    if (!description.trim() || submitting) return;
+    setSubmitting(true);
+    try {
+      await raiseDispute(booking.id, category, description.trim());
+      setReportOpen(false);
+      setDescription("");
+      showToast("Your report has been submitted — we'll review it shortly");
+    } catch (e) {
+      showToast(e.message || "Failed to submit report");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -223,6 +251,58 @@ export default function BookingDetailsScreen() {
             You rated this service {booking.review.rating}★
           </div>
         )}
+
+        {/* Dispute: show its status once filed, otherwise offer to report one. */}
+        {booking.dispute ? (
+          <div className={`rounded-xl px-4 py-3 text-[12.5px] ${DISPUTE_STATUS_STYLE[booking.dispute.status]}`}>
+            <p className="font-semibold">{DISPUTE_STATUS_LABEL[booking.dispute.status]}</p>
+            <p className="mt-0.5 text-[11.5px] opacity-80">
+              {booking.dispute.category}: {booking.dispute.description}
+            </p>
+            {booking.dispute.resolutionNote && (
+              <p className="mt-1.5 text-[11.5px] opacity-80">Admin note: {booking.dispute.resolutionNote}</p>
+            )}
+          </div>
+        ) : (
+          reportOpen && (
+            <div className="space-y-2.5 rounded-xl border border-gray-200 p-3">
+              <h2 className="text-[13px] font-bold text-gray-900">Report an issue</h2>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] text-gray-800 outline-none"
+              >
+                {DISPUTE_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                placeholder="Describe what went wrong..."
+                className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] text-gray-800 outline-none placeholder:text-gray-400"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setReportOpen(false)}
+                  className="flex-1 rounded-lg border border-gray-200 py-2 text-[12.5px] font-semibold text-gray-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleReportIssue}
+                  disabled={!description.trim() || submitting}
+                  className="flex-1 rounded-lg bg-gray-900 py-2 text-[12.5px] font-semibold text-white disabled:opacity-50"
+                >
+                  {submitting ? "Submitting…" : "Submit"}
+                </button>
+              </div>
+            </div>
+          )
+        )}
       </div>
 
       {!isCancelled && (booking.status === "Pending" || booking.status === "Accepted") && (
@@ -233,12 +313,14 @@ export default function BookingDetailsScreen() {
           >
             Cancel Booking
           </button>
-          <button
-            onClick={() => showToast("Support will reach out shortly")}
-            className="flex-1 rounded-xl bg-gray-900 py-3 text-sm font-semibold text-white active:scale-[0.98]"
-          >
-            Need Help?
-          </button>
+          {!booking.dispute && (
+            <button
+              onClick={() => setReportOpen((v) => !v)}
+              className="flex-1 rounded-xl bg-gray-900 py-3 text-sm font-semibold text-white active:scale-[0.98]"
+            >
+              Need Help?
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -40,6 +40,8 @@ export const api = {
   listBookings: () => request("/bookings"),
   updateBookingStatus: (id, status) =>
     request(`/bookings/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  raiseDispute: (bookingId, category, description) =>
+    request(`/bookings/${bookingId}/disputes`, { method: "POST", body: JSON.stringify({ category, description }) }),
   getMessages: (bookingId) => request(`/messages/${bookingId}`),
   sendMessage: (bookingId, text) => request(`/messages/${bookingId}`, { method: "POST", body: JSON.stringify({ text }) }),
   listProviderServices: (providerId) => request(`/providers/${providerId}/services`),

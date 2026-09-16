@@ -37,7 +37,7 @@ const sections = [
       { label: "Payments & Transactions", icon: WalletIcon, to: "/payments" },
       { label: "Commission", icon: PercentIcon },
       { label: "Reviews & Ratings", icon: StarIcon, to: "/reviews" },
-      { label: "Disputes & Complaints", icon: AlertIcon },
+      { label: "Disputes & Complaints", icon: AlertIcon, to: "/disputes" },
       { label: "Notifications", icon: BellIcon },
     ],
   },

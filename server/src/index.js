@@ -493,6 +493,23 @@ app.post("/api/bookings/:id/review", auth.requireAuth("customer"), ah(async (req
   res.json(result.booking);
 }));
 
+app.post("/api/bookings/:id/disputes", auth.requireAuth("customer", "provider"), ah(async (req, res) => {
+  const { category, description } = req.body || {};
+  if (!category || !description || !description.trim()) {
+    return res.status(400).json({ error: "category and description are required" });
+  }
+  await store.createDispute(req.params.id, {
+    raisedBy: req.user.role,
+    raisedById: req.user.id,
+    category,
+    description: description.trim(),
+  });
+  const booking = await store.getBooking(req.params.id);
+  io.emit("booking:updated", booking);
+  io.emit("activity:created", (await store.listActivities(1))[0]);
+  res.status(201).json(booking);
+}));
+
 // ---- push notifications (wake a backgrounded/closed provider app for new
 // booking requests — see server/src/push.js) ----
 app.get("/api/push/vapid-public-key", (req, res) => {
@@ -609,6 +626,17 @@ app.patch("/api/admin/settings", auth.requireAuth("admin"), ah(async (req, res) 
   const settings = store.updateSettings(req.body || {});
   await store.logActivity("settings", `Platform fee updated to ${settings.platformFeePct}%`);
   res.json(settings);
+}));
+
+app.get("/api/admin/disputes", auth.requireAuth("admin"), ah(async (req, res) => {
+  res.json(await store.listDisputes({ status: req.query.status }));
+}));
+
+app.patch("/api/admin/disputes/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { status, resolutionNote } = req.body || {};
+  const dispute = await store.updateDisputeStatus(req.params.id, { status, resolutionNote });
+  io.emit("activity:created", (await store.listActivities(1))[0]);
+  res.json(dispute);
 }));
 
 app.get("/api/admin/transactions", auth.requireAuth("admin"), ah(async (req, res) => {

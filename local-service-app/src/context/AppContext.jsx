@@ -328,6 +328,12 @@ export function AppProvider({ children }) {
     setBookings((prev) => upsertById(prev, booking));
   }, []);
 
+  const raiseDispute = useCallback(async (id, category, description) => {
+    const booking = await api.raiseDispute(id, category, description);
+    setBookings((prev) => upsertById(prev, booking));
+    return booking;
+  }, []);
+
   const loadMessages = useCallback(async (bookingId) => {
     if (loadedThreads.current.has(bookingId)) return;
     loadedThreads.current.add(bookingId);
@@ -435,6 +441,7 @@ export function AppProvider({ children }) {
       createBooking,
       cancelBooking,
       advanceBookingStatus,
+      raiseDispute,
       loadMessages,
       sendMessage,
       submitReview,
@@ -476,6 +483,7 @@ export function AppProvider({ children }) {
       createBooking,
       cancelBooking,
       advanceBookingStatus,
+      raiseDispute,
       loadMessages,
       sendMessage,
       submitReview,
