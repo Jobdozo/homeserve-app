@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "907306775191",
+    "firebase_url": "https://tikdum-1edea-default-rtdb.firebaseio.com",
+    "project_id": "tikdum-1edea",
+    "storage_bucket": "tikdum-1edea.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:907306775191:android:7633f5f3b8aabcf5c0afd2",
+        "android_client_info": {
+          "package_name": "com.tikdum.provider"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "907306775191-ebbh93g4dc8e79s6m44r1628rmf059kh.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBOxVYwd1Z5nPisbQ68L0qSD_JEPpR11os"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "907306775191-ebbh93g4dc8e79s6m44r1628rmf059kh.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

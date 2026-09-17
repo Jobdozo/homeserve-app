@@ -89,4 +89,5 @@ export const api = {
   listJobPhotos: (bookingId) => request(`/bookings/${bookingId}/photos`),
   uploadJobPhoto: (bookingId, file, photoType) =>
     uploadFile(`/bookings/${bookingId}/photos`, file, { photoType }),
+  saveFcmToken: (token) => request("/provider/fcm-token", { method: "POST", body: JSON.stringify({ token }) }),
 };

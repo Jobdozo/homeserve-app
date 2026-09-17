@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, useCallback, u
 import { api, setAuthToken } from "../api";
 import { socket } from "../socket";
 import { loadNotificationPrefs, saveNotificationPrefs } from "../utils/notificationPrefs";
-import { ensurePushSubscribed } from "../utils/pushNotifications";
+import { ensurePushSubscribed, onNativeRing } from "../utils/pushNotifications";
 
 const AppContext = createContext(null);
 const AUTH_KEY = "tikdum-provider-auth-v1";
@@ -193,6 +193,23 @@ export function AppProvider({ children }) {
     if (provider) ensurePushSubscribed();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider?.id]);
+
+  // Native only: the full-screen ringing notification (TikdumMessagingService)
+  // launches/resumes the app and fires this the same way the live socket
+  // "booking:created" event does, for whichever booking triggered it.
+  useEffect(() => {
+    if (!provider) return () => {};
+    return onNativeRing((bookingId) => {
+      api
+        .listBookings()
+        .then((data) => {
+          setRequests(data);
+          const booking = data.find((r) => r.id === bookingId);
+          if (booking && booking.status === "Pending") setRingingRequest(booking);
+        })
+        .catch((e) => console.error("Failed to load booking for native ring", e));
+    });
+  }, [provider]);
 
   // The service worker's push handler postMessages every open tab the
   // moment a booking comes in — this tab may have been backgrounded with a
