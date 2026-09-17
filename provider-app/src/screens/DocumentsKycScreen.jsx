@@ -3,6 +3,7 @@ import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
 import { ShieldCheckIcon, CameraIcon, XIcon } from "../components/icons";
 import { api, SERVER_URL } from "../api";
+import { compressImage } from "../utils/imageCompress";
 
 const statusConfig = {
   approved: {
@@ -50,16 +51,20 @@ export default function DocumentsKycScreen() {
     };
   }, []);
 
-  const handlePick = (docType) => (e) => {
+  const handlePick = (docType) => async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     setUploadingType(docType);
-    api
-      .uploadKycDocument(file, docType)
-      .then((doc) => setDocuments((prev) => [...prev.filter((d) => d.docType !== docType), doc]))
-      .catch(() => showToast("Upload failed — please try again"))
-      .finally(() => setUploadingType(null));
+    try {
+      const compressed = await compressImage(file, { maxDimension: 2000 });
+      const doc = await api.uploadKycDocument(compressed, docType);
+      setDocuments((prev) => [...prev.filter((d) => d.docType !== docType), doc]);
+    } catch (err) {
+      showToast(err.message || "Upload failed — please try again");
+    } finally {
+      setUploadingType(null);
+    }
   };
 
   const handleDelete = (doc) => {

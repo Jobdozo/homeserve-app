@@ -23,7 +23,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 8 * 1024 * 1024 }, // 8MB — plenty for a phone camera photo, caps abuse
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB — the client compresses first, but some formats (e.g. HEIC) fall through uncompressed
   fileFilter: (req, file, cb) => {
     if (!ALLOWED_TYPES.has(file.mimetype)) return cb(new Error("Only image uploads (JPEG, PNG, WebP, HEIC) are allowed"));
     cb(null, true);

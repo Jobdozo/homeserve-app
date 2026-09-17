@@ -5,6 +5,7 @@ import { api, SERVER_URL } from "../api";
 import ScreenHeader from "../components/ScreenHeader";
 import { MapPinIcon, CalendarIcon, ClockIcon, PhoneIcon, CameraIcon } from "../components/icons";
 import CategoryIcon from "../components/CategoryIcon";
+import { compressImage } from "../utils/imageCompress";
 
 const LOCATION_TRACKED_STATUSES = ["Pending", "Accepted", "In Progress"];
 
@@ -221,16 +222,20 @@ function JobPhotos({ bookingId }) {
     };
   }, [bookingId]);
 
-  const handlePick = (photoType) => (e) => {
+  const handlePick = (photoType) => async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     setUploadingType(photoType);
-    api
-      .uploadJobPhoto(bookingId, file, photoType)
-      .then((photo) => setPhotos((prev) => [...prev, photo]))
-      .catch(() => showToast("Upload failed — please try again"))
-      .finally(() => setUploadingType(null));
+    try {
+      const compressed = await compressImage(file);
+      const photo = await api.uploadJobPhoto(bookingId, compressed, photoType);
+      setPhotos((prev) => [...prev, photo]);
+    } catch (err) {
+      showToast(err.message || "Upload failed — please try again");
+    } finally {
+      setUploadingType(null);
+    }
   };
 
   return (
