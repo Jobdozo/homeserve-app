@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
 import { NOTIFICATION_TYPES } from "../utils/notificationPrefs";
@@ -134,8 +135,9 @@ export default function NotificationSettingsScreen() {
             </div>
           </div>
           <p className="px-1 text-[11px] text-gray-400">
-            Ringing only works while Tikdum Pro is open or was recently in the background. When the app is fully
-            closed, new requests still arrive as a phone notification with sound and vibration.
+            {Capacitor.isNativePlatform()
+              ? "New requests ring like an incoming call — full-screen with sound and vibration — even when Tikdum Pro is fully closed."
+              : "Ringing only works while Tikdum Pro is open or was recently in the background. When the app is fully closed, new requests still arrive as a phone notification with sound and vibration."}
           </p>
         </div>
 
