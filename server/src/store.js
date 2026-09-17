@@ -1,6 +1,7 @@
 const { query, mutate } = require("./dataconnect");
 const jsonStore = require("./jsonStore");
 const push = require("./push");
+const fcm = require("./fcm");
 const whatsapp = require("./whatsapp");
 
 // Short-lived in-memory cache for the catalog reads that hit almost every
@@ -925,6 +926,13 @@ async function addNotification({ recipientType, recipientId, type, title, messag
     push
       .sendPush(recipientType, recipientId, { title, body: message, type, bookingId: bookingId || null })
       .catch((e) => console.error("Push send failed for notification", notification.id, e));
+    // Separate channel from push.js — this is what the native customer app
+    // listens on (see local-service-app/android's TikdumMessagingService).
+    // Harmless for providers too: their native service only acts on
+    // type "booking:created", which never comes through this generic path.
+    fcm
+      .sendToDevices(recipientType, recipientId, { title, body: message, type, bookingId: bookingId || null })
+      .catch((e) => console.error("FCM send failed for notification", notification.id, e));
   }
   return notification;
 }

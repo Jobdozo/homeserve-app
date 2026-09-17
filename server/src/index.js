@@ -541,7 +541,7 @@ app.patch("/api/provider/notification-prefs", auth.requireAuth("provider"), ah(a
   res.json(store.updateProviderNotificationPrefs(req.user.id, req.body || {}));
 }));
 
-// ---- FCM device tokens (native provider app only — see fcm.js) ----
+// ---- FCM device tokens (native apps only — see fcm.js) ----
 app.post("/api/provider/fcm-token", auth.requireAuth("provider"), ah(async (req, res) => {
   const { token } = req.body || {};
   if (!token) return res.status(400).json({ error: "token is required" });
@@ -550,6 +550,20 @@ app.post("/api/provider/fcm-token", auth.requireAuth("provider"), ah(async (req,
 }));
 
 app.post("/api/provider/fcm-token/remove", auth.requireAuth("provider"), ah(async (req, res) => {
+  const { token } = req.body || {};
+  if (!token) return res.status(400).json({ error: "token is required" });
+  fcm.removeToken(token);
+  res.json({ ok: true });
+}));
+
+app.post("/api/customer/fcm-token", auth.requireAuth("customer"), ah(async (req, res) => {
+  const { token } = req.body || {};
+  if (!token) return res.status(400).json({ error: "token is required" });
+  fcm.saveToken("customer", req.user.id, token);
+  res.status(201).json({ ok: true });
+}));
+
+app.post("/api/customer/fcm-token/remove", auth.requireAuth("customer"), ah(async (req, res) => {
   const { token } = req.body || {};
   if (!token) return res.status(400).json({ error: "token is required" });
   fcm.removeToken(token);
