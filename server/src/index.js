@@ -1,5 +1,6 @@
 require("dotenv").config({ override: true });
 const express = require("express");
+const multer = require("multer");
 const cors = require("cors");
 const compression = require("compression");
 const http = require("http");
@@ -9,6 +10,7 @@ const auth = require("./auth");
 const { sendOtpViaWhatsApp } = require("./whatsapp");
 const liveLocation = require("./liveLocation");
 const push = require("./push");
+const { upload, UPLOADS_DIR } = require("./uploads");
 
 const PORT = process.env.PORT || 4000;
 
@@ -27,6 +29,7 @@ const app = express();
 app.use(compression());
 app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json());
+app.use("/uploads", express.static(UPLOADS_DIR));
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: ALLOWED_ORIGINS } });
@@ -526,6 +529,50 @@ app.patch("/api/provider/notification-prefs", auth.requireAuth("provider"), ah(a
   res.json(store.updateProviderNotificationPrefs(req.user.id, req.body || {}));
 }));
 
+// ---- KYC documents (camera or file upload from Documents & KYC screen) ----
+app.get("/api/provider/kyc-documents", auth.requireAuth("provider"), ah(async (req, res) => {
+  res.json(store.listKycDocuments(req.user.id));
+}));
+
+app.post(
+  "/api/provider/kyc-documents",
+  auth.requireAuth("provider"),
+  upload.single("file"),
+  ah(async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "file is required" });
+    const docType = req.body?.docType || "other";
+    const doc = store.addKycDocument(req.user.id, { docType, url: `/uploads/${req.file.filename}` });
+    await store.logActivity("provider", `${req.user.id} uploaded a KYC document (${docType})`);
+    res.status(201).json(doc);
+  })
+);
+
+app.delete("/api/provider/kyc-documents/:id", auth.requireAuth("provider"), ah(async (req, res) => {
+  const removed = store.deleteKycDocument(req.user.id, req.params.id);
+  if (!removed) return res.status(404).json({ error: "Document not found" });
+  res.status(204).end();
+}));
+
+// ---- job before/after photos (attached to a specific booking, provider must own it) ----
+app.get("/api/bookings/:id/photos", auth.requireAuth("provider", "customer"), ah(async (req, res) => {
+  res.json(store.listJobPhotos(req.params.id));
+}));
+
+app.post(
+  "/api/bookings/:id/photos",
+  auth.requireAuth("provider"),
+  upload.single("file"),
+  ah(async (req, res) => {
+    const booking = await store.getBooking(req.params.id);
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+    if (booking.providerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
+    if (!req.file) return res.status(400).json({ error: "file is required" });
+    const photoType = req.body?.photoType === "after" ? "after" : "before";
+    const photo = store.addJobPhoto(req.params.id, { photoType, url: `/uploads/${req.file.filename}` });
+    res.status(201).json(photo);
+  })
+);
+
 // ---- live location (self-reported every ~30s by the customer/provider apps
 // while a booking is active, so "Get Directions" can target where someone
 // actually is instead of the address captured at booking time) ----
@@ -637,6 +684,9 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   console.error(err);
+  if (err instanceof multer.MulterError || /^Only image uploads/.test(err.message || "")) {
+    return res.status(400).json({ error: err.message });
+  }
   const status = err.status || (["Unknown service", "Unknown customer"].includes(err.message) ? 400 : 500);
   res.status(status).json({ error: err.message || "Internal server error" });
 });

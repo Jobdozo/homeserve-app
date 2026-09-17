@@ -17,6 +17,7 @@ export default function ProfileScreen() {
     { icon: "📄", label: "Documents & KYC", path: "/profile/documents", badge: verificationBadges[providerProfile.verificationStatus] },
     { icon: "🗓️", label: "Manage Availability", path: "/profile/availability" },
     { icon: "🔔", label: "Notification Settings", path: "/profile/notifications" },
+    { icon: "🎁", label: "Refer a Friend", path: "/profile/refer" },
     { icon: "❓", label: "Help & Support", path: "/profile/help" },
     { icon: "📄", label: "Terms & Privacy Policy", href: "/privacy.html" },
   ];

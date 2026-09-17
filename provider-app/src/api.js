@@ -27,6 +27,27 @@ async function request(path, options) {
   return res.json();
 }
 
+// Multipart uploads can't go through request() — it always sets a JSON
+// Content-Type, which would clobber the multipart boundary the browser
+// needs to set itself from the FormData.
+async function uploadFile(path, file, extraFields) {
+  const form = new FormData();
+  form.append("file", file);
+  Object.entries(extraFields || {}).forEach(([key, value]) => form.append(key, value));
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(body.error || `Upload failed: ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+}
+
 export const api = {
   requestOtp: (phone, role) => request("/auth/otp/request", { method: "POST", body: JSON.stringify({ phone, role }) }),
   verifyOtp: (phone, code, role, name) =>
@@ -62,4 +83,10 @@ export const api = {
   getProviderNotificationPrefs: () => request("/provider/notification-prefs"),
   updateProviderNotificationPrefs: (patch) =>
     request("/provider/notification-prefs", { method: "PATCH", body: JSON.stringify(patch) }),
+  listKycDocuments: () => request("/provider/kyc-documents"),
+  uploadKycDocument: (file, docType) => uploadFile("/provider/kyc-documents", file, { docType }),
+  deleteKycDocument: (id) => request(`/provider/kyc-documents/${id}`, { method: "DELETE" }),
+  listJobPhotos: (bookingId) => request(`/bookings/${bookingId}/photos`),
+  uploadJobPhoto: (bookingId, file, photoType) =>
+    uploadFile(`/bookings/${bookingId}/photos`, file, { photoType }),
 };

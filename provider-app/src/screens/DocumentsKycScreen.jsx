@@ -1,6 +1,8 @@
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
-import { ShieldCheckIcon } from "../components/icons";
+import { ShieldCheckIcon, CameraIcon, XIcon } from "../components/icons";
+import { api, SERVER_URL } from "../api";
 
 const statusConfig = {
   approved: {
@@ -23,9 +25,47 @@ const statusConfig = {
   },
 };
 
+const DOC_TYPES = [
+  { docType: "id_proof", label: "ID Proof", description: "Aadhaar, PAN, or another government ID" },
+  { docType: "gst_certificate", label: "GST Certificate", description: "Only if you're GST registered" },
+];
+
 export default function DocumentsKycScreen() {
-  const { provider } = useApp();
+  const { provider, showToast } = useApp();
   const status = statusConfig[provider.verificationStatus] || statusConfig.pending;
+  const [documents, setDocuments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploadingType, setUploadingType] = useState(null);
+  const fileInputs = useRef({});
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listKycDocuments()
+      .then((docs) => !cancelled && setDocuments(docs))
+      .catch(() => {})
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handlePick = (docType) => (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploadingType(docType);
+    api
+      .uploadKycDocument(file, docType)
+      .then((doc) => setDocuments((prev) => [...prev.filter((d) => d.docType !== docType), doc]))
+      .catch(() => showToast("Upload failed — please try again"))
+      .finally(() => setUploadingType(null));
+  };
+
+  const handleDelete = (doc) => {
+    setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+    api.deleteKycDocument(doc.id).catch(() => showToast("Couldn't remove document"));
+  };
 
   return (
     <div className="flex flex-1 flex-col">
@@ -48,15 +88,74 @@ export default function DocumentsKycScreen() {
           </div>
         </div>
 
+        <div>
+          <h2 className="mb-2 text-[13px] font-bold text-gray-900">Documents</h2>
+          <div className="space-y-3">
+            {DOC_TYPES.map(({ docType, label, description }) => {
+              const doc = documents.find((d) => d.docType === docType);
+              const isUploading = uploadingType === docType;
+              return (
+                <div key={docType} className="flex items-center gap-3 rounded-2xl border border-gray-100 p-3">
+                  {doc ? (
+                    <img
+                      src={`${SERVER_URL}${doc.url}`}
+                      alt={label}
+                      className="h-16 w-16 flex-shrink-0 rounded-xl object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-xl bg-gray-50 text-gray-300">
+                      <CameraIcon width={22} height={22} />
+                    </div>
+                  )}
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-semibold text-gray-800">{label}</p>
+                    <p className="mt-0.5 text-[11px] text-gray-400">{description}</p>
+                  </div>
+
+                  <div className="flex flex-shrink-0 items-center gap-2">
+                    {doc && (
+                      <button
+                        onClick={() => handleDelete(doc)}
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-50 text-gray-400"
+                        aria-label={`Remove ${label}`}
+                      >
+                        <XIcon width={14} height={14} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => fileInputs.current[docType]?.click()}
+                      disabled={isUploading}
+                      className="rounded-xl bg-brand px-3 py-2 text-[11.5px] font-semibold text-white disabled:opacity-50"
+                    >
+                      {isUploading ? "Uploading…" : doc ? "Retake" : "Add Photo"}
+                    </button>
+                    <input
+                      ref={(el) => (fileInputs.current[docType] = el)}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={handlePick(docType)}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {!loading && (
+            <p className="mt-2 px-1 text-[11px] text-gray-400">
+              Tap "Add Photo" to take a picture with your camera or choose one from your gallery.
+            </p>
+          )}
+        </div>
+
         <div className="flex items-start gap-3 rounded-2xl border border-gray-100 p-4">
           <ShieldCheckIcon width={18} height={18} className="mt-0.5 flex-shrink-0 text-gray-400" />
-          <div>
-            <p className="text-[13px] font-semibold text-gray-800">Document upload coming soon</p>
-            <p className="mt-0.5 text-[11.5px] leading-snug text-gray-500">
-              Uploading ID proof, GST certificate, and other documents directly here isn't available yet. For now,
-              verification is based on the information in your profile — keep it accurate and up to date.
-            </p>
-          </div>
+          <p className="text-[11.5px] leading-snug text-gray-500">
+            Documents you upload here are reviewed by our team as part of verifying your account. Keep the info in
+            your profile accurate too.
+          </p>
         </div>
       </div>
     </div>

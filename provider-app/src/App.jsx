@@ -21,6 +21,7 @@ const DocumentsKycScreen = lazy(() => import("./screens/DocumentsKycScreen"));
 const ManageAvailabilityScreen = lazy(() => import("./screens/ManageAvailabilityScreen"));
 const NotificationSettingsScreen = lazy(() => import("./screens/NotificationSettingsScreen"));
 const HelpSupportScreen = lazy(() => import("./screens/HelpSupportScreen"));
+const ReferFriendScreen = lazy(() => import("./screens/ReferFriendScreen"));
 const ChatScreen = lazy(() => import("./screens/ChatScreen"));
 const NotificationsScreen = lazy(() => import("./screens/NotificationsScreen"));
 
@@ -72,6 +73,7 @@ function AppRoutes() {
             <Route path="/profile/availability" element={<ManageAvailabilityScreen />} />
             <Route path="/profile/notifications" element={<NotificationSettingsScreen />} />
             <Route path="/profile/help" element={<HelpSupportScreen />} />
+            <Route path="/profile/refer" element={<ReferFriendScreen />} />
             <Route path="/chat/:requestId" element={<ChatScreen />} />
             <Route path="/notifications" element={<NotificationsScreen />} />
           </Route>

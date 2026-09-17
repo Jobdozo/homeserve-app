@@ -1272,6 +1272,32 @@ async function notifyProviderOfBookingByWhatsApp(providerId, message) {
   await whatsapp.sendWhatsAppMessage(provider.phone, message);
 }
 
+// ---- KYC documents and job photos (jsonStore-backed — a provider's document
+// set and a booking's before/after photos are small, low-volume, and don't
+// warrant a schema migration) ----
+
+function listKycDocuments(providerId) {
+  return jsonStore.readAll("kycDocuments").filter((d) => d.providerId === providerId);
+}
+
+function addKycDocument(providerId, { docType, url }) {
+  return jsonStore.insert("kycDocuments", { providerId, docType, url, uploadedAt: new Date().toISOString() });
+}
+
+function deleteKycDocument(providerId, docId) {
+  const doc = jsonStore.readAll("kycDocuments").find((d) => d.id === docId && d.providerId === providerId);
+  if (!doc) return false;
+  return jsonStore.remove("kycDocuments", docId);
+}
+
+function listJobPhotos(bookingId) {
+  return jsonStore.readAll("jobPhotos").filter((p) => p.bookingId === bookingId);
+}
+
+function addJobPhoto(bookingId, { photoType, url }) {
+  return jsonStore.insert("jobPhotos", { bookingId, photoType, url, uploadedAt: new Date().toISOString() });
+}
+
 module.exports = {
   getCustomerById,
   getCustomerByPhone,
@@ -1329,4 +1355,9 @@ module.exports = {
   updateSettings,
   getProviderNotificationPrefs,
   updateProviderNotificationPrefs,
+  listKycDocuments,
+  addKycDocument,
+  deleteKycDocument,
+  listJobPhotos,
+  addJobPhoto,
 };

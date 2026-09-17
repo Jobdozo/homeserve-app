@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
-import { api } from "../api";
+import { api, SERVER_URL } from "../api";
 import ScreenHeader from "../components/ScreenHeader";
-import { MapPinIcon, CalendarIcon, ClockIcon, PhoneIcon } from "../components/icons";
+import { MapPinIcon, CalendarIcon, ClockIcon, PhoneIcon, CameraIcon } from "../components/icons";
 import CategoryIcon from "../components/CategoryIcon";
 
 const LOCATION_TRACKED_STATUSES = ["Pending", "Accepted", "In Progress"];
@@ -147,6 +147,8 @@ export default function RequestDetailsScreen() {
           </div>
         )}
 
+        {["Accepted", "In Progress", "Completed"].includes(request.status) && <JobPhotos bookingId={request.id} />}
+
         {!["Pending", "Rejected", "Cancelled"].includes(request.status) && (
           <div>
             <StatusPill status={request.status} />
@@ -193,6 +195,89 @@ export default function RequestDetailsScreen() {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+const PHOTO_SLOTS = [
+  { photoType: "before", label: "Before" },
+  { photoType: "after", label: "After" },
+];
+
+function JobPhotos({ bookingId }) {
+  const { showToast } = useApp();
+  const [photos, setPhotos] = useState([]);
+  const [uploadingType, setUploadingType] = useState(null);
+  const fileInputs = useRef({});
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listJobPhotos(bookingId)
+      .then((data) => !cancelled && setPhotos(data))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingId]);
+
+  const handlePick = (photoType) => (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploadingType(photoType);
+    api
+      .uploadJobPhoto(bookingId, file, photoType)
+      .then((photo) => setPhotos((prev) => [...prev, photo]))
+      .catch(() => showToast("Upload failed — please try again"))
+      .finally(() => setUploadingType(null));
+  };
+
+  return (
+    <div>
+      <h2 className="mb-2 text-[13px] font-bold text-gray-900">Job Photos</h2>
+      <div className="grid grid-cols-2 gap-3">
+        {PHOTO_SLOTS.map(({ photoType, label }) => {
+          const slotPhotos = photos.filter((p) => p.photoType === photoType);
+          const isUploading = uploadingType === photoType;
+          return (
+            <div key={photoType} className="rounded-2xl border border-gray-100 p-3">
+              <p className="mb-2 text-[11.5px] font-semibold text-gray-600">{label}</p>
+              {slotPhotos.length > 0 ? (
+                <div className="mb-2 grid grid-cols-2 gap-1.5">
+                  {slotPhotos.map((p) => (
+                    <img
+                      key={p.id}
+                      src={`${SERVER_URL}${p.url}`}
+                      alt={`${label} photo`}
+                      className="aspect-square w-full rounded-lg object-cover"
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="mb-2 flex aspect-square w-full items-center justify-center rounded-lg bg-gray-50 text-gray-300">
+                  <CameraIcon width={20} height={20} />
+                </div>
+              )}
+              <button
+                onClick={() => fileInputs.current[photoType]?.click()}
+                disabled={isUploading}
+                className="w-full rounded-lg bg-brand-light py-2 text-[11.5px] font-semibold text-brand-dark disabled:opacity-50"
+              >
+                {isUploading ? "Uploading…" : `Add ${label} Photo`}
+              </button>
+              <input
+                ref={(el) => (fileInputs.current[photoType] = el)}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handlePick(photoType)}
+              />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
