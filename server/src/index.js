@@ -515,6 +515,17 @@ app.post("/api/push/unsubscribe", auth.requireAuth("provider", "customer"), ah(a
   res.json({ ok: true });
 }));
 
+// ---- provider notification preferences (WhatsApp opt-in for new booking
+// alerts, a second channel alongside push in case a device's push delivery
+// is unreliable) ----
+app.get("/api/provider/notification-prefs", auth.requireAuth("provider"), ah(async (req, res) => {
+  res.json(store.getProviderNotificationPrefs(req.user.id));
+}));
+
+app.patch("/api/provider/notification-prefs", auth.requireAuth("provider"), ah(async (req, res) => {
+  res.json(store.updateProviderNotificationPrefs(req.user.id, req.body || {}));
+}));
+
 // ---- live location (self-reported every ~30s by the customer/provider apps
 // while a booking is active, so "Get Directions" can target where someone
 // actually is instead of the address captured at booking time) ----

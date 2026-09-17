@@ -10,7 +10,14 @@ export const NOTIFICATION_TYPES = [
   { type: "review", label: "Reviews", description: "When a customer leaves a review" },
 ];
 
-const DEFAULTS = Object.fromEntries(NOTIFICATION_TYPES.map((t) => [t.type, true]));
+// ringVolume/vibrate control the incoming-request ringing overlay (see
+// RingingOverlay + utils/ringtone) — only client-side settings, since that
+// overlay only ever runs while this device's copy of the app is open.
+const DEFAULTS = {
+  ...Object.fromEntries(NOTIFICATION_TYPES.map((t) => [t.type, true])),
+  ringVolume: 0.8,
+  vibrate: true,
+};
 
 export function loadNotificationPrefs() {
   try {

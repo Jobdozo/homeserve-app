@@ -59,4 +59,7 @@ export const api = {
     request("/push/subscribe", { method: "POST", body: JSON.stringify({ subscription }) }),
   unsubscribePush: (endpoint) =>
     request("/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
+  getProviderNotificationPrefs: () => request("/provider/notification-prefs"),
+  updateProviderNotificationPrefs: (patch) =>
+    request("/provider/notification-prefs", { method: "PATCH", body: JSON.stringify(patch) }),
 };

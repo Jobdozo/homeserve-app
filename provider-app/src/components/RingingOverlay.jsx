@@ -6,7 +6,7 @@ import { startRingtone } from "../utils/ringtone";
 const RING_SECONDS = 90;
 
 export default function RingingOverlay() {
-  const { ringingRequest, acceptRequest, rejectRequest, dismissRinging } = useApp();
+  const { ringingRequest, acceptRequest, rejectRequest, dismissRinging, notificationPrefs } = useApp();
   const [secondsLeft, setSecondsLeft] = useState(RING_SECONDS);
   const [busy, setBusy] = useState(false);
 
@@ -29,8 +29,23 @@ export default function RingingOverlay() {
 
   useEffect(() => {
     if (!ringingRequest) return;
-    const stopRingtone = startRingtone();
+    const stopRingtone = startRingtone(notificationPrefs.ringVolume);
     return stopRingtone;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ringingRequest]);
+
+  // navigator.vibrate() patterns don't repeat on their own — re-trigger it on
+  // the same cadence as the ringtone so the phone keeps buzzing for as long
+  // as the request is ringing, not just once.
+  useEffect(() => {
+    if (!ringingRequest || !notificationPrefs.vibrate || !navigator.vibrate) return;
+    navigator.vibrate([400, 200, 400]);
+    const interval = setInterval(() => navigator.vibrate([400, 200, 400]), 2200);
+    return () => {
+      clearInterval(interval);
+      navigator.vibrate(0);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ringingRequest]);
 
   if (!ringingRequest) return null;

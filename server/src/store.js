@@ -1,6 +1,7 @@
 const { query, mutate } = require("./dataconnect");
 const jsonStore = require("./jsonStore");
 const push = require("./push");
+const whatsapp = require("./whatsapp");
 
 // Short-lived in-memory cache for the catalog reads that hit almost every
 // page load (categories/services/providers) — Data Connect is a remote
@@ -596,15 +597,20 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
   );
 
   if (!orderId) await logActivity("booking", `New booking received: #${bookingId} — ${service.name}`);
+  const bookingMessage = `${customer.name} requested ${service.name} for ${date}`;
   await addNotification({
     recipientType: "provider",
     recipientId: service.providerId,
     type: "booking",
     title: "New booking request",
-    message: `${customer.name} requested ${service.name} for ${date}`,
+    message: bookingMessage,
     bookingId,
     skipPush: true, // dispatchBooking (index.js) sends this one's push
   });
+  notifyProviderOfBookingByWhatsApp(
+    service.providerId,
+    `New Tikdum booking request!\n${bookingMessage}\nOpen the Tikdum Pro app to accept or decline.`
+  ).catch((e) => console.error("WhatsApp booking alert failed", e));
   return fetchBookingWithRelations(bookingId);
 }
 
@@ -722,15 +728,20 @@ async function reassignBooking(bookingId, excludeProviderIds) {
     );
     await logActivity("booking", `Booking #${bookingId} reassigned to another provider after no response`);
     const updated = await fetchBookingWithRelations(bookingId);
+    const bookingMessage = `${updated.customer?.name || "A customer"} requested ${updated.service?.name || "a service"} for ${updated.date}`;
     await addNotification({
       recipientType: "provider",
       recipientId: candidate.providerId,
       type: "booking",
       title: "New booking request",
-      message: `${updated.customer?.name || "A customer"} requested ${updated.service?.name || "a service"} for ${updated.date}`,
+      message: bookingMessage,
       bookingId,
       skipPush: true, // the caller in index.js calls dispatchBooking again, which sends this one's push
     });
+    notifyProviderOfBookingByWhatsApp(
+      candidate.providerId,
+      `New Tikdum booking request!\n${bookingMessage}\nOpen the Tikdum Pro app to accept or decline.`
+    ).catch((e) => console.error("WhatsApp booking alert failed", e));
     return { reassigned: true, booking: updated };
   }
 
@@ -1233,6 +1244,34 @@ function updateSettings(patch) {
   return getSettings();
 }
 
+// ---- per-provider notification preferences (jsonStore, one record per
+// provider — not worth a schema column for a single opt-in toggle) ----
+
+const DEFAULT_PROVIDER_NOTIFICATION_PREFS = { whatsappNotifications: false };
+
+function getProviderNotificationPrefs(providerId) {
+  const existing = jsonStore.readAll("providerNotificationPrefs").find((r) => r.id === providerId);
+  return { ...DEFAULT_PROVIDER_NOTIFICATION_PREFS, ...existing };
+}
+
+function updateProviderNotificationPrefs(providerId, patch) {
+  const existing = jsonStore.readAll("providerNotificationPrefs").find((r) => r.id === providerId);
+  const next = { ...DEFAULT_PROVIDER_NOTIFICATION_PREFS, ...existing, ...patch, id: providerId };
+  if (existing) jsonStore.update("providerNotificationPrefs", providerId, next);
+  else jsonStore.insert("providerNotificationPrefs", next);
+  return getProviderNotificationPrefs(providerId);
+}
+
+// Best-effort — a WhatsApp gateway hiccup should never block booking
+// creation, so callers fire this and ignore the result.
+async function notifyProviderOfBookingByWhatsApp(providerId, message) {
+  const { whatsappNotifications } = getProviderNotificationPrefs(providerId);
+  if (!whatsappNotifications) return;
+  const provider = await getProvider(providerId);
+  if (!provider?.phone) return;
+  await whatsapp.sendWhatsAppMessage(provider.phone, message);
+}
+
 module.exports = {
   getCustomerById,
   getCustomerByPhone,
@@ -1288,4 +1327,6 @@ module.exports = {
   validateOffer,
   getSettings,
   updateSettings,
+  getProviderNotificationPrefs,
+  updateProviderNotificationPrefs,
 };

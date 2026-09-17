@@ -16,24 +16,27 @@ function getContext() {
   return audioCtx;
 }
 
-function beep(ctx, startTime, duration, freq) {
+function beep(ctx, startTime, duration, freq, peakGain) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.type = "sine";
   osc.frequency.value = freq;
   gain.gain.setValueAtTime(0, startTime);
-  gain.gain.linearRampToValueAtTime(0.25, startTime + 0.02);
+  gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.02);
   gain.gain.linearRampToValueAtTime(0, startTime + duration);
   osc.connect(gain).connect(ctx.destination);
   osc.start(startTime);
   osc.stop(startTime + duration + 0.02);
 }
 
-export function startRingtone() {
+// volume: 0-1, from the provider's Ring Volume preference — scales the peak
+// gain of each beep so "silent" (0) is a real option, not just quieter.
+export function startRingtone(volume = 0.8) {
   const ctx = getContext();
   if (!ctx) return () => {};
   if (ctx.state === "suspended") ctx.resume().catch(() => {});
 
+  const peakGain = Math.max(0, Math.min(1, volume)) * 0.25;
   const CYCLE = 2.2; // seconds between ring bursts, like a phone ringtone
   let stopped = false;
   let timeoutId;
@@ -42,8 +45,8 @@ export function startRingtone() {
     if (stopped) return;
     try {
       const now = ctx.currentTime;
-      beep(ctx, now, 0.4, 880);
-      beep(ctx, now + 0.5, 0.4, 880);
+      beep(ctx, now, 0.4, 880, peakGain);
+      beep(ctx, now + 0.5, 0.4, 880, peakGain);
     } catch {
       // ignore — visual ringing still works without sound
     }

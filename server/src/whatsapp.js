@@ -12,11 +12,9 @@ function toGatewayNumber(phone) {
   return String(phone || "").replace(/\D/g, "");
 }
 
-async function sendOtpViaWhatsApp(phone, code) {
-  const message = `Your Tikdum verification code is ${code}. It expires in 5 minutes.`;
-
+async function sendWhatsAppMessage(phone, message) {
   if (!isConfigured) {
-    console.log(`[WhatsApp OTP] (no provider configured) To ${phone}: ${message}`);
+    console.log(`[WhatsApp] (no provider configured) To ${phone}: ${message}`);
     return false;
   }
 
@@ -30,10 +28,14 @@ async function sendOtpViaWhatsApp(phone, code) {
   const res = await fetch(url.toString());
   const data = await res.json().catch(() => ({}));
   if (data.status !== "success") {
-    console.error("[WhatsApp OTP] Send failed:", data);
+    console.error("[WhatsApp] Send failed:", data);
     return false;
   }
   return true;
 }
 
-module.exports = { sendOtpViaWhatsApp, isConfigured };
+async function sendOtpViaWhatsApp(phone, code) {
+  return sendWhatsAppMessage(phone, `Your Tikdum verification code is ${code}. It expires in 5 minutes.`);
+}
+
+module.exports = { sendOtpViaWhatsApp, sendWhatsAppMessage, isConfigured };
