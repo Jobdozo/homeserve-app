@@ -10,6 +10,7 @@ const auth = require("./auth");
 const { sendOtpViaWhatsApp } = require("./whatsapp");
 const liveLocation = require("./liveLocation");
 const push = require("./push");
+const fcm = require("./fcm");
 const { upload, UPLOADS_DIR } = require("./uploads");
 
 const PORT = process.env.PORT || 4000;
@@ -88,6 +89,17 @@ async function dispatchBooking(booking, triedProviderIds = [booking.providerId])
       type: "booking:created",
     })
     .catch((e) => console.error("push send failed", e));
+  // Separate channel, separate failure mode: FCM is what lets the native
+  // provider app ring like an incoming call (see TikdumMessagingService) —
+  // web push alone can't do that even when it's delivered successfully.
+  fcm
+    .sendToDevices("provider", provider.id, {
+      title: "New booking request",
+      body: `${booking.service?.name || "A service"} request nearby`,
+      bookingId: booking.id,
+      type: "booking:created",
+    })
+    .catch((e) => console.error("fcm send failed", e));
   setTimeout(async () => {
     try {
       const current = await store.getBooking(booking.id);
@@ -527,6 +539,21 @@ app.get("/api/provider/notification-prefs", auth.requireAuth("provider"), ah(asy
 
 app.patch("/api/provider/notification-prefs", auth.requireAuth("provider"), ah(async (req, res) => {
   res.json(store.updateProviderNotificationPrefs(req.user.id, req.body || {}));
+}));
+
+// ---- FCM device tokens (native provider app only — see fcm.js) ----
+app.post("/api/provider/fcm-token", auth.requireAuth("provider"), ah(async (req, res) => {
+  const { token } = req.body || {};
+  if (!token) return res.status(400).json({ error: "token is required" });
+  fcm.saveToken("provider", req.user.id, token);
+  res.status(201).json({ ok: true });
+}));
+
+app.post("/api/provider/fcm-token/remove", auth.requireAuth("provider"), ah(async (req, res) => {
+  const { token } = req.body || {};
+  if (!token) return res.status(400).json({ error: "token is required" });
+  fcm.removeToken(token);
+  res.json({ ok: true });
 }));
 
 // ---- KYC documents (camera or file upload from Documents & KYC screen) ----
