@@ -1,4 +1,37 @@
+import { Capacitor, registerPlugin } from "@capacitor/core";
 import { api } from "../api";
+
+const FcmToken = registerPlugin("FcmToken");
+
+async function ensureFcmRegistered() {
+  try {
+    const { token } = await FcmToken.getToken();
+    if (token) await api.saveFcmToken(token);
+  } catch (e) {
+    console.error("FCM registration failed", e);
+  }
+  FcmToken.addListener("tokenRefresh", ({ token }) => {
+    if (token) api.saveFcmToken(token).catch((e) => console.error("FCM token refresh save failed", e));
+  });
+}
+
+// Fires when a tapped notification (or the cold-start fallback) carries a
+// bookingId — lets the screen decide what to do with it (e.g. navigate to
+// the booking) without this module knowing about routing.
+export function onNativeNotificationTap(callback) {
+  if (!Capacitor.isNativePlatform()) return () => {};
+  const listenerPromise = FcmToken.addListener("notificationTap", ({ bookingId }) => {
+    if (bookingId) callback(bookingId);
+  });
+  FcmToken.consumePendingNotification()
+    .then(({ bookingId }) => {
+      if (bookingId) callback(bookingId);
+    })
+    .catch(() => {});
+  return () => {
+    listenerPromise.then((handle) => handle.remove()).catch(() => {});
+  };
+}
 
 // A VAPID public key comes back base64url-encoded from the server; the Push
 // API needs it as a raw Uint8Array.
@@ -14,6 +47,7 @@ function urlBase64ToUint8Array(base64String) {
 // tab that's already open via the socket connection, never a backgrounded or
 // closed app. Silently no-ops wherever push isn't supported/permitted.
 export async function ensurePushSubscribed() {
+  if (Capacitor.isNativePlatform()) return ensureFcmRegistered();
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
   if (Notification.permission === "denied") return;
 

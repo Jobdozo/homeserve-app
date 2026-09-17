@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react";
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
+import { HashRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { AppProvider, useApp } from "./context/AppContext";
 import { MainLayout, DetailLayout } from "./components/PhoneFrame";
 import LoginScreen from "./screens/LoginScreen";
@@ -33,7 +33,14 @@ function ScreenFallback() {
 }
 
 function AppRoutes() {
-  const { customer, authLoading } = useApp();
+  const { customer, authLoading, pendingNotificationBookingId, clearPendingNotification } = useApp();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!pendingNotificationBookingId) return;
+    navigate(`/booking/${pendingNotificationBookingId}`);
+    clearPendingNotification();
+  }, [pendingNotificationBookingId, navigate, clearPendingNotification]);
 
   if (authLoading) {
     return (

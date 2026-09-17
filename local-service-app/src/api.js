@@ -55,4 +55,5 @@ export const api = {
   subscribePush: (subscription) => request("/push/subscribe", { method: "POST", body: JSON.stringify({ subscription }) }),
   unsubscribePush: (endpoint) => request("/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
   validateOffer: (code) => request("/offers/validate", { method: "POST", body: JSON.stringify({ code }) }),
+  saveFcmToken: (token) => request("/customer/fcm-token", { method: "POST", body: JSON.stringify({ token }) }),
 };

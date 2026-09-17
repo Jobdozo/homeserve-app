@@ -3,7 +3,7 @@ import { api, setAuthToken } from "../api";
 import { socket } from "../socket";
 import { timeSlots, defaultAddress } from "../data/mockData";
 import { detectCurrentLocation } from "../utils/geolocation";
-import { ensurePushSubscribed } from "../utils/pushNotifications";
+import { ensurePushSubscribed, onNativeNotificationTap } from "../utils/pushNotifications";
 
 const AppContext = createContext(null);
 const CART_KEY = "homeserve-cart-v1";
@@ -112,6 +112,13 @@ export function AppProvider({ children }) {
     if (customer) ensurePushSubscribed();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer?.id]);
+
+  // Tapping a native notification (or a cold start from one) surfaces a
+  // bookingId here — AppRoutes (inside the Router, unlike this context)
+  // watches it and navigates, then clears it.
+  const [pendingNotificationBookingId, setPendingNotificationBookingId] = useState(null);
+  useEffect(() => onNativeNotificationTap(setPendingNotificationBookingId), []);
+  const clearPendingNotification = useCallback(() => setPendingNotificationBookingId(null), []);
 
   const hasActiveBooking = useMemo(
     () => bookings.some((b) => ["Pending", "Accepted", "In Progress"].includes(b.status)),
@@ -495,6 +502,8 @@ export function AppProvider({ children }) {
       location,
       locationStatus,
       detectLocation,
+      pendingNotificationBookingId,
+      clearPendingNotification,
     }),
     [
       customer,
@@ -536,6 +545,8 @@ export function AppProvider({ children }) {
       location,
       locationStatus,
       detectLocation,
+      pendingNotificationBookingId,
+      clearPendingNotification,
     ]
   );
 
