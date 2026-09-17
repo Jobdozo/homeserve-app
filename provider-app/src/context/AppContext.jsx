@@ -50,6 +50,13 @@ export function AppProvider({ children }) {
   const [ringingRequest, setRingingRequest] = useState(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const loadedThreads = useRef(new Set());
+  // Long-lived callbacks (the 30s background refresh below) close over
+  // whatever `ringingRequest` was when they were created, not its current
+  // value — this ref is how they read the live value instead.
+  const ringingRequestRef = useRef(null);
+  useEffect(() => {
+    ringingRequestRef.current = ringingRequest;
+  }, [ringingRequest]);
 
   useEffect(() => {
     const onOffline = () => setIsOffline(true);
@@ -207,6 +214,45 @@ export function AppProvider({ children }) {
     navigator.serviceWorker.addEventListener("message", onMessage);
     return () => navigator.serviceWorker.removeEventListener("message", onMessage);
   }, [provider]);
+
+  // Background safety net: the live socket connection is what's supposed to
+  // keep everything current, but mobile browsers frequently suspend/drop
+  // websockets for a backgrounded tab, so a quiet poll (no `loading` toggle
+  // — this must never blank the screen with a spinner) is what actually
+  // keeps data from going stale until the user notices something's missing.
+  // Also fires once immediately when the app comes back to the foreground,
+  // so reopening it doesn't have to wait out the rest of the 30s tick.
+  useEffect(() => {
+    if (!provider) return;
+    let cancelled = false;
+
+    const silentRefresh = () => {
+      Promise.all([api.listBookings(), api.listNotifications(), api.getEarnings(provider.id)])
+        .then(([requestData, notificationData, earningsData]) => {
+          if (cancelled) return;
+          setRequests(requestData);
+          setNotifications(notificationData);
+          setEarnings(earningsData);
+          if (!ringingRequestRef.current) {
+            const stillPending = requestData.find((r) => r.status === "Pending");
+            if (stillPending) setRingingRequest(stillPending);
+          }
+        })
+        .catch((e) => console.error("Background refresh failed", e));
+    };
+
+    const interval = setInterval(silentRefresh, 30000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") silentRefresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [provider?.id]);
 
   useEffect(() => {
     const onConnect = () => setConnected(true);

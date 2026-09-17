@@ -252,6 +252,40 @@ export function AppProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer?.id]);
 
+  // Background safety net: the live socket is what's supposed to keep
+  // bookings/notifications current, but mobile browsers frequently
+  // suspend/drop websockets for a backgrounded tab, so a quiet poll (no
+  // `loading` toggle — this must never blank the screen with a spinner)
+  // is what actually keeps data from going stale. Also fires once
+  // immediately when the app comes back to the foreground, so reopening it
+  // doesn't have to wait out the rest of the 30s tick.
+  useEffect(() => {
+    if (!customer) return;
+    let cancelled = false;
+
+    const silentRefresh = () => {
+      Promise.all([api.listBookings(), api.listNotifications()])
+        .then(([myBookings, myNotifications]) => {
+          if (cancelled) return;
+          setBookings(myBookings);
+          setNotifications(myNotifications);
+        })
+        .catch((e) => console.error("Background refresh failed", e));
+    };
+
+    const interval = setInterval(silentRefresh, 30000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") silentRefresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [customer?.id]);
+
   useEffect(() => {
     const onConnect = () => setConnected(true);
     const onDisconnect = () => setConnected(false);
