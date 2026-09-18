@@ -148,6 +148,10 @@ export function AppProvider({ children }) {
       setProviders((prev) => upsertById(prev, provider));
       scheduleRefresh();
     };
+    const onProviderDeleted = (providerId) => {
+      setProviders((prev) => prev.filter((p) => p.id !== providerId));
+      scheduleRefresh();
+    };
     const onActivityCreated = (activity) => {
       if (!activity) return;
       setActivities((prev) => [activity, ...prev].slice(0, 20));
@@ -158,6 +162,7 @@ export function AppProvider({ children }) {
     socket.on("service:created", onServiceChanged);
     socket.on("service:updated", onServiceChanged);
     socket.on("provider:updated", onProviderUpdated);
+    socket.on("provider:deleted", onProviderDeleted);
     socket.on("activity:created", onActivityCreated);
     return () => {
       socket.off("booking:created", onBookingChanged);
@@ -165,6 +170,7 @@ export function AppProvider({ children }) {
       socket.off("service:created", onServiceChanged);
       socket.off("service:updated", onServiceChanged);
       socket.off("provider:updated", onProviderUpdated);
+      socket.off("provider:deleted", onProviderDeleted);
       socket.off("activity:created", onActivityCreated);
     };
   }, [scheduleRefresh]);
@@ -192,6 +198,16 @@ export function AppProvider({ children }) {
       const provider = await api.setProviderVerification(id, "rejected");
       setProviders((prev) => upsertById(prev, provider));
       showToast("Provider rejected");
+      scheduleRefresh();
+    },
+    [showToast, scheduleRefresh]
+  );
+
+  const deleteProvider = useCallback(
+    async (id) => {
+      await api.deleteProvider(id);
+      setProviders((prev) => prev.filter((p) => p.id !== id));
+      showToast("Provider deleted");
       scheduleRefresh();
     },
     [showToast, scheduleRefresh]
@@ -267,6 +283,7 @@ export function AppProvider({ children }) {
       showToast,
       approveProvider,
       rejectProvider,
+      deleteProvider,
       toggleServiceStatus,
       addCategory,
       addProvider,
@@ -290,6 +307,7 @@ export function AppProvider({ children }) {
       showToast,
       approveProvider,
       rejectProvider,
+      deleteProvider,
       toggleServiceStatus,
       addCategory,
       addProvider,

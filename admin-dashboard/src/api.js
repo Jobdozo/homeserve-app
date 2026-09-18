@@ -49,6 +49,7 @@ export const api = {
   getBookingCheckpoints: (id) => request(`/bookings/${id}/checkpoints`),
   setProviderVerification: (id, status) =>
     request(`/providers/${id}/verification`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  deleteProvider: (id) => request(`/admin/providers/${id}`, { method: "DELETE" }),
   setServiceStatus: (id, status) =>
     request(`/services/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
   getTransactions: () => request("/admin/transactions"),

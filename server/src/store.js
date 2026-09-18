@@ -328,6 +328,77 @@ async function setProviderVerification(providerId, status) {
   return provider;
 }
 
+// Admin-triggered manual removal of a single provider — deletes everything
+// that points back at it (services, bookings and their sub-rows) in FK-safe
+// order, same pattern as removeSeedData below but scoped to one provider
+// instead of the bundled demo set. Irreversible; the customer-facing side
+// of any deleted booking disappears along with it.
+async function deleteProvider(providerId) {
+  const provider = await getProvider(providerId);
+  if (!provider) return false;
+
+  const { services } = await query(
+    `query($id: UUID!) { services(where: { providerId: { eq: $id } }) { id } }`,
+    { id: providerId }
+  );
+  const serviceIds = services.map((s) => s.id);
+
+  const { bookings } = await query(
+    `query($id: UUID!) { bookings(where: { providerId: { eq: $id } }) { id } }`,
+    { id: providerId }
+  );
+  const bookingIds = bookings.map((b) => b.id);
+
+  if (serviceIds.length) {
+    await mutate(`mutation($ids: [UUID!]!) { serviceHighlight_deleteMany(where: { serviceId: { in: $ids } }) }`, {
+      ids: serviceIds,
+    });
+    await mutate(`mutation($ids: [UUID!]!) { serviceInclude_deleteMany(where: { serviceId: { in: $ids } }) }`, {
+      ids: serviceIds,
+    });
+  }
+  if (bookingIds.length) {
+    await mutate(`mutation($ids: [UUID!]!) { message_deleteMany(where: { bookingId: { in: $ids } }) }`, {
+      ids: bookingIds,
+    });
+    await mutate(`mutation($ids: [UUID!]!) { bookingStatusEvent_deleteMany(where: { bookingId: { in: $ids } }) }`, {
+      ids: bookingIds,
+    });
+    await mutate(`mutation($ids: [UUID!]!) { notification_deleteMany(where: { bookingId: { in: $ids } }) }`, {
+      ids: bookingIds,
+    });
+  }
+  await mutate(`mutation($id: UUID!) { notification_deleteMany(where: { recipientId: { eq: $id } }) }`, {
+    id: providerId,
+  });
+  if (bookingIds.length) {
+    await mutate(`mutation($ids: [UUID!]!) { booking_deleteMany(where: { id: { in: $ids } }) }`, {
+      ids: bookingIds,
+    });
+  }
+  if (serviceIds.length) {
+    await mutate(`mutation($ids: [UUID!]!) { service_deleteMany(where: { id: { in: $ids } }) }`, {
+      ids: serviceIds,
+    });
+  }
+  await mutate(`mutation($id: UUID!) { provider_delete(id: $id) { id } }`, { id: providerId });
+
+  for (const bookingId of bookingIds) {
+    jsonStore.readAll("jobPhotos").filter((p) => p.bookingId === bookingId).forEach((p) => jsonStore.remove("jobPhotos", p.id));
+    jsonStore.readAll("jobCheckpoints").filter((c) => c.bookingId === bookingId).forEach((c) => jsonStore.remove("jobCheckpoints", c.id));
+    jsonStore.readAll("bookingOtps").filter((o) => o.bookingId === bookingId).forEach((o) => jsonStore.remove("bookingOtps", o.id));
+  }
+  jsonStore.remove("providerWallets", providerId);
+  jsonStore.remove("providerNotificationPrefs", providerId);
+  jsonStore.readAll("kycDocuments").filter((d) => d.providerId === providerId).forEach((d) => jsonStore.remove("kycDocuments", d.id));
+  jsonStore.readAll("providerAgreements").filter((a) => a.providerId === providerId).forEach((a) => jsonStore.remove("providerAgreements", a.id));
+
+  cacheClear("providers");
+  cacheClear("service");
+  await logActivity("provider", `Provider deleted by admin: ${provider.name} (${provider.category})`);
+  return true;
+}
+
 const EDITABLE_PROVIDER_FIELDS = ["name", "category", "businessName", "experience", "serviceArea", "email", "gstNumber"];
 
 async function updateProviderProfile(providerId, patch) {
@@ -1798,6 +1869,7 @@ module.exports = {
   updateProviderService,
   updateServiceStatus,
   setProviderVerification,
+  deleteProvider,
   updateProviderProfile,
   getEarnings,
   listActivities,

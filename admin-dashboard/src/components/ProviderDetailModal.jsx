@@ -15,7 +15,7 @@ const DOC_LABELS = {
 };
 
 export default function ProviderDetailModal({ providerId, onClose }) {
-  const { providers, approveProvider, rejectProvider, showToast } = useApp();
+  const { providers, approveProvider, rejectProvider, deleteProvider, showToast } = useApp();
   const provider = providers.find((p) => p.id === providerId);
   const [services, setServices] = useState(null);
   const [earnings, setEarnings] = useState(null);
@@ -25,6 +25,8 @@ export default function ProviderDetailModal({ providerId, onClose }) {
   const [busy, setBusy] = useState(false);
   const [rechargeAmount, setRechargeAmount] = useState("");
   const [recharging, setRecharging] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const loadWallet = () => api.getProviderWallet(providerId).then(setWallet).catch(() => setWallet(null));
 
@@ -72,6 +74,22 @@ export default function ProviderDetailModal({ providerId, onClose }) {
   };
 
   if (!provider) return null;
+
+  const handleDelete = async () => {
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deleteProvider(provider.id);
+      onClose();
+    } catch (err) {
+      showToast(err.message || "Failed to delete provider");
+      setDeleting(false);
+      setConfirmingDelete(false);
+    }
+  };
 
   const act = async (fn) => {
     setBusy(true);
@@ -263,6 +281,29 @@ export default function ProviderDetailModal({ providerId, onClose }) {
               </div>
             ))}
           </Section>
+
+          <div className="rounded-xl border border-red-100 p-3.5">
+            <p className="text-[12.5px] font-bold text-red-700">Danger Zone</p>
+            <p className="mt-1 text-[11.5px] leading-snug text-gray-400">
+              Permanently deletes this provider along with their services and bookings. This can't be undone.
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className={`rounded-lg px-3.5 py-2 text-[12px] font-semibold disabled:opacity-50 ${
+                  confirmingDelete ? "bg-red-600 text-white hover:bg-red-700" : "border border-red-200 text-red-600 hover:bg-red-50"
+                }`}
+              >
+                {deleting ? "Deleting…" : confirmingDelete ? "Click again to confirm" : "Delete Provider"}
+              </button>
+              {confirmingDelete && !deleting && (
+                <button onClick={() => setConfirmingDelete(false)} className="text-[12px] font-semibold text-gray-400">
+                  Cancel
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

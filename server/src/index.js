@@ -271,6 +271,14 @@ app.patch("/api/providers/:id/verification", auth.requireAuth("admin"), ah(async
   res.json(provider);
 }));
 
+app.delete("/api/admin/providers/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const deleted = await store.deleteProvider(req.params.id);
+  if (!deleted) return res.status(404).json({ error: "Provider not found" });
+  io.emit("provider:deleted", req.params.id);
+  io.emit("activity:created", (await store.listActivities(1))[0]);
+  res.json({ deleted: true });
+}));
+
 app.get("/api/admin/providers/:id/wallet", auth.requireAuth("admin"), ah(async (req, res) => {
   res.json(store.getWallet(req.params.id));
 }));
