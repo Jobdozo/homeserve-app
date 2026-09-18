@@ -381,7 +381,9 @@ async function deleteProvider(providerId) {
       ids: serviceIds,
     });
   }
-  await mutate(`mutation($id: UUID!) { provider_delete(id: $id) { id } }`, { id: providerId });
+  // provider_delete returns a scalar Provider_KeyOutput, not an object — it
+  // can't take a field selection like `{ id }`.
+  await mutate(`mutation($id: UUID!) { provider_delete(id: $id) }`, { id: providerId });
 
   for (const bookingId of bookingIds) {
     jsonStore.readAll("jobPhotos").filter((p) => p.bookingId === bookingId).forEach((p) => jsonStore.remove("jobPhotos", p.id));
