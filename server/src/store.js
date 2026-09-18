@@ -1688,13 +1688,25 @@ async function removeSeedData() {
     : { services: [] };
   const serviceIds = services.map((s) => s.id);
 
-  const bookingOr = [];
-  if (providerIds.length) bookingOr.push({ providerId: { in: providerIds } });
-  if (customerIds.length) bookingOr.push({ customerId: { in: customerIds } });
-  const { bookings } = bookingOr.length
-    ? await query(`query($or: [Booking_Filter!]!) { bookings(where: { _or: $or }) { id } }`, { or: bookingOr })
-    : { bookings: [] };
-  const bookingIds = bookings.map((b) => b.id);
+  // Data Connect's generated API only accepts scalar (or list-of-scalar)
+  // GraphQL variables — a compound filter object like `_or` can't be passed
+  // as one, so the two conditions are queried separately and merged here.
+  const bookingIds = new Set();
+  if (providerIds.length) {
+    const { bookings } = await query(
+      `query($ids: [UUID!]!) { bookings(where: { providerId: { in: $ids } }) { id } }`,
+      { ids: providerIds }
+    );
+    bookings.forEach((b) => bookingIds.add(b.id));
+  }
+  if (customerIds.length) {
+    const { bookings } = await query(
+      `query($ids: [UUID!]!) { bookings(where: { customerId: { in: $ids } }) { id } }`,
+      { ids: customerIds }
+    );
+    bookings.forEach((b) => bookingIds.add(b.id));
+  }
+  const bookingIdList = [...bookingIds];
 
   if (serviceIds.length) {
     await mutate(`mutation($ids: [UUID!]!) { serviceHighlight_deleteMany(where: { serviceId: { in: $ids } }) }`, {
@@ -1704,15 +1716,15 @@ async function removeSeedData() {
       ids: serviceIds,
     });
   }
-  if (bookingIds.length) {
+  if (bookingIdList.length) {
     await mutate(`mutation($ids: [UUID!]!) { message_deleteMany(where: { bookingId: { in: $ids } }) }`, {
-      ids: bookingIds,
+      ids: bookingIdList,
     });
     await mutate(`mutation($ids: [UUID!]!) { bookingStatusEvent_deleteMany(where: { bookingId: { in: $ids } }) }`, {
-      ids: bookingIds,
+      ids: bookingIdList,
     });
     await mutate(`mutation($ids: [UUID!]!) { notification_deleteMany(where: { bookingId: { in: $ids } }) }`, {
-      ids: bookingIds,
+      ids: bookingIdList,
     });
   }
   const recipientIds = [...providerIds, ...customerIds];
@@ -1721,9 +1733,9 @@ async function removeSeedData() {
       ids: recipientIds,
     });
   }
-  if (bookingIds.length) {
+  if (bookingIdList.length) {
     const r = await mutate(`mutation($ids: [UUID!]!) { booking_deleteMany(where: { id: { in: $ids } }) }`, {
-      ids: bookingIds,
+      ids: bookingIdList,
     });
     result.bookings = r.booking_deleteMany;
   }
