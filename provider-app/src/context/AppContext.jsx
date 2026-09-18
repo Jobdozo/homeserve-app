@@ -37,9 +37,16 @@ export function AppProvider({ children }) {
   // read straight through this (earnings.thisMonth etc.) with no loading
   // guard, so a failed fetch must never leave it null.
   const [earnings, setEarnings] = useState({
+    allTime: 0,
     thisMonth: 0,
     changePct: 0,
     breakdown: { completedJobs: 0, inProgressJobs: 0, cancelledJobs: 0, platformFeePct: 0, platformFeeAmt: 0 },
+    periods: {
+      Daily: { total: 0, changePct: 0, breakdown: { completedJobs: 0, inProgressJobs: 0, cancelledJobs: 0, platformFeePct: 0, platformFeeAmt: 0 } },
+      Weekly: { total: 0, changePct: 0, breakdown: { completedJobs: 0, inProgressJobs: 0, cancelledJobs: 0, platformFeePct: 0, platformFeeAmt: 0 } },
+      Monthly: { total: 0, changePct: 0, breakdown: { completedJobs: 0, inProgressJobs: 0, cancelledJobs: 0, platformFeePct: 0, platformFeeAmt: 0 } },
+      Yearly: { total: 0, changePct: 0, breakdown: { completedJobs: 0, inProgressJobs: 0, cancelledJobs: 0, platformFeePct: 0, platformFeeAmt: 0 } },
+    },
     transactions: [],
   });
   const [loading, setLoading] = useState(true);

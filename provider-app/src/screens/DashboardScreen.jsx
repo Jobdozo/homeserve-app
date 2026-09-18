@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
-import { BellIcon, StarIcon, ShieldCheckIcon, TrendUpIcon } from "../components/icons";
+import { BellIcon, StarIcon, ShieldCheckIcon, TrendUpIcon, TrendDownIcon } from "../components/icons";
 
 export default function DashboardScreen() {
   const navigate = useNavigate();
@@ -53,8 +53,14 @@ export default function DashboardScreen() {
         <div>
           <p className="text-[11px] text-gray-400">Earnings This Month</p>
           <p className="text-2xl font-extrabold text-gray-900 lg:text-3xl">₹{earnings.thisMonth.toLocaleString("en-IN")}</p>
-          <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-emerald-600">
-            <TrendUpIcon width={12} height={12} /> +{earnings.changePct}% from last month
+          <p
+            className={`mt-0.5 flex items-center gap-1 text-[11px] font-medium ${
+              earnings.changePct >= 0 ? "text-emerald-600" : "text-red-500"
+            }`}
+          >
+            {earnings.changePct >= 0 ? <TrendUpIcon width={12} height={12} /> : <TrendDownIcon width={12} height={12} />}
+            {earnings.changePct >= 0 ? "+" : ""}
+            {earnings.changePct}% from last month
           </p>
         </div>
         <button

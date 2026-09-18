@@ -173,7 +173,7 @@ export default function ProviderDetailModal({ providerId, onClose }) {
               <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2.5 text-[12.5px]">
                 <WalletIcon width={16} height={16} className="text-gray-400" />
                 <span className="text-gray-500">Total completed:</span>
-                <span className="font-semibold text-gray-900">₹{earnings.thisMonth.toLocaleString("en-IN")}</span>
+                <span className="font-semibold text-gray-900">₹{earnings.allTime.toLocaleString("en-IN")}</span>
               </div>
             )}
           </Section>

@@ -976,16 +976,78 @@ async function markAllNotificationsRead(recipientType, recipientId) {
 // ---- earnings / admin aggregates (fetched as raw rows, computed in JS —
 // matches the original in-memory implementation's exact logic/output) ----
 
+// A completed booking's earning date is when it was marked Completed; a
+// cancelled one has no completion event, so its cancellation date stands in.
+function earningsEventDate(b) {
+  return new Date(b.statusHistory.Completed || b.cancelledAt || b.createdAt);
+}
+
+function sumInRange(bookings, start, end) {
+  return bookings
+    .filter((b) => {
+      const d = earningsEventDate(b);
+      return d >= start && (!end || d < end);
+    })
+    .reduce((sum, b) => sum + b.amount, 0);
+}
+
+// Builds one period's figures (e.g. "this month"), plus its % change against
+// the immediately preceding period of the same length, so Daily/Weekly/
+// Monthly/Yearly each reflect what actually happened in that window instead
+// of a fixed ratio applied to an all-time total.
+function buildEarningsPeriod({ completed, cancelled, inProgressTotal, platformFeePct, start, prevStart, prevEnd }) {
+  const total = sumInRange(completed, start);
+  const prevTotal = sumInRange(completed, prevStart, prevEnd);
+  const changePct = prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : total > 0 ? 100 : 0;
+  const cancelledJobs = sumInRange(cancelled, start);
+  const platformFeeAmt = Math.round(total * (platformFeePct / 100));
+  return {
+    total,
+    changePct,
+    breakdown: { completedJobs: total, inProgressJobs: inProgressTotal, cancelledJobs, platformFeePct, platformFeeAmt },
+  };
+}
+
 async function getEarnings(providerId) {
   const bookings = await listBookings({ providerId });
   const completed = bookings.filter((b) => b.status === "Completed");
   const inProgress = bookings.filter((b) => b.status === "In Progress");
-  const total = completed.reduce((sum, b) => sum + b.amount, 0);
+  const cancelled = bookings.filter((b) => b.status === "Cancelled");
   const inProgressTotal = inProgress.reduce((sum, b) => sum + b.amount, 0);
   const { platformFeePct } = getSettings();
-  const platformFeeAmt = Math.round(total * (platformFeePct / 100));
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfYear = new Date(now.getFullYear(), 0, 1);
+  const args = { completed, cancelled, inProgressTotal, platformFeePct };
+
+  const rollingWindow = (days) => {
+    const start = new Date(startOfToday);
+    start.setDate(start.getDate() - (days - 1));
+    const prevStart = new Date(start);
+    prevStart.setDate(prevStart.getDate() - days);
+    return buildEarningsPeriod({ ...args, start, prevStart, prevEnd: start });
+  };
+
+  const daily = rollingWindow(1);
+  const weekly = rollingWindow(7);
+  const monthly = buildEarningsPeriod({
+    ...args,
+    start: startOfMonth,
+    prevStart: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+    prevEnd: startOfMonth,
+  });
+  const yearly = buildEarningsPeriod({
+    ...args,
+    start: startOfYear,
+    prevStart: new Date(now.getFullYear() - 1, 0, 1),
+    prevEnd: startOfYear,
+  });
+
+  const allTime = completed.reduce((sum, b) => sum + b.amount, 0);
   const transactions = [...completed]
-    .sort((a, b) => new Date(b.statusHistory.Completed || b.createdAt) - new Date(a.statusHistory.Completed || a.createdAt))
+    .sort((a, b) => earningsEventDate(b) - earningsEventDate(a))
     .map((b) => ({
       id: b.id,
       service: b.service?.name || "Service",
@@ -995,10 +1057,13 @@ async function getEarnings(providerId) {
       amount: b.amount,
       status: "Completed",
     }));
+
   return {
-    thisMonth: total,
-    changePct: 12,
-    breakdown: { completedJobs: total, inProgressJobs: inProgressTotal, cancelledJobs: 0, platformFeePct, platformFeeAmt },
+    allTime,
+    thisMonth: monthly.total,
+    changePct: monthly.changePct,
+    breakdown: monthly.breakdown,
+    periods: { Daily: daily, Weekly: weekly, Monthly: monthly, Yearly: yearly },
     transactions,
   };
 }

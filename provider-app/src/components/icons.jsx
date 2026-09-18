@@ -153,6 +153,13 @@ export const TrendUpIcon = (p) => (
   </svg>
 );
 
+export const TrendDownIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 8l5.5 6 4-4L20 18" />
+    <path d="M14 18h6v-6" />
+  </svg>
+);
+
 export const ShieldCheckIcon = (p) => (
   <svg {...base} {...p}>
     <path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6Z" />

@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { TrendUpIcon } from "../components/icons";
+import { TrendUpIcon, TrendDownIcon } from "../components/icons";
 import CategoryIcon from "../components/CategoryIcon";
 
 const TABS = ["Daily", "Weekly", "Monthly", "Yearly"];
-const FACTORS = { Daily: 1 / 30, Weekly: 7 / 30, Monthly: 1, Yearly: 12 };
 const PERIOD_LABEL = { Daily: "Day", Weekly: "Week", Monthly: "Month", Yearly: "Year" };
 
 export default function EarningsScreen() {
@@ -12,14 +11,14 @@ export default function EarningsScreen() {
   const [tab, setTab] = useState("Monthly");
   const [showAll, setShowAll] = useState(false);
 
-  const factor = FACTORS[tab];
-  const total = Math.round(earnings.thisMonth * factor);
-  const breakdown = earnings.breakdown;
+  const period = earnings.periods[tab];
+  const total = period.total;
+  const breakdown = period.breakdown;
   const scaled = {
-    completed: Math.round(breakdown.completedJobs * factor),
-    inProgress: Math.round(breakdown.inProgressJobs * factor),
-    cancelled: Math.round(breakdown.cancelledJobs * factor),
-    fee: Math.round(breakdown.platformFeeAmt * factor),
+    completed: breakdown.completedJobs,
+    inProgress: breakdown.inProgressJobs,
+    cancelled: breakdown.cancelledJobs,
+    fee: breakdown.platformFeeAmt,
   };
 
   const visibleTx = showAll ? earnings.transactions : earnings.transactions.slice(0, 3);
@@ -50,7 +49,13 @@ export default function EarningsScreen() {
             <p className="text-[11px] text-white/75">This {PERIOD_LABEL[tab]} Earnings</p>
             <p className="mt-1 text-2xl font-extrabold lg:text-3xl">₹{total.toLocaleString("en-IN")}</p>
             <p className="mt-1 flex items-center gap-1 text-[11px] text-emerald-200">
-              <TrendUpIcon width={12} height={12} /> +{earnings.changePct}% from last {PERIOD_LABEL[tab].toLowerCase()}
+              {period.changePct >= 0 ? (
+                <TrendUpIcon width={12} height={12} />
+              ) : (
+                <TrendDownIcon width={12} height={12} />
+              )}
+              {period.changePct >= 0 ? "+" : ""}
+              {period.changePct}% from last {PERIOD_LABEL[tab].toLowerCase()}
             </p>
           </div>
 
