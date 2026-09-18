@@ -234,6 +234,11 @@ app.post("/api/providers/:id/services", auth.requireAuth("provider"), ah(async (
 
 app.patch("/api/providers/:id/profile", auth.requireAuth("provider"), ah(async (req, res) => {
   if (req.user.id !== req.params.id) return res.status(403).json({ error: "Not your provider account" });
+  const existing = await store.getProvider(req.params.id);
+  if (!existing) return res.status(404).json({ error: "Provider not found" });
+  if (existing.verificationStatus === "approved") {
+    return res.status(403).json({ error: "Your account is verified — contact support to change account information" });
+  }
   const provider = await store.updateProviderProfile(req.params.id, req.body || {});
   if (!provider) return res.status(404).json({ error: "Provider not found" });
   io.emit("provider:updated", provider);
@@ -581,6 +586,10 @@ app.post(
   upload.single("file"),
   ah(async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "file is required" });
+    const provider = await store.getProvider(req.user.id);
+    if (provider?.verificationStatus === "approved") {
+      return res.status(403).json({ error: "Your account is verified — contact support to change documents" });
+    }
     const docType = req.body?.docType || "other";
     const doc = store.addKycDocument(req.user.id, { docType, url: `/uploads/${req.file.filename}` });
     await store.logActivity("provider", `${req.user.id} uploaded a KYC document (${docType})`);
@@ -589,9 +598,17 @@ app.post(
 );
 
 app.delete("/api/provider/kyc-documents/:id", auth.requireAuth("provider"), ah(async (req, res) => {
+  const provider = await store.getProvider(req.user.id);
+  if (provider?.verificationStatus === "approved") {
+    return res.status(403).json({ error: "Your account is verified — contact support to change documents" });
+  }
   const removed = store.deleteKycDocument(req.user.id, req.params.id);
   if (!removed) return res.status(404).json({ error: "Document not found" });
   res.status(204).end();
+}));
+
+app.get("/api/admin/providers/:id/kyc-documents", auth.requireAuth("admin"), ah(async (req, res) => {
+  res.json(store.listKycDocuments(req.params.id));
 }));
 
 // ---- job before/after photos (attached to a specific booking, provider must own it) ----

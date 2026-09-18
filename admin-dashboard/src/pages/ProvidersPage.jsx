@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { StarIcon, CheckIcon, XIcon } from "../components/icons";
+import ProviderDetailModal from "../components/ProviderDetailModal";
 
 const TABS = ["All", "Pending", "Approved", "Rejected"];
 
@@ -13,6 +14,7 @@ const verificationStyles = {
 export default function ProvidersPage() {
   const { providers, approveProvider, rejectProvider } = useApp();
   const [tab, setTab] = useState("All");
+  const [openProviderId, setOpenProviderId] = useState(null);
 
   const filtered = useMemo(() => {
     if (tab === "All") return providers;
@@ -37,7 +39,11 @@ export default function ProvidersPage() {
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((p) => (
-          <div key={p.id} className="rounded-2xl bg-white p-4 shadow-card">
+          <div
+            key={p.id}
+            onClick={() => setOpenProviderId(p.id)}
+            className="cursor-pointer rounded-2xl bg-white p-4 shadow-card transition-shadow hover:shadow-md"
+          >
             <div className="flex items-start gap-3">
               <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-2xl">
                 {p.avatar}
@@ -69,13 +75,19 @@ export default function ProvidersPage() {
             {p.verificationStatus === "pending" && (
               <div className="mt-3 flex gap-2">
                 <button
-                  onClick={() => rejectProvider(p.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    rejectProvider(p.id);
+                  }}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-200 py-2 text-[12px] font-semibold text-red-600 active:scale-[0.98]"
                 >
                   <XIcon width={13} height={13} /> Reject
                 </button>
                 <button
-                  onClick={() => approveProvider(p.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    approveProvider(p.id);
+                  }}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand py-2 text-[12px] font-semibold text-white active:scale-[0.98]"
                 >
                   <CheckIcon width={13} height={13} /> Approve
@@ -88,6 +100,10 @@ export default function ProvidersPage() {
           <p className="col-span-full py-12 text-center text-sm text-gray-400">No {tab.toLowerCase()} providers.</p>
         )}
       </div>
+
+      {openProviderId && (
+        <ProviderDetailModal providerId={openProviderId} onClose={() => setOpenProviderId(null)} />
+      )}
     </div>
   );
 }

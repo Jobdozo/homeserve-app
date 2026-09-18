@@ -10,7 +10,8 @@ const statusConfig = {
     icon: "✅",
     title: "Verified",
     className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    message: "Your account is verified. Customers can see your verified badge on your profile.",
+    message:
+      "Your account is verified. Customers can see your verified badge on your profile. Documents are locked — contact support to make changes.",
   },
   pending: {
     icon: "⏳",
@@ -34,6 +35,7 @@ const DOC_TYPES = [
 export default function DocumentsKycScreen() {
   const { provider, showToast } = useApp();
   const status = statusConfig[provider.verificationStatus] || statusConfig.pending;
+  const locked = provider.verificationStatus === "approved";
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploadingType, setUploadingType] = useState(null);
@@ -118,37 +120,39 @@ export default function DocumentsKycScreen() {
                     <p className="mt-0.5 text-[11px] text-gray-400">{description}</p>
                   </div>
 
-                  <div className="flex flex-shrink-0 items-center gap-2">
-                    {doc && (
+                  {!locked && (
+                    <div className="flex flex-shrink-0 items-center gap-2">
+                      {doc && (
+                        <button
+                          onClick={() => handleDelete(doc)}
+                          className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-50 text-gray-400"
+                          aria-label={`Remove ${label}`}
+                        >
+                          <XIcon width={14} height={14} />
+                        </button>
+                      )}
                       <button
-                        onClick={() => handleDelete(doc)}
-                        className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-50 text-gray-400"
-                        aria-label={`Remove ${label}`}
+                        onClick={() => fileInputs.current[docType]?.click()}
+                        disabled={isUploading}
+                        className="rounded-xl bg-brand px-3 py-2 text-[11.5px] font-semibold text-white disabled:opacity-50"
                       >
-                        <XIcon width={14} height={14} />
+                        {isUploading ? "Uploading…" : doc ? "Retake" : "Add Photo"}
                       </button>
-                    )}
-                    <button
-                      onClick={() => fileInputs.current[docType]?.click()}
-                      disabled={isUploading}
-                      className="rounded-xl bg-brand px-3 py-2 text-[11.5px] font-semibold text-white disabled:opacity-50"
-                    >
-                      {isUploading ? "Uploading…" : doc ? "Retake" : "Add Photo"}
-                    </button>
-                    <input
-                      ref={(el) => (fileInputs.current[docType] = el)}
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="hidden"
-                      onChange={handlePick(docType)}
-                    />
-                  </div>
+                      <input
+                        ref={(el) => (fileInputs.current[docType] = el)}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={handlePick(docType)}
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
-          {!loading && (
+          {!loading && !locked && (
             <p className="mt-2 px-1 text-[11px] text-gray-400">
               Tap "Add Photo" to take a picture with your camera or choose one from your gallery.
             </p>
