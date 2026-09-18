@@ -21,7 +21,12 @@ export default function ProviderDetailModal({ providerId, onClose }) {
   const [earnings, setEarnings] = useState(null);
   const [reviews, setReviews] = useState(null);
   const [documents, setDocuments] = useState(null);
+  const [wallet, setWallet] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [rechargeAmount, setRechargeAmount] = useState("");
+  const [recharging, setRecharging] = useState(false);
+
+  const loadWallet = () => api.getProviderWallet(providerId).then(setWallet).catch(() => setWallet(null));
 
   useEffect(() => {
     let cancelled = false;
@@ -29,22 +34,42 @@ export default function ProviderDetailModal({ providerId, onClose }) {
     setEarnings(null);
     setReviews(null);
     setDocuments(null);
+    setWallet(null);
     Promise.all([
       api.getProviderServices(providerId),
       api.getProviderEarnings(providerId).catch(() => null),
       api.getProviderReviews(providerId),
       api.getProviderKycDocuments(providerId).catch(() => []),
-    ]).then(([s, e, r, d]) => {
+      api.getProviderWallet(providerId).catch(() => null),
+    ]).then(([s, e, r, d, w]) => {
       if (cancelled) return;
       setServices(s);
       setEarnings(e);
       setReviews(r);
       setDocuments(d);
+      setWallet(w);
     });
     return () => {
       cancelled = true;
     };
   }, [providerId]);
+
+  const submitRecharge = async (e) => {
+    e.preventDefault();
+    const amount = Number(rechargeAmount);
+    if (!amount || amount <= 0) return;
+    setRecharging(true);
+    try {
+      await api.rechargeProviderWallet(providerId, amount);
+      setRechargeAmount("");
+      await loadWallet();
+      showToast(`Recharged ₹${amount.toLocaleString("en-IN")}`);
+    } catch (err) {
+      showToast(err.message || "Recharge failed");
+    } finally {
+      setRecharging(false);
+    }
+  };
 
   if (!provider) return null;
 
@@ -98,6 +123,51 @@ export default function ProviderDetailModal({ providerId, onClose }) {
           <div className="rounded-xl bg-gray-50 px-3 py-2 text-[11.5px] text-gray-500">
             {provider.live ? "🟢 Connected via Provider App" : "⚪ Managed by admin (no live app)"}
           </div>
+
+          <Section title="Wallet">
+            {wallet === null && <p className="text-[12px] text-gray-400">Loading…</p>}
+            {wallet && (
+              <>
+                <div
+                  className={`flex items-center justify-between rounded-lg px-3 py-2.5 text-[12.5px] ${
+                    wallet.balance <= 0 ? "bg-red-50" : "bg-gray-50"
+                  }`}
+                >
+                  <span className="flex items-center gap-2 text-gray-500">
+                    <WalletIcon width={16} height={16} className={wallet.balance <= 0 ? "text-red-400" : "text-gray-400"} />
+                    Balance
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className={`font-semibold ${wallet.balance <= 0 ? "text-red-600" : "text-gray-900"}`}>
+                      ₹{wallet.balance.toLocaleString("en-IN")}
+                    </span>
+                    {wallet.balance <= 0 && (
+                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-600">
+                        Paused — no new jobs
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <form onSubmit={submitRecharge} className="flex gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    value={rechargeAmount}
+                    onChange={(e) => setRechargeAmount(e.target.value)}
+                    placeholder="Amount to add (₹)"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] text-gray-800 outline-none focus:border-brand"
+                  />
+                  <button
+                    type="submit"
+                    disabled={recharging || !rechargeAmount}
+                    className="flex-shrink-0 rounded-lg bg-brand px-3.5 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
+                  >
+                    {recharging ? "Adding…" : "Recharge"}
+                  </button>
+                </form>
+              </>
+            )}
+          </Section>
 
           <div className="grid grid-cols-2 gap-3 text-[12.5px]">
             <Field label="Phone" value={provider.phone} />

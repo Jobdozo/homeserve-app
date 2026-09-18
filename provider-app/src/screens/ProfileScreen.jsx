@@ -10,10 +10,17 @@ const verificationBadges = {
 
 export default function ProfileScreen() {
   const navigate = useNavigate();
-  const { provider: providerProfile, showToast, logout } = useApp();
+  const { provider: providerProfile, wallet, showToast, logout } = useApp();
 
   const menuItems = [
-    { icon: "💳", label: "Payout Details" },
+    {
+      icon: "💳",
+      label: "Payout Details",
+      badge: {
+        text: `Balance ₹${wallet.balance.toLocaleString("en-IN")}`,
+        className: wallet.suspended ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600",
+      },
+    },
     { icon: "📄", label: "Documents & KYC", path: "/profile/documents", badge: verificationBadges[providerProfile.verificationStatus] },
     { icon: "🗓️", label: "Manage Availability", path: "/profile/availability" },
     { icon: "🔔", label: "Notification Settings", path: "/profile/notifications" },

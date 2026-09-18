@@ -1,11 +1,11 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
-import { BellIcon, StarIcon, ShieldCheckIcon, TrendUpIcon, TrendDownIcon } from "../components/icons";
+import { BellIcon, StarIcon, ShieldCheckIcon, TrendUpIcon, TrendDownIcon, AlertIcon } from "../components/icons";
 
 export default function DashboardScreen() {
   const navigate = useNavigate();
-  const { provider: providerProfile, requests, earnings, notifications } = useApp();
+  const { provider: providerProfile, requests, earnings, wallet, notifications } = useApp();
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const stats = useMemo(() => {
@@ -48,8 +48,24 @@ export default function DashboardScreen() {
         </button>
       </div>
 
+      {wallet.suspended && (
+        <div className="mx-4 -mt-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 shadow-card lg:mx-8 lg:mt-6 lg:p-6">
+          <AlertIcon width={20} height={20} className="mt-0.5 flex-shrink-0 text-red-500" />
+          <div>
+            <p className="text-[13px] font-bold text-red-700">Account paused — wallet balance ₹0</p>
+            <p className="mt-0.5 text-[11.5px] leading-snug text-red-600">
+              You won't receive new job requests until your account is recharged. Contact Tikdum support to recharge.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Earnings card */}
-      <div className="mx-4 -mt-4 flex items-center justify-between rounded-2xl bg-white p-4 shadow-card lg:mx-8 lg:mt-6 lg:p-6">
+      <div
+        className={`mx-4 flex items-center justify-between rounded-2xl bg-white p-4 shadow-card lg:mx-8 lg:mt-6 lg:p-6 ${
+          wallet.suspended ? "mt-3" : "-mt-4"
+        }`}
+      >
         <div>
           <p className="text-[11px] text-gray-400">Earnings This Month</p>
           <p className="text-2xl font-extrabold text-gray-900 lg:text-3xl">₹{earnings.thisMonth.toLocaleString("en-IN")}</p>

@@ -9,6 +9,14 @@ const base = {
   strokeLinejoin: "round",
 };
 
+export const AlertIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 3 2 20h20L12 3Z" />
+    <path d="M12 10v4" />
+    <circle cx="12" cy="17" r="0.6" fill="currentColor" stroke="none" />
+  </svg>
+);
+
 export const HomeIcon = (p) => (
   <svg {...base} {...p}>
     <path d="M3 11.5 12 4l9 7.5" />

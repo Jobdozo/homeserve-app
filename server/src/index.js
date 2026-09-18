@@ -257,6 +257,22 @@ app.patch("/api/providers/:id/verification", auth.requireAuth("admin"), ah(async
   res.json(provider);
 }));
 
+app.get("/api/admin/providers/:id/wallet", auth.requireAuth("admin"), ah(async (req, res) => {
+  res.json(store.getWallet(req.params.id));
+}));
+
+app.post("/api/admin/providers/:id/wallet/recharge", auth.requireAuth("admin"), ah(async (req, res) => {
+  const amount = Number(req.body?.amount);
+  const wallet = await store.rechargeProviderWallet(req.params.id, amount, req.body?.note);
+  io.emit("activity:created", (await store.listActivities(1))[0]);
+  res.json(wallet);
+}));
+
+app.get("/api/provider/wallet", auth.requireAuth("provider"), ah(async (req, res) => {
+  const wallet = store.getWallet(req.user.id);
+  res.json({ balance: wallet.balance, suspended: wallet.balance <= 0 });
+}));
+
 app.patch("/api/providers/:id/services/:serviceId", auth.requireAuth("provider"), ah(async (req, res) => {
   if (req.user.id !== req.params.id) return res.status(403).json({ error: "Not your provider account" });
   const service = await store.updateProviderService(req.params.id, req.params.serviceId, req.body || {});
@@ -755,3 +771,9 @@ process.on("uncaughtException", (err) => console.error("Uncaught exception:", er
 server.listen(PORT, () => {
   console.log(`Tikdum API + realtime server listening on http://localhost:${PORT}`);
 });
+
+// Re-sends a recharge reminder to any still-suspended provider roughly once
+// a day — checked hourly so a restart never leaves it waiting a full day.
+setInterval(() => {
+  store.sendSuspendedWalletReminders().catch((e) => console.error("Suspended wallet reminders failed:", e));
+}, 60 * 60 * 1000);

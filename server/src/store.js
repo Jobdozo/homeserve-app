@@ -340,13 +340,19 @@ async function updateProviderProfile(providerId, patch) {
 
 async function listServices({ activeOnly = false } = {}) {
   const cacheKey = `services:${activeOnly ? "active" : "all"}`;
-  const cached = cacheGet(cacheKey);
-  if (cached) return cached;
-  const gql = activeOnly
-    ? `query { services(where: { status: { eq: "active" } }) { ${SERVICE_FIELDS} } }`
-    : `query { services { ${SERVICE_FIELDS} } }`;
-  const { services } = await query(gql, {});
-  return cacheSet(cacheKey, services.map(mapService));
+  let all = cacheGet(cacheKey);
+  if (!all) {
+    const gql = activeOnly
+      ? `query { services(where: { status: { eq: "active" } }) { ${SERVICE_FIELDS} } }`
+      : `query { services { ${SERVICE_FIELDS} } }`;
+    const { services } = await query(gql, {});
+    all = cacheSet(cacheKey, services.map(mapService));
+  }
+  // Suspended providers' services stay off the public/bookable catalog, but
+  // remain visible to admin (activeOnly: false) so they aren't hidden there.
+  if (!activeOnly) return all;
+  const suspended = new Set(listSuspendedProviderIds());
+  return all.filter((s) => !suspended.has(s.providerId));
 }
 
 async function getService(id) {
@@ -555,6 +561,9 @@ async function getMessages(bookingId) {
 async function createBooking({ serviceId, date, time, address, issue, customerId, orderId, offerCode }) {
   const service = await getService(serviceId);
   if (!service) throw new Error("Unknown service");
+  if (isProviderSuspended(service.providerId)) {
+    throw Object.assign(new Error("This provider isn't currently accepting new bookings"), { status: 409 });
+  }
   const customer = await getCustomerById(customerId);
   if (!customer) throw new Error("Unknown customer");
   let amount = service.price;
@@ -684,6 +693,15 @@ async function updateBookingStatus(id, status) {
       bookingId: id,
     });
   }
+  if (status === "Completed") {
+    // Never let a wallet-side failure block marking the job Completed — the
+    // booking status update above has already succeeded at this point.
+    try {
+      await deductWalletCommission(existing.providerId, existing.amount);
+    } catch (e) {
+      console.error(`Wallet commission deduction failed for booking ${id}:`, e);
+    }
+  }
   return fetchBookingWithRelations(id);
 }
 
@@ -702,7 +720,9 @@ async function findAlternativeProviderService(categorySlug, excludeProviderIds) 
     }`,
     { categoryId: categoryUuid }
   );
-  const candidate = services.find((s) => s.provider && !excludeProviderIds.includes(s.provider.id));
+  const candidate = services.find(
+    (s) => s.provider && !excludeProviderIds.includes(s.provider.id) && !isProviderSuspended(s.provider.id)
+  );
   if (!candidate) return null;
   return { serviceId: candidate.id, providerId: candidate.provider.id, amount: candidate.price };
 }
@@ -1345,6 +1365,146 @@ async function notifyProviderOfBookingByWhatsApp(providerId, message) {
   await whatsapp.sendWhatsAppMessage(provider.phone, message);
 }
 
+// ---- provider wallet (jsonStore-backed, one record per provider — a manual
+// admin-topped-up balance that a % commission is deducted from on every
+// completed job. Hitting ₹0 pauses the provider from new bookings until an
+// admin recharges them. Not a schema migration since this is a simple
+// balance ledger, same lightweight-entity reasoning as settings/prefs above.)
+
+const LOW_BALANCE_WARN_FRACTION = 0.2; // warn once balance drops to <=20% of the last recharge
+
+function getWallet(providerId) {
+  const existing = jsonStore.readAll("providerWallets").find((w) => w.id === providerId);
+  return existing || { id: providerId, balance: 0, recharges: [], deductions: [], lowBalanceAlertSentAt: null, suspendedAlertSentAt: null, lastReminderAt: null };
+}
+
+function saveWallet(wallet) {
+  const existing = jsonStore.readAll("providerWallets").find((w) => w.id === wallet.id);
+  if (existing) jsonStore.update("providerWallets", wallet.id, wallet);
+  else jsonStore.insert("providerWallets", wallet);
+  return wallet;
+}
+
+function isProviderSuspended(providerId) {
+  return getWallet(providerId).balance <= 0;
+}
+
+// Cheap sync read used to filter the public service catalog — suspended
+// providers' services shouldn't be bookable, without needing a Postgres join.
+function listSuspendedProviderIds() {
+  return jsonStore.readAll("providerWallets").filter((w) => w.balance <= 0).map((w) => w.id);
+}
+
+// Alerts are sent regardless of the provider's optional WhatsApp booking-
+// notification toggle — account balance/suspension is not a routine
+// notification the provider should be able to silence.
+async function rechargeProviderWallet(providerId, amount, note) {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw Object.assign(new Error("Recharge amount must be a positive number"), { status: 400 });
+  }
+  const wallet = getWallet(providerId);
+  wallet.balance = (wallet.balance || 0) + amount;
+  wallet.recharges = [...(wallet.recharges || []), { amount, at: new Date().toISOString(), note: note || null }];
+  // A fresh recharge clears the suspension — reset alert flags so the next
+  // time the balance runs low/out, the provider is alerted again.
+  wallet.lowBalanceAlertSentAt = null;
+  wallet.suspendedAlertSentAt = null;
+  saveWallet(wallet);
+
+  // The recharge itself is already committed above — a WhatsApp/lookup
+  // hiccup past this point must never surface as a failed recharge.
+  try {
+    const provider = await getProvider(providerId);
+    if (provider?.phone) {
+      await whatsapp.sendWhatsAppMessage(
+        provider.phone,
+        `Your Tikdum wallet has been recharged with ₹${amount}. New balance: ₹${wallet.balance}. You're all set to keep receiving job requests.`
+      );
+    }
+  } catch (e) {
+    console.error("Recharge WhatsApp notification failed:", e);
+  }
+  await logActivity("provider", `Wallet recharged for provider ${providerId}: +₹${amount}`);
+  return wallet;
+}
+
+// Deducts this job's commission from the provider's wallet and fires the
+// low-balance / suspended WhatsApp alert the first time each is crossed
+// (tracked via the *AlertSentAt flags so a provider isn't messaged on every
+// single job once they're already below the threshold).
+async function deductWalletCommission(providerId, bookingAmount) {
+  const { platformFeePct } = getSettings();
+  const commission = Math.round(bookingAmount * (platformFeePct / 100));
+  if (commission <= 0) return getWallet(providerId);
+
+  const wallet = getWallet(providerId);
+  const before = wallet.balance;
+  wallet.balance = before - commission;
+  wallet.deductions = [...(wallet.deductions || []), { amount: commission, at: new Date().toISOString() }];
+
+  const justSuspended = before > 0 && wallet.balance <= 0 && !wallet.suspendedAlertSentAt;
+  const justWentLow =
+    !justSuspended &&
+    wallet.balance > 0 &&
+    !wallet.lowBalanceAlertSentAt &&
+    (() => {
+      const lastRecharge = [...(wallet.recharges || [])].pop();
+      const warnThreshold = lastRecharge ? lastRecharge.amount * LOW_BALANCE_WARN_FRACTION : 0;
+      return wallet.balance <= warnThreshold;
+    })();
+  if (justSuspended) wallet.suspendedAlertSentAt = new Date().toISOString();
+  if (justWentLow) wallet.lowBalanceAlertSentAt = new Date().toISOString();
+
+  // Commit the deduction (and alert-flag bookkeeping) before ever touching
+  // the network — this is the source of truth for whether the provider is
+  // suspended, and must never be lost to a WhatsApp/lookup failure below.
+  saveWallet(wallet);
+
+  if (justSuspended || justWentLow) {
+    try {
+      const provider = await getProvider(providerId);
+      if (provider?.phone) {
+        const message = justSuspended
+          ? `Your Tikdum wallet balance has reached ₹0. Your account is paused from receiving new job requests until you recharge. Please contact Tikdum support to recharge your account.`
+          : `Your Tikdum wallet balance is running low (₹${wallet.balance}). Recharge soon to keep receiving job requests without interruption.`;
+        await whatsapp.sendWhatsAppMessage(provider.phone, message);
+      }
+    } catch (e) {
+      console.error("Wallet balance WhatsApp alert failed:", e);
+    }
+  }
+
+  return wallet;
+}
+
+// Called periodically (see index.js) — re-sends the recharge reminder to any
+// still-suspended provider roughly once a day, so it doesn't go silent while
+// they remain paused and unpaid.
+async function sendSuspendedWalletReminders() {
+  const REMINDER_INTERVAL_MS = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const suspended = jsonStore.readAll("providerWallets").filter((w) => w.balance <= 0);
+  for (const wallet of suspended) {
+    const last = wallet.lastReminderAt ? new Date(wallet.lastReminderAt).getTime() : 0;
+    if (now - last < REMINDER_INTERVAL_MS) continue;
+    // One provider's lookup/send failure shouldn't stop the rest from
+    // getting their reminder in this sweep.
+    try {
+      const provider = await getProvider(wallet.id);
+      if (provider?.phone) {
+        await whatsapp.sendWhatsAppMessage(
+          provider.phone,
+          `Reminder: your Tikdum wallet balance is ₹0 and your account is still paused from receiving new job requests. Contact Tikdum support to recharge and resume.`
+        );
+      }
+      wallet.lastReminderAt = new Date().toISOString();
+      saveWallet(wallet);
+    } catch (e) {
+      console.error(`Suspended wallet reminder failed for provider ${wallet.id}:`, e);
+    }
+  }
+}
+
 // ---- KYC documents and job photos (jsonStore-backed — a provider's document
 // set and a booking's before/after photos are small, low-volume, and don't
 // warrant a schema migration) ----
@@ -1428,6 +1588,10 @@ module.exports = {
   updateSettings,
   getProviderNotificationPrefs,
   updateProviderNotificationPrefs,
+  getWallet,
+  rechargeProviderWallet,
+  isProviderSuspended,
+  sendSuspendedWalletReminders,
   listKycDocuments,
   addKycDocument,
   deleteKycDocument,

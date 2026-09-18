@@ -49,6 +49,7 @@ export function AppProvider({ children }) {
     },
     transactions: [],
   });
+  const [wallet, setWallet] = useState({ balance: 0, suspended: false });
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(socket.connected);
   const [toast, setToast] = useState(null);
@@ -100,6 +101,7 @@ export function AppProvider({ children }) {
     setServices([]);
     setMessages({});
     setEarnings(null);
+    setWallet(null);
     setNotifications([]);
     loadedThreads.current = new Set();
   }, []);
@@ -107,6 +109,11 @@ export function AppProvider({ children }) {
   const refreshEarnings = useCallback(() => {
     if (!provider) return;
     api.getEarnings(provider.id).then(setEarnings).catch((e) => console.error("earnings", e));
+  }, [provider]);
+
+  const refreshWallet = useCallback(() => {
+    if (!provider) return;
+    api.getWallet().then(setWallet).catch((e) => console.error("wallet", e));
   }, [provider]);
 
   // Restore + validate a persisted session on first load.
@@ -153,10 +160,11 @@ export function AppProvider({ children }) {
     async function load() {
       setLoading(true);
       try {
-        const [requestData, serviceData, earningsData, notificationData, categoryData] = await Promise.all([
+        const [requestData, serviceData, earningsData, walletData, notificationData, categoryData] = await Promise.all([
           api.listBookings(),
           api.listProviderServices(provider.id),
           api.getEarnings(provider.id),
+          api.getWallet(),
           api.listNotifications(),
           api.listCategories(),
         ]);
@@ -164,6 +172,7 @@ export function AppProvider({ children }) {
         setRequests(requestData);
         setServices(serviceData);
         setEarnings(earningsData);
+        setWallet(walletData);
         setNotifications(notificationData);
         setCategories(categoryData);
 
@@ -308,7 +317,10 @@ export function AppProvider({ children }) {
       if (booking.status !== "Pending") {
         setRingingRequest((prev) => (prev?.id === booking.id ? null : prev));
       }
-      if (booking.status === "Completed") refreshEarnings();
+      if (booking.status === "Completed") {
+        refreshEarnings();
+        refreshWallet();
+      }
     };
     const onMessageCreated = ({ bookingId, message }) => {
       setMessages((prev) => ({ ...prev, [bookingId]: [...(prev[bookingId] || []), message] }));
@@ -343,7 +355,7 @@ export function AppProvider({ children }) {
       socket.off("provider:updated", onProviderUpdated);
       socket.off("notification:created", onNotificationCreated);
     };
-  }, [provider, refreshEarnings, notificationPrefs]);
+  }, [provider, refreshEarnings, refreshWallet, notificationPrefs]);
 
   useEffect(() => {
     if (!toast) return;
@@ -417,9 +429,12 @@ export function AppProvider({ children }) {
       const next = order[Math.min(idx + 1, order.length - 1)];
       const booking = await api.updateBookingStatus(id, next);
       setRequests((prev) => upsertById(prev, booking));
-      if (booking.status === "Completed") refreshEarnings();
+      if (booking.status === "Completed") {
+        refreshEarnings();
+        refreshWallet();
+      }
     },
-    [requests, refreshEarnings]
+    [requests, refreshEarnings, refreshWallet]
   );
 
   const loadMessages = useCallback(async (bookingId) => {
@@ -494,6 +509,7 @@ export function AppProvider({ children }) {
       categories,
       messages,
       earnings,
+      wallet,
       loading,
       connected,
       isOffline,
@@ -526,6 +542,7 @@ export function AppProvider({ children }) {
       categories,
       messages,
       earnings,
+      wallet,
       loading,
       connected,
       isOffline,

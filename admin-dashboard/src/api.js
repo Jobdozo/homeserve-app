@@ -39,6 +39,9 @@ export const api = {
   getProviderEarnings: (id) => request(`/providers/${id}/earnings`),
   getProviderReviews: (id) => request(`/providers/${id}/reviews`),
   getProviderKycDocuments: (id) => request(`/admin/providers/${id}/kyc-documents`),
+  getProviderWallet: (id) => request(`/admin/providers/${id}/wallet`),
+  rechargeProviderWallet: (id, amount, note) =>
+    request(`/admin/providers/${id}/wallet/recharge`, { method: "POST", body: JSON.stringify({ amount, note }) }),
   listCategories: () => request("/categories"),
   listServices: () => request("/services"),
   listBookings: () => request("/bookings"),
