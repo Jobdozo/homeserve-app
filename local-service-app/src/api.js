@@ -50,6 +50,7 @@ export const api = {
   reportLocation: (lat, lng, accuracy) =>
     request("/location", { method: "POST", body: JSON.stringify({ lat, lng, accuracy }) }),
   getBookingLiveLocation: (bookingId) => request(`/bookings/${bookingId}/live-location`),
+  getBookingOtp: (bookingId) => request(`/bookings/${bookingId}/otp`),
   listBanners: () => request("/banners"),
   getVapidPublicKey: () => request("/push/vapid-public-key"),
   subscribePush: (subscription) => request("/push/subscribe", { method: "POST", body: JSON.stringify({ subscription }) }),

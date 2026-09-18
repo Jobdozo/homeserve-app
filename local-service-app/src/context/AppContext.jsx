@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { api, setAuthToken } from "../api";
 import { socket } from "../socket";
-import { timeSlots, defaultAddress } from "../data/mockData";
+import { timeSlots } from "../data/mockData";
 import { detectCurrentLocation } from "../utils/geolocation";
 import { ensurePushSubscribed, onNativeNotificationTap } from "../utils/pushNotifications";
 
@@ -440,7 +440,7 @@ export function AppProvider({ children }) {
     async (address) => {
       if (cart.length === 0) return [];
       const items = cart.map(({ serviceId, date, time, issue }) => ({ serviceId, date, time, issue }));
-      const created = await api.createOrder({ items, address: address || defaultAddress, offerCode: appliedOffer?.code });
+      const created = await api.createOrder({ items, address, offerCode: appliedOffer?.code });
       setBookings((prev) => created.reduce((acc, b) => upsertById(acc, b), prev));
       setCart([]);
       setAppliedOffer(null);

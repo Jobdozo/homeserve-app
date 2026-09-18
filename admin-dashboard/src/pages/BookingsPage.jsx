@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import CategoryIcon from "../components/CategoryIcon";
+import BookingDetailModal from "../components/BookingDetailModal";
 
 const TABS = ["All", "Pending", "Accepted", "In Progress", "Completed", "Rejected", "Cancelled"];
 
@@ -16,6 +17,7 @@ const statusStyles = {
 export default function BookingsPage() {
   const { bookings, providers } = useApp();
   const [tab, setTab] = useState("All");
+  const [openBookingId, setOpenBookingId] = useState(null);
 
   const providerName = (id) => providers.find((p) => p.id === id)?.name || "—";
 
@@ -57,7 +59,11 @@ export default function BookingsPage() {
             </thead>
             <tbody>
               {filtered.map((b) => (
-                <tr key={b.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
+                <tr
+                  key={b.id}
+                  onClick={() => setOpenBookingId(b.id)}
+                  className="cursor-pointer border-b border-gray-50 last:border-0 hover:bg-gray-50/60"
+                >
                   <td className="px-4 py-3 font-semibold text-gray-800">#{b.id}</td>
                   <td className="flex items-center gap-2 px-4 py-3 text-gray-700">
                     <CategoryIcon categoryId={b.service?.categoryId} size={28} rounded="rounded-lg" /> {b.service?.name}
@@ -86,6 +92,8 @@ export default function BookingsPage() {
           </table>
         </div>
       </div>
+
+      {openBookingId && <BookingDetailModal bookingId={openBookingId} onClose={() => setOpenBookingId(null)} />}
     </div>
   );
 }

@@ -89,6 +89,12 @@ export const api = {
   listJobPhotos: (bookingId) => request(`/bookings/${bookingId}/photos`),
   uploadJobPhoto: (bookingId, file, photoType) =>
     uploadFile(`/bookings/${bookingId}/photos`, file, { photoType }),
+  listJobCheckpoints: (bookingId) => request(`/bookings/${bookingId}/checkpoints`),
+  addJobCheckpoint: (bookingId, type) =>
+    request(`/bookings/${bookingId}/checkpoints`, { method: "POST", body: JSON.stringify({ type }) }),
+  verifyBookingOtp: (bookingId, type, code) =>
+    request(`/bookings/${bookingId}/otp/verify`, { method: "POST", body: JSON.stringify({ type, code }) }),
   saveFcmToken: (token) => request("/provider/fcm-token", { method: "POST", body: JSON.stringify({ token }) }),
+  acceptAgreement: () => request("/provider/agreement/accept", { method: "POST" }),
   getWallet: () => request("/provider/wallet"),
 };

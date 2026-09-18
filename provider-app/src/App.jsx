@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppProvider, useApp } from "./context/AppContext";
 import { MainLayout, DetailLayout } from "./components/PhoneFrame";
 import LoginScreen from "./screens/LoginScreen";
+import AgreementScreen from "./screens/AgreementScreen";
 import RingingOverlay from "./components/RingingOverlay";
 
 // Route-level code splitting: only Login (needed before anything else can
@@ -51,6 +52,8 @@ function AppRoutes() {
   }
 
   if (!provider) return <LoginScreen />;
+
+  if (!provider.agreementAccepted) return <AgreementScreen />;
 
   return (
     <>

@@ -91,12 +91,23 @@ function mapCategory(c) {
   return { id: c.slug, name: c.name, icon: c.icon };
 }
 
+// Bump this string whenever the Service Provider Agreement's terms actually
+// change — a provider who accepted an older version is treated as not
+// having accepted, so they're asked again on next login.
+const AGREEMENT_VERSION = "2026-01";
+
+function hasAcceptedAgreement(providerId) {
+  return jsonStore
+    .readAll("providerAgreements")
+    .some((a) => a.providerId === providerId && a.version === AGREEMENT_VERSION);
+}
+
 function mapProvider(p) {
   if (!p) return p;
   // responseRate is never written at signup (no rejected/late responses yet
   // to compute it from) — default a brand-new provider to 100% rather than
   // showing a raw null (renders as the literal string "null%" in the UI).
-  return { ...p, responseRate: p.responseRate ?? 100 };
+  return { ...p, responseRate: p.responseRate ?? 100, agreementAccepted: hasAcceptedAgreement(p.id) };
 }
 
 function mapService(s) {
@@ -676,6 +687,13 @@ async function updateBookingStatus(id, status) {
   const provider = await getProvider(existing.providerId);
   const serviceName = existing.service?.name || "Service";
   await logActivity("booking", `Booking #${id} (${serviceName}) marked ${status}`);
+
+  // The customer is handed a fresh 4-digit code the moment a provider
+  // accepts — the provider asks for it in person once they've actually
+  // reached the customer, so "Accepted" isn't itself proof of arrival.
+  if (status === "Accepted") {
+    ensureBookingOtp(id, "start");
+  }
 
   const customerMessages = {
     Accepted: `${provider?.name || "The provider"} accepted your ${serviceName} request`,
@@ -1536,6 +1554,208 @@ function addJobPhoto(bookingId, { photoType, url }) {
   return jsonStore.insert("jobPhotos", { bookingId, photoType, url, uploadedAt: new Date().toISOString() });
 }
 
+// Finer-grained on-the-job checkpoints a provider taps through (reached the
+// customer's location, started the job, left the location) — sit alongside
+// the booking's real status (Accepted/In Progress/Completed) rather than
+// replacing it, so nothing else keyed off booking.status has to change.
+const JOB_CHECKPOINT_TYPES = ["reached_location", "started_job", "left_location"];
+
+function listJobCheckpoints(bookingId) {
+  return jsonStore.readAll("jobCheckpoints").filter((c) => c.bookingId === bookingId);
+}
+
+function addJobCheckpoint(bookingId, type) {
+  if (!JOB_CHECKPOINT_TYPES.includes(type)) {
+    throw Object.assign(new Error("Invalid checkpoint type"), { status: 400 });
+  }
+  const existing = listJobCheckpoints(bookingId).find((c) => c.type === type);
+  if (existing) return existing;
+  return jsonStore.insert("jobCheckpoints", { bookingId, type, at: new Date().toISOString() });
+}
+
+// ---- work start / job completion OTPs. The customer is the only one who
+// ever sees the code (fetched via their own auth) — the provider has to ask
+// for it in person and submit a guess, which is what actually proves they
+// were physically there to start, and later finish, the job. ----
+function generateOtpCode() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+function getBookingOtp(bookingId, type) {
+  return jsonStore.readAll("bookingOtps").find((o) => o.bookingId === bookingId && o.type === type);
+}
+
+function ensureBookingOtp(bookingId, type) {
+  const existing = getBookingOtp(bookingId, type);
+  if (existing) return existing;
+  return jsonStore.insert("bookingOtps", {
+    bookingId,
+    type,
+    code: generateOtpCode(),
+    verifiedAt: null,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+function getBookingOtpsForCustomer(bookingId) {
+  const start = getBookingOtp(bookingId, "start");
+  const complete = getBookingOtp(bookingId, "complete");
+  return {
+    start: start ? { code: start.code, verified: !!start.verifiedAt } : null,
+    complete: complete ? { code: complete.code, verified: !!complete.verifiedAt } : null,
+  };
+}
+
+async function verifyBookingOtp(bookingId, type, code) {
+  if (type !== "start" && type !== "complete") {
+    throw Object.assign(new Error("Invalid OTP type"), { status: 400 });
+  }
+  const otp = getBookingOtp(bookingId, type);
+  if (!otp) {
+    throw Object.assign(new Error("No OTP has been generated for this step yet"), { status: 400 });
+  }
+  if (otp.verifiedAt) {
+    throw Object.assign(new Error("This OTP has already been used"), { status: 400 });
+  }
+  if (String(code || "").trim() !== otp.code) {
+    throw Object.assign(new Error("Incorrect OTP"), { status: 400 });
+  }
+  jsonStore.update("bookingOtps", otp.id, { verifiedAt: new Date().toISOString() });
+
+  if (type === "start") {
+    const booking = await updateBookingStatus(bookingId, "In Progress");
+    // The completion code only appears once the job has actually started —
+    // generating both up front would let it leak to the customer too early.
+    ensureBookingOtp(bookingId, "complete");
+    return booking;
+  }
+  return updateBookingStatus(bookingId, "Completed");
+}
+
+// ---- Service Provider Agreement acceptance (jsonStore-backed — a signed
+// timestamp/IP record per provider per version, not a Postgres entity) ----
+function getProviderAgreement(providerId) {
+  return (
+    jsonStore
+      .readAll("providerAgreements")
+      .find((a) => a.providerId === providerId && a.version === AGREEMENT_VERSION) || null
+  );
+}
+
+function acceptProviderAgreement(providerId, { ip, userAgent } = {}) {
+  const existing = getProviderAgreement(providerId);
+  if (existing) return existing;
+  return jsonStore.insert("providerAgreements", {
+    providerId,
+    version: AGREEMENT_VERSION,
+    acceptedAt: new Date().toISOString(),
+    ip: ip || null,
+    userAgent: userAgent || null,
+  });
+}
+
+// ---- one-time production cleanup: server/src/seedData.js was inserted
+// once via scripts/seed.js to prototype the catalog before real sign-ups
+// existed. These are the exact phones/messages that data used, so this only
+// ever matches the bundled demo rows — never a real provider or customer —
+// and is safe to call more than once (matches nothing once it's been run).
+const SEED_PROVIDER_PHONES = ["+91 98765 43210", "+91 98765 11223", "+91 98765 99887", "+91 98765 44556"];
+const SEED_CUSTOMER_PHONE = "+91 98765 43210";
+const SEED_ACTIVITY_MESSAGES = [
+  "New provider registration: Meena Kapoor (Painting)",
+  "New review received: 5★ for Plumbing Service",
+  "New booking received: #BK12344 — Home Cleaning",
+  "Provider approved: Amit Sharma (AC Repair & Service)",
+];
+
+async function removeSeedData() {
+  const [{ providers }, { customers }] = await Promise.all([
+    query(`query($phones: [String!]) { providers(where: { phone: { in: $phones } }) { id } }`, {
+      phones: SEED_PROVIDER_PHONES,
+    }),
+    query(`query($phone: String!) { customers(where: { phone: { eq: $phone } }) { id } }`, {
+      phone: SEED_CUSTOMER_PHONE,
+    }),
+  ]);
+  const providerIds = providers.map((p) => p.id);
+  const customerIds = customers.map((c) => c.id);
+  const result = { providers: 0, services: 0, bookings: 0, customers: 0, activities: 0 };
+
+  const { services } = providerIds.length
+    ? await query(`query($ids: [UUID!]!) { services(where: { providerId: { in: $ids } }) { id } }`, {
+        ids: providerIds,
+      })
+    : { services: [] };
+  const serviceIds = services.map((s) => s.id);
+
+  const bookingOr = [];
+  if (providerIds.length) bookingOr.push({ providerId: { in: providerIds } });
+  if (customerIds.length) bookingOr.push({ customerId: { in: customerIds } });
+  const { bookings } = bookingOr.length
+    ? await query(`query($or: [Booking_Filter!]!) { bookings(where: { _or: $or }) { id } }`, { or: bookingOr })
+    : { bookings: [] };
+  const bookingIds = bookings.map((b) => b.id);
+
+  if (serviceIds.length) {
+    await mutate(`mutation($ids: [UUID!]!) { serviceHighlight_deleteMany(where: { serviceId: { in: $ids } }) }`, {
+      ids: serviceIds,
+    });
+    await mutate(`mutation($ids: [UUID!]!) { serviceInclude_deleteMany(where: { serviceId: { in: $ids } }) }`, {
+      ids: serviceIds,
+    });
+  }
+  if (bookingIds.length) {
+    await mutate(`mutation($ids: [UUID!]!) { message_deleteMany(where: { bookingId: { in: $ids } }) }`, {
+      ids: bookingIds,
+    });
+    await mutate(`mutation($ids: [UUID!]!) { bookingStatusEvent_deleteMany(where: { bookingId: { in: $ids } }) }`, {
+      ids: bookingIds,
+    });
+    await mutate(`mutation($ids: [UUID!]!) { notification_deleteMany(where: { bookingId: { in: $ids } }) }`, {
+      ids: bookingIds,
+    });
+  }
+  const recipientIds = [...providerIds, ...customerIds];
+  if (recipientIds.length) {
+    await mutate(`mutation($ids: [UUID!]!) { notification_deleteMany(where: { recipientId: { in: $ids } }) }`, {
+      ids: recipientIds,
+    });
+  }
+  if (bookingIds.length) {
+    const r = await mutate(`mutation($ids: [UUID!]!) { booking_deleteMany(where: { id: { in: $ids } }) }`, {
+      ids: bookingIds,
+    });
+    result.bookings = r.booking_deleteMany;
+  }
+  if (serviceIds.length) {
+    const r = await mutate(`mutation($ids: [UUID!]!) { service_deleteMany(where: { id: { in: $ids } }) }`, {
+      ids: serviceIds,
+    });
+    result.services = r.service_deleteMany;
+  }
+  if (providerIds.length) {
+    const r = await mutate(`mutation($ids: [UUID!]!) { provider_deleteMany(where: { id: { in: $ids } }) }`, {
+      ids: providerIds,
+    });
+    result.providers = r.provider_deleteMany;
+  }
+  if (customerIds.length) {
+    const r = await mutate(`mutation($ids: [UUID!]!) { customer_deleteMany(where: { id: { in: $ids } }) }`, {
+      ids: customerIds,
+    });
+    result.customers = r.customer_deleteMany;
+  }
+  const activityResult = await mutate(
+    `mutation($messages: [String!]!) { activity_deleteMany(where: { message: { in: $messages } }) }`,
+    { messages: SEED_ACTIVITY_MESSAGES }
+  );
+  result.activities = activityResult.activity_deleteMany;
+
+  cacheClear("providers");
+  cacheClear("service");
+  return result;
+}
+
 module.exports = {
   getCustomerById,
   getCustomerByPhone,
@@ -1602,4 +1822,12 @@ module.exports = {
   deleteKycDocument,
   listJobPhotos,
   addJobPhoto,
+  listJobCheckpoints,
+  addJobCheckpoint,
+  getBookingOtpsForCustomer,
+  verifyBookingOtp,
+  AGREEMENT_VERSION,
+  getProviderAgreement,
+  acceptProviderAgreement,
+  removeSeedData,
 };

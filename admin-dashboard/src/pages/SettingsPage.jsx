@@ -11,6 +11,8 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState(null);
   const [feeInput, setFeeInput] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirmingCleanup, setConfirmingCleanup] = useState(false);
+  const [cleaningUp, setCleaningUp] = useState(false);
 
   useEffect(() => {
     api
@@ -38,6 +40,29 @@ export default function SettingsPage() {
       showToast(e.message || "Failed to update settings");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleRemoveSeedData = async () => {
+    if (!confirmingCleanup) {
+      setConfirmingCleanup(true);
+      return;
+    }
+    setCleaningUp(true);
+    try {
+      const result = await api.removeSeedData();
+      const removed = Object.values(result).reduce((sum, n) => sum + n, 0);
+      showToast(
+        removed > 0
+          ? `Removed ${result.providers} demo provider(s), ${result.services} service(s), ${result.bookings} booking(s)`
+          : "No demo data left to remove"
+      );
+      setConfirmingCleanup(false);
+      window.location.reload();
+    } catch (e) {
+      showToast(e.message || "Failed to remove demo data");
+      setCleaningUp(false);
+      setConfirmingCleanup(false);
     }
   };
 
@@ -76,6 +101,34 @@ export default function SettingsPage() {
             </button>
           </div>
         )}
+      </div>
+
+      <div className="max-w-md rounded-2xl border border-red-100 bg-white p-4 shadow-card sm:p-5">
+        <h2 className="text-[14px] font-bold text-red-700">Danger Zone</h2>
+        <p className="mt-1 text-[12px] text-gray-400">
+          Permanently removes the bundled demo providers, services and bookings used to prototype the app (Amit
+          Sharma, Rakesh Kumar, Sunita Devi, Meena Kapoor and their sample data). Real providers and bookings are
+          never touched. This can't be undone.
+        </p>
+        <div className="mt-4 flex items-center gap-2">
+          <button
+            onClick={handleRemoveSeedData}
+            disabled={cleaningUp}
+            className={`rounded-xl py-2.5 text-[13px] font-semibold disabled:opacity-50 ${
+              confirmingCleanup ? "bg-red-600 text-white hover:bg-red-700" : "border border-red-200 text-red-600 hover:bg-red-50"
+            } px-5`}
+          >
+            {cleaningUp ? "Removing…" : confirmingCleanup ? "Click again to confirm" : "Remove Demo Data"}
+          </button>
+          {confirmingCleanup && !cleaningUp && (
+            <button
+              onClick={() => setConfirmingCleanup(false)}
+              className="text-[12.5px] font-semibold text-gray-400"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

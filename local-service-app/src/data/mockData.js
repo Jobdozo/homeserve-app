@@ -10,10 +10,5 @@ export const timeSlots = [
   "04:00 PM – 06:00 PM",
 ];
 
-export const defaultAddress = {
-  label: "Home",
-  line: "221B, Baker Street, Connaught Place, New Delhi - 110001",
-};
-
 // Statuses in order — drives the booking progress timeline.
 export const STATUS_STEPS = ["Pending", "Accepted", "In Progress", "Completed"];

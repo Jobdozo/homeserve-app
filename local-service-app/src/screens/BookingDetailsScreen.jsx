@@ -161,6 +161,8 @@ export default function BookingDetailsScreen() {
           </div>
         </div>
 
+        {["Accepted", "In Progress"].includes(booking.status) && <JobOtpCard bookingId={booking.id} status={booking.status} />}
+
         {/* Status timeline */}
         {!isCancelled && (
           <div>
@@ -241,6 +243,45 @@ export default function BookingDetailsScreen() {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+const OTP_COPY = {
+  start: {
+    title: "Start OTP",
+    hint: "Share this code with your provider once they've arrived, so they can start the job.",
+  },
+  complete: {
+    title: "Completion OTP",
+    hint: "Happy with the job? Share this code with your provider to mark it complete.",
+  },
+};
+
+function JobOtpCard({ bookingId, status }) {
+  const [otp, setOtp] = useState(null);
+  const type = status === "Accepted" ? "start" : "complete";
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getBookingOtp(bookingId)
+      .then((data) => !cancelled && setOtp(data))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingId, status]);
+
+  const code = otp?.[type]?.code;
+  if (!code) return null;
+  const copy = OTP_COPY[type];
+
+  return (
+    <div className="rounded-2xl border border-dashed border-brand/40 bg-brand-light/40 p-4 text-center">
+      <p className="text-[12px] font-semibold text-gray-700">{copy.title}</p>
+      <p className="mt-1 text-3xl font-extrabold tracking-[0.3em] text-brand">{code}</p>
+      <p className="mt-2 text-[11px] leading-snug text-gray-500">{copy.hint}</p>
     </div>
   );
 }

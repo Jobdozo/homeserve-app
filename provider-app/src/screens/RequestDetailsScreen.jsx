@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { api, SERVER_URL } from "../api";
 import ScreenHeader from "../components/ScreenHeader";
-import { MapPinIcon, CalendarIcon, ClockIcon, PhoneIcon, CameraIcon } from "../components/icons";
+import { MapPinIcon, CalendarIcon, ClockIcon, PhoneIcon, CameraIcon, CheckIcon } from "../components/icons";
 import CategoryIcon from "../components/CategoryIcon";
 import { compressImage } from "../utils/imageCompress";
 
@@ -12,7 +12,7 @@ const LOCATION_TRACKED_STATUSES = ["Pending", "Accepted", "In Progress"];
 export default function RequestDetailsScreen() {
   const { requestId } = useParams();
   const navigate = useNavigate();
-  const { getRequest, acceptRequest, rejectRequest, advanceRequestStatus, showToast } = useApp();
+  const { getRequest, acceptRequest, rejectRequest, showToast } = useApp();
   const [liveLocation, setLiveLocation] = useState(null);
 
   const request = getRequest(requestId);
@@ -51,8 +51,6 @@ export default function RequestDetailsScreen() {
   }
 
   const customer = request.customer;
-  const order = ["Accepted", "In Progress", "Completed"];
-  const nextStatus = order[Math.min(order.indexOf(request.status) + 1, order.length - 1)];
 
   return (
     <div className="flex flex-1 flex-col">
@@ -148,21 +146,17 @@ export default function RequestDetailsScreen() {
           </div>
         )}
 
+        {["Accepted", "In Progress", "Completed"].includes(request.status) && (
+          <JobCheckpoints bookingId={request.id} locked={request.status === "Completed"} />
+        )}
+
         {["Accepted", "In Progress", "Completed"].includes(request.status) && <JobPhotos bookingId={request.id} />}
 
         {!["Pending", "Rejected", "Cancelled"].includes(request.status) && (
           <div>
             <StatusPill status={request.status} />
             {request.status !== "Completed" && (
-              <button
-                onClick={() => {
-                  advanceRequestStatus(request.id);
-                  showToast("Status updated");
-                }}
-                className="mt-3 w-full rounded-xl border border-dashed border-gray-300 py-2.5 text-xs font-medium text-gray-500"
-              >
-                Simulate: mark as "{nextStatus}"
-              </button>
+              <OtpVerifyCard bookingId={request.id} type={request.status === "Accepted" ? "start" : "complete"} />
             )}
           </div>
         )}
@@ -196,6 +190,135 @@ export default function RequestDetailsScreen() {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+const OTP_COPY = {
+  start: {
+    title: "Ask the customer to start the job",
+    hint: "Once you've reached them, they'll see a 4-digit Start OTP in their app.",
+  },
+  complete: {
+    title: "Ask the customer to confirm completion",
+    hint: "Once they're happy with the job, they'll see a 4-digit Completion OTP in their app.",
+  },
+};
+
+function OtpVerifyCard({ bookingId, type }) {
+  const { verifyJobOtp, showToast } = useApp();
+  const [code, setCode] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const copy = OTP_COPY[type];
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (code.length !== 4) return;
+    setSubmitting(true);
+    try {
+      await verifyJobOtp(bookingId, type, code);
+      setCode("");
+      showToast(type === "start" ? "Job started" : "Job marked complete");
+    } catch (err) {
+      showToast(err.message || "Incorrect OTP");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="mt-3 rounded-2xl border border-dashed border-brand/40 bg-brand-light/40 p-3.5">
+      <p className="text-[12.5px] font-semibold text-gray-800">{copy.title}</p>
+      <p className="mt-0.5 text-[11px] text-gray-500">{copy.hint}</p>
+      <div className="mt-3 flex gap-2">
+        <input
+          type="text"
+          inputMode="numeric"
+          maxLength={4}
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
+          placeholder="Enter 4-digit OTP"
+          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-center text-[15px] font-bold tracking-widest text-gray-800 outline-none focus:border-brand"
+        />
+        <button
+          type="submit"
+          disabled={submitting || code.length !== 4}
+          className="flex-shrink-0 rounded-xl bg-brand px-4 py-2.5 text-[12.5px] font-semibold text-white disabled:opacity-50"
+        >
+          {submitting ? "Checking…" : "Verify"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+const CHECKPOINT_STEPS = [
+  { type: "reached_location", label: "Reached the Location" },
+  { type: "started_job", label: "Started the Job" },
+  { type: "left_location", label: "Left the Location" },
+];
+
+function JobCheckpoints({ bookingId, locked }) {
+  const { showToast } = useApp();
+  const [checkpoints, setCheckpoints] = useState([]);
+  const [saving, setSaving] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listJobCheckpoints(bookingId)
+      .then((data) => !cancelled && setCheckpoints(data))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingId]);
+
+  const markDone = (type) => async () => {
+    setSaving(type);
+    try {
+      const checkpoint = await api.addJobCheckpoint(bookingId, type);
+      setCheckpoints((prev) => (prev.some((c) => c.type === type) ? prev : [...prev, checkpoint]));
+    } catch (err) {
+      showToast(err.message || "Couldn't save — please try again");
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return (
+    <div>
+      <h2 className="mb-2 text-[13px] font-bold text-gray-900">Job Checkpoints</h2>
+      <div className="divide-y divide-gray-50 rounded-2xl border border-gray-100">
+        {CHECKPOINT_STEPS.map(({ type, label }) => {
+          const done = checkpoints.find((c) => c.type === type);
+          return (
+            <div key={type} className="flex items-center justify-between px-3 py-2.5">
+              <div>
+                <p className={`text-[12.5px] font-medium ${done ? "text-gray-900" : "text-gray-600"}`}>{label}</p>
+                {done && (
+                  <p className="text-[10.5px] text-gray-400">
+                    {new Date(done.at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                )}
+              </div>
+              {done ? (
+                <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                  <CheckIcon width={13} height={13} />
+                </span>
+              ) : (
+                <button
+                  onClick={markDone(type)}
+                  disabled={locked || saving === type}
+                  className="flex-shrink-0 rounded-lg bg-brand-light px-3 py-1.5 text-[11px] font-semibold text-brand-dark disabled:opacity-50"
+                >
+                  {saving === type ? "Saving…" : "Mark Done"}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

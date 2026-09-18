@@ -420,21 +420,19 @@ export function AppProvider({ children }) {
     [showToast]
   );
 
-  const advanceRequestStatus = useCallback(
-    async (id) => {
-      const order = ["Accepted", "In Progress", "Completed"];
-      const current = requests.find((r) => r.id === id);
-      if (!current) return;
-      const idx = order.indexOf(current.status);
-      const next = order[Math.min(idx + 1, order.length - 1)];
-      const booking = await api.updateBookingStatus(id, next);
+  // Starting and completing a job both require the code the customer sees in
+  // their app — the provider asks for it in person and submits a guess here.
+  const verifyJobOtp = useCallback(
+    async (id, type, code) => {
+      const booking = await api.verifyBookingOtp(id, type, code);
       setRequests((prev) => upsertById(prev, booking));
       if (booking.status === "Completed") {
         refreshEarnings();
         refreshWallet();
       }
+      return booking;
     },
-    [requests, refreshEarnings, refreshWallet]
+    [refreshEarnings, refreshWallet]
   );
 
   const loadMessages = useCallback(async (bookingId) => {
@@ -488,6 +486,12 @@ export function AppProvider({ children }) {
     [provider, showToast]
   );
 
+  const acceptAgreement = useCallback(async () => {
+    const updated = await api.acceptAgreement();
+    setProvider(updated);
+    return updated;
+  }, []);
+
   const markNotificationRead = useCallback(async (id) => {
     const notification = await api.markNotificationRead(id);
     setNotifications((prev) => prev.map((n) => (n.id === id ? notification : n)));
@@ -518,12 +522,13 @@ export function AppProvider({ children }) {
       getRequest,
       acceptRequest,
       rejectRequest,
-      advanceRequestStatus,
+      verifyJobOtp,
       loadMessages,
       sendMessage,
       toggleServiceStatus,
       addService,
       updateProfile,
+      acceptAgreement,
       notifications,
       notificationPrefs,
       updateNotificationPref,
@@ -551,12 +556,13 @@ export function AppProvider({ children }) {
       getRequest,
       acceptRequest,
       rejectRequest,
-      advanceRequestStatus,
+      verifyJobOtp,
       loadMessages,
       sendMessage,
       toggleServiceStatus,
       addService,
       updateProfile,
+      acceptAgreement,
       notifications,
       notificationPrefs,
       updateNotificationPref,

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
-import { timeSlots, defaultAddress } from "../data/mockData";
+import { timeSlots } from "../data/mockData";
 import ScreenHeader from "../components/ScreenHeader";
 import { CalendarIcon, ClockIcon, MapPinIcon, XIcon } from "../components/icons";
 import { discountPct } from "../utils/format";
@@ -51,10 +51,10 @@ export default function CartScreen() {
   };
   const bookingAddress = location
     ? { label: location.label, line: location.line, lat: location.lat, lng: location.lng }
-    : defaultAddress;
+    : null;
 
   const handleCheckout = async () => {
-    if (submitting || lines.length === 0) return;
+    if (submitting || lines.length === 0 || !bookingAddress) return;
     setSubmitting(true);
     try {
       const created = await checkout(bookingAddress);
@@ -157,11 +157,20 @@ export default function CartScreen() {
           </div>
           <div className="flex items-start gap-2 rounded-xl border border-gray-200 px-3 py-2.5">
             <MapPinIcon width={16} height={16} className="mt-0.5 flex-shrink-0 text-gray-400" />
-            <div>
-              <p className="text-[13px] font-semibold text-gray-800">{bookingAddress.label}</p>
-              <p className="text-[11.5px] leading-snug text-gray-500">{bookingAddress.line}</p>
-              {!location && <p className="mt-0.5 text-[10.5px] text-amber-600">Using a placeholder address — tap "Use current location" for accurate pickup.</p>}
-            </div>
+            {bookingAddress ? (
+              <div>
+                <p className="text-[13px] font-semibold text-gray-800">{bookingAddress.label}</p>
+                <p className="text-[11.5px] leading-snug text-gray-500">{bookingAddress.line}</p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-[13px] font-medium text-amber-600">
+                  {locationStatus === "denied"
+                    ? "Location access denied — enable it in your browser/device settings, then tap \"Use current location\"."
+                    : "No address set yet — tap \"Use current location\" above to continue."}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -221,10 +230,10 @@ export default function CartScreen() {
         )}
         <button
           onClick={handleCheckout}
-          disabled={submitting}
+          disabled={submitting || !bookingAddress}
           className="w-full rounded-xl bg-brand py-3.5 text-sm font-semibold text-white shadow-card hover:bg-brand-dark active:scale-[0.98] disabled:opacity-60"
         >
-          {submitting ? "Placing order..." : `Checkout · ₹${payable}`}
+          {submitting ? "Placing order..." : !bookingAddress ? "Set your location to continue" : `Checkout · ₹${payable}`}
         </button>
         <p className="mt-2 text-center text-[10.5px] text-gray-400">
           You won't be charged now. Payment after service completion.

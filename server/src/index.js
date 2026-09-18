@@ -184,6 +184,20 @@ app.post("/api/auth/otp/verify", ah(async (req, res) => {
   res.json({ token, user: provider });
 }));
 
+// One-time production cleanup — see store.removeSeedData for exactly what
+// it matches. Safe to call more than once; a second call deletes nothing.
+app.post("/api/admin/remove-seed-data", auth.requireAuth("admin"), ah(async (req, res) => {
+  const result = await store.removeSeedData();
+  res.json(result);
+}));
+
+app.post("/api/provider/agreement/accept", auth.requireAuth("provider"), ah(async (req, res) => {
+  store.acceptProviderAgreement(req.user.id, { ip: req.ip, userAgent: req.headers["user-agent"] });
+  const provider = await store.getProvider(req.user.id);
+  io.emit("provider:updated", provider);
+  res.status(201).json(provider);
+}));
+
 app.get("/api/auth/me", auth.requireAuth(), ah(async (req, res) => {
   if (req.user.role === "customer") {
     const customer = await store.getCustomerById(req.user.id);
@@ -494,6 +508,9 @@ app.patch("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
     if (existing.customerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
     if (status !== "Cancelled") return res.status(403).json({ error: "Customers can only cancel bookings" });
   }
+  if (req.user.role === "provider" && ["In Progress", "Completed"].includes(status)) {
+    return res.status(400).json({ error: "Starting and completing a job requires the customer's OTP" });
+  }
   // A provider declining doesn't fail the booking outright — try handing it
   // to another provider in the same category first, same as a ring timeout.
   if (req.user.role === "provider" && status === "Rejected" && existing.status === "Pending") {
@@ -628,7 +645,7 @@ app.get("/api/admin/providers/:id/kyc-documents", auth.requireAuth("admin"), ah(
 }));
 
 // ---- job before/after photos (attached to a specific booking, provider must own it) ----
-app.get("/api/bookings/:id/photos", auth.requireAuth("provider", "customer"), ah(async (req, res) => {
+app.get("/api/bookings/:id/photos", auth.requireAuth("provider", "customer", "admin"), ah(async (req, res) => {
   res.json(store.listJobPhotos(req.params.id));
 }));
 
@@ -646,6 +663,39 @@ app.post(
     res.status(201).json(photo);
   })
 );
+
+// ---- on-the-job checkpoints (reached location / started job / left location) ----
+app.get("/api/bookings/:id/checkpoints", auth.requireAuth("provider", "customer", "admin"), ah(async (req, res) => {
+  res.json(store.listJobCheckpoints(req.params.id));
+}));
+
+app.post("/api/bookings/:id/checkpoints", auth.requireAuth("provider"), ah(async (req, res) => {
+  const booking = await store.getBooking(req.params.id);
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  if (booking.providerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
+  const checkpoint = store.addJobCheckpoint(req.params.id, req.body?.type);
+  io.emit("booking:checkpoint", checkpoint);
+  res.status(201).json(checkpoint);
+}));
+
+// ---- work start / job completion OTPs — only the customer can ever see the
+// codes; the provider asks for them in person and submits a guess ----
+app.get("/api/bookings/:id/otp", auth.requireAuth("customer"), ah(async (req, res) => {
+  const booking = await store.getBooking(req.params.id);
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  if (booking.customerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
+  res.json(store.getBookingOtpsForCustomer(req.params.id));
+}));
+
+app.post("/api/bookings/:id/otp/verify", auth.requireAuth("provider"), ah(async (req, res) => {
+  const booking = await store.getBooking(req.params.id);
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  if (booking.providerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
+  const updated = await store.verifyBookingOtp(req.params.id, req.body?.type, req.body?.code);
+  io.emit("booking:updated", updated);
+  io.emit("activity:created", (await store.listActivities(1))[0]);
+  res.json(updated);
+}));
 
 // ---- live location (self-reported every ~30s by the customer/provider apps
 // while a booking is active, so "Get Directions" can target where someone

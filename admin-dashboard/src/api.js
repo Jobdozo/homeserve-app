@@ -45,6 +45,8 @@ export const api = {
   listCategories: () => request("/categories"),
   listServices: () => request("/services"),
   listBookings: () => request("/bookings"),
+  getBookingPhotos: (id) => request(`/bookings/${id}/photos`),
+  getBookingCheckpoints: (id) => request(`/bookings/${id}/checkpoints`),
   setProviderVerification: (id, status) =>
     request(`/providers/${id}/verification`, { method: "PATCH", body: JSON.stringify({ status }) }),
   setServiceStatus: (id, status) =>
@@ -62,6 +64,8 @@ export const api = {
   createBanner: (data) => request("/admin/banners", { method: "POST", body: JSON.stringify(data) }),
   updateBanner: (id, patch) => request(`/admin/banners/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteBanner: (id) => request(`/admin/banners/${id}`, { method: "DELETE" }),
+
+  removeSeedData: () => request("/admin/remove-seed-data", { method: "POST" }),
 
   listOffers: () => request("/admin/offers"),
   createOffer: (data) => request("/admin/offers", { method: "POST", body: JSON.stringify(data) }),
