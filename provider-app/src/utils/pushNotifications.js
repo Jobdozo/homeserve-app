@@ -1,4 +1,5 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
+import { PushNotifications } from "@capacitor/push-notifications";
 import { api } from "../api";
 
 // A VAPID public key comes back base64url-encoded from the server; the Push
@@ -20,6 +21,18 @@ const FcmToken = registerPlugin("FcmToken");
 // screen) is only possible in the native app build — see
 // TikdumMessagingService.java for why a web Service Worker can't do this.
 async function ensureFcmRegistered() {
+  // Android 13+ treats notifications as a dangerous runtime permission —
+  // declaring it in the manifest isn't enough, the OS prompt only appears
+  // once something actually calls requestPermissions(). We only need the
+  // prompt itself here; PushNotifications.register()/addListener() are
+  // deliberately never called, since that plugin's own notification
+  // listener would compete with TikdumMessagingService's full-screen ringing.
+  try {
+    await PushNotifications.requestPermissions();
+  } catch (e) {
+    console.error("Notification permission request failed", e);
+  }
+
   try {
     const { token } = await FcmToken.getToken();
     if (token) await api.saveFcmToken(token);
