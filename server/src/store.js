@@ -351,8 +351,8 @@ async function listServices({ activeOnly = false } = {}) {
   // Suspended providers' services stay off the public/bookable catalog, but
   // remain visible to admin (activeOnly: false) so they aren't hidden there.
   if (!activeOnly) return all;
-  const suspended = new Set(listSuspendedProviderIds());
-  return all.filter((s) => !suspended.has(s.providerId));
+  const active = listActiveWalletProviderIds();
+  return all.filter((s) => active.has(s.providerId));
 }
 
 async function getService(id) {
@@ -1391,8 +1391,13 @@ function isProviderSuspended(providerId) {
 
 // Cheap sync read used to filter the public service catalog — suspended
 // providers' services shouldn't be bookable, without needing a Postgres join.
-function listSuspendedProviderIds() {
-  return jsonStore.readAll("providerWallets").filter((w) => w.balance <= 0).map((w) => w.id);
+// Returns providers with balance > 0, i.e. NOT suspended. A provider with no
+// wallet record at all (never recharged) has no row here, so it's correctly
+// excluded by default — same "no record = ₹0 = suspended" rule as
+// isProviderSuspended, instead of listing suspended IDs (which would only
+// ever contain providers who'd already touched their wallet).
+function listActiveWalletProviderIds() {
+  return new Set(jsonStore.readAll("providerWallets").filter((w) => w.balance > 0).map((w) => w.id));
 }
 
 // Alerts are sent regardless of the provider's optional WhatsApp booking-
