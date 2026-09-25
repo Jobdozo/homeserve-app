@@ -1,8 +1,9 @@
 import { lazy, Suspense, useEffect } from "react";
-import { HashRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { AppProvider, useApp } from "./context/AppContext";
 import { MainLayout, DetailLayout } from "./components/PhoneFrame";
 import LoginScreen from "./screens/LoginScreen";
+import { useAndroidBackButton } from "./utils/useAndroidBackButton";
 
 // Route-level code splitting: only Login (needed before anything else can
 // render) ships in the initial bundle. Every other screen loads on demand
@@ -38,6 +39,8 @@ function ScreenFallback() {
 function AppRoutes() {
   const { customer, authLoading, pendingNotificationBookingId, clearPendingNotification } = useApp();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  useAndroidBackButton({ rootPath: "/home", atRoot: authLoading || !customer || pathname === "/home" });
 
   useEffect(() => {
     if (!pendingNotificationBookingId) return;

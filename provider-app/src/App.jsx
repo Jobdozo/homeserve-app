@@ -1,8 +1,9 @@
 import { lazy, Suspense } from "react";
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AppProvider, useApp } from "./context/AppContext";
 import { MainLayout, DetailLayout } from "./components/PhoneFrame";
 import LoginScreen from "./screens/LoginScreen";
+import { useAndroidBackButton } from "./utils/useAndroidBackButton";
 import AgreementScreen from "./screens/AgreementScreen";
 import RingingOverlay from "./components/RingingOverlay";
 
@@ -37,6 +38,11 @@ function ScreenFallback() {
 
 function AppRoutes() {
   const { provider, authLoading } = useApp();
+  const { pathname } = useLocation();
+  useAndroidBackButton({
+    rootPath: "/dashboard",
+    atRoot: authLoading || !provider || !provider.agreementAccepted || pathname === "/dashboard",
+  });
 
   if (authLoading) {
     return (

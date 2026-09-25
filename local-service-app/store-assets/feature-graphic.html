@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100vw; height: 100vh; overflow: hidden;
+    font-family: 'Segoe UI', Arial, sans-serif;
+  }
+  .stage {
+    width: 1024px; height: 500px;
+    transform-origin: top left;
+  }
+  .banner {
+    width: 1024px; height: 500px;
+    position: relative;
+    background: linear-gradient(135deg, #6d5bf0 0%, #5340d6 55%, #362a94 100%);
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+  }
+  .glow {
+    position: absolute;
+    width: 700px; height: 700px;
+    right: -180px; top: -150px;
+    background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 65%);
+  }
+  .content {
+    position: relative;
+    z-index: 2;
+    padding-left: 72px;
+    max-width: 610px;
+  }
+  .icon {
+    width: 84px; height: 84px;
+    border-radius: 22px;
+    background: linear-gradient(135deg, #8b7bf7, #5340d6);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+    margin-bottom: 28px;
+  }
+  h1 {
+    color: #ffffff;
+    font-size: 54px;
+    font-weight: 800;
+    line-height: 1.08;
+    letter-spacing: -1px;
+  }
+  h1 span { color: #c9befb; }
+  p.tag {
+    color: rgba(255,255,255,0.88);
+    font-size: 23px;
+    font-weight: 500;
+    margin-top: 18px;
+    line-height: 1.4;
+  }
+  .phone {
+    position: absolute;
+    right: 90px; top: 50%;
+    transform: translateY(-50%);
+    width: 260px; height: 460px;
+    background: #14103a;
+    border-radius: 34px;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.4);
+    padding: 10px;
+    z-index: 2;
+  }
+  .screen {
+    width: 100%; height: 100%;
+    background: #ffffff;
+    border-radius: 26px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 22px 18px;
+  }
+  .searchbar {
+    background: #f3f1fe;
+    border-radius: 12px;
+    padding: 12px 14px;
+    color: #a39fc4;
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+  .promo {
+    background: linear-gradient(135deg, #6d5bf0, #4a38c9);
+    border-radius: 14px;
+    padding: 16px;
+    color: #fff;
+    margin-bottom: 16px;
+  }
+  .promo .tag2 {
+    background: rgba(255,255,255,0.22);
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+  }
+  .promo .title {
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+  .catrow { display: flex; gap: 8px; margin-bottom: 16px; }
+  .cat {
+    flex: 1;
+    background: #f7f6fd;
+    border-radius: 12px;
+    padding: 10px 6px;
+    text-align: center;
+  }
+  .cat .dot {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    margin: 0 auto 6px;
+  }
+  .cat:nth-child(1) .dot { background: #c9f2d8; }
+  .cat:nth-child(2) .dot { background: #cfe0fb; }
+  .cat:nth-child(3) .dot { background: #fde8c2; }
+  .cat .label { font-size: 8px; color: #55516f; font-weight: 600; }
+  .servcard {
+    background: #fff;
+    border: 1px solid #eeecf9;
+    border-radius: 12px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .servcard .thumb {
+    width: 38px; height: 38px;
+    border-radius: 9px;
+    background: #ece8fd;
+  }
+  .servcard .name { font-size: 12px; font-weight: 700; color: #221c47; }
+  .servcard .price { font-size: 10.5px; color: #8a86a8; }
+</style>
+</head>
+<body>
+  <div class="stage" id="stage">
+  <div class="banner">
+    <div class="glow"></div>
+    <div class="content">
+      <div class="icon">
+        <svg viewBox="0 0 24 24" fill="none" width="44" height="44"><path d="M5 13l4 4L19 7" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h1>Trusted help, <span>right at home</span></h1>
+      <p class="tag">Book verified local pros for repairs, cleaning &amp; more — track every step in real time.</p>
+    </div>
+    <div class="phone">
+      <div class="screen">
+        <div class="searchbar">Search for services...</div>
+        <div class="promo">
+          <div class="tag2">LIMITED TIME</div>
+          <div class="title">57% OFF Bed Bug Treatment</div>
+        </div>
+        <div class="catrow">
+          <div class="cat"><div class="dot"></div><div class="label">Cleaning</div></div>
+          <div class="cat"><div class="dot"></div><div class="label">AC Repair</div></div>
+          <div class="cat"><div class="dot"></div><div class="label">Plumbing</div></div>
+        </div>
+        <div class="servcard">
+          <div class="thumb"></div>
+          <div>
+            <div class="name">AC Repair &amp; Service</div>
+            <div class="price">Starting ₹499</div>
+          </div>
+        </div>
+        <div class="servcard">
+          <div class="thumb"></div>
+          <div>
+            <div class="name">Electrician Visit</div>
+            <div class="price">Starting ₹299</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <script>
+    function fit() {
+      var s = Math.min(window.innerWidth / 1024, window.innerHeight / 500);
+      document.getElementById('stage').style.transform = 'scale(' + s + ')';
+    }
+    fit();
+    window.addEventListener('resize', fit);
+  </script>
+</body>
+</html>
