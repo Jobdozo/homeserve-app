@@ -1,13 +1,14 @@
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
-import { BellIcon, SendIcon, StarIcon, CheckIcon, WalletIcon } from "../components/icons";
+import { BellIcon, SendIcon, StarIcon, CheckIcon, WalletIcon, AlertIcon } from "../components/icons";
 
 const typeIcon = {
   booking: BellIcon,
   message: SendIcon,
   review: StarIcon,
   wallet: WalletIcon,
+  warning: AlertIcon,
 };
 
 export default function NotificationsScreen() {

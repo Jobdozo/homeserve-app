@@ -29,6 +29,52 @@ export default function ProviderDetailModal({ providerId, onClose }) {
   const [deleting, setDeleting] = useState(false);
   const [pincodeInput, setPincodeInput] = useState(provider?.coverage?.pincodes.join(", ") || "");
   const [savingCoverage, setSavingCoverage] = useState(false);
+  const [capacity, setCapacity] = useState(null);
+  const [maxInput, setMaxInput] = useState("");
+  const [capacityBusy, setCapacityBusy] = useState(false);
+  const [warning, setWarning] = useState("");
+
+  const loadCapacity = () =>
+    api
+      .getProviderCapacity(providerId)
+      .then((c) => {
+        setCapacity(c);
+        setMaxInput(c.customMax === null ? "" : String(c.customMax));
+      })
+      .catch(() => setCapacity(null));
+
+  useEffect(() => {
+    loadCapacity();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providerId]);
+
+  const changeCapacity = async (patch, doneMessage) => {
+    setCapacityBusy(true);
+    try {
+      const c = await api.updateProviderCapacity(providerId, patch);
+      setCapacity(c);
+      setMaxInput(c.customMax === null ? "" : String(c.customMax));
+      showToast(doneMessage);
+    } catch (err) {
+      showToast(err.message || "Failed to update");
+    } finally {
+      setCapacityBusy(false);
+    }
+  };
+
+  const sendWarning = async () => {
+    if (!warning.trim()) return;
+    setCapacityBusy(true);
+    try {
+      await api.warnProvider(providerId, warning.trim());
+      setWarning("");
+      showToast("Warning sent to provider");
+    } catch (err) {
+      showToast(err.message || "Failed to send warning");
+    } finally {
+      setCapacityBusy(false);
+    }
+  };
 
   const loadWallet = () => api.getProviderWallet(providerId).then(setWallet).catch(() => setWallet(null));
 
@@ -269,6 +315,119 @@ export default function ProviderDetailModal({ providerId, onClose }) {
               </button>
             </div>
             <p className="text-[11px] text-gray-400">Empty PIN codes means visible to customers everywhere.</p>
+          </Section>
+
+          <Section title="Open Requests & Visibility">
+            {capacity === null && <p className="text-[12px] text-gray-400">Loading…</p>}
+            {capacity && (
+              <>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-lg bg-gray-50 py-2">
+                    <p className="text-[15px] font-extrabold text-gray-900">
+                      {capacity.openCount}/{capacity.maxOpen}
+                    </p>
+                    <p className="text-[10px] text-gray-400">Open / limit</p>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 py-2">
+                    <p className="text-[15px] font-extrabold text-gray-900">{capacity.oldestOpenDays}d</p>
+                    <p className="text-[10px] text-gray-400">Oldest open</p>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 py-2">
+                    <p className={`text-[13px] font-extrabold ${capacity.restricted ? "text-red-600" : "text-emerald-600"}`}>
+                      {capacity.restricted ? "Hidden" : "Visible"}
+                    </p>
+                    <p className="text-[10px] text-gray-400">To customers</p>
+                  </div>
+                </div>
+                {capacity.reasons.length > 0 && (
+                  <div
+                    className={`rounded-lg px-3 py-2 text-[11.5px] ${
+                      capacity.restricted ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-700"
+                    }`}
+                  >
+                    <p className="font-semibold">
+                      {capacity.restricted ? "Restricted because:" : "Would be restricted, but overridden:"}
+                    </p>
+                    <ul className="mt-0.5 list-disc pl-4">
+                      {capacity.reasons.map((r) => (
+                        <li key={r}>{r}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {capacity.override && (
+                  <p className="rounded-lg bg-emerald-50 px-3 py-2 text-[11.5px] font-medium text-emerald-700">
+                    Override active{" "}
+                    {capacity.override.until
+                      ? `until ${new Date(capacity.override.until).toLocaleString("en-IN")}`
+                      : "until you remove it"}
+                    .
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    value={maxInput}
+                    onChange={(e) => setMaxInput(e.target.value)}
+                    placeholder="Max open requests (blank = platform default)"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] text-gray-800 outline-none focus:border-brand"
+                  />
+                  <button
+                    disabled={capacityBusy}
+                    onClick={() =>
+                      changeCapacity(
+                        { maxOpenRequests: maxInput.trim() === "" ? null : Number(maxInput) },
+                        "Request limit updated"
+                      )
+                    }
+                    className="flex-shrink-0 rounded-lg bg-brand px-3.5 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
+                  >
+                    Save
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    ["Show for 24h", 24],
+                    ["Show for 7 days", 168],
+                    ["Override indefinitely", "indefinite"],
+                  ].map(([label, hours]) => (
+                    <button
+                      key={label}
+                      disabled={capacityBusy}
+                      onClick={() => changeCapacity({ overrideHours: hours }, "Visibility override set")}
+                      className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11.5px] font-semibold text-gray-600 disabled:opacity-50"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  {capacity.override && (
+                    <button
+                      disabled={capacityBusy}
+                      onClick={() => changeCapacity({ overrideHours: null }, "Override removed")}
+                      className="rounded-lg border border-red-200 px-2.5 py-1.5 text-[11.5px] font-semibold text-red-600 disabled:opacity-50"
+                    >
+                      Remove override
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+            <div className="flex gap-2">
+              <input
+                value={warning}
+                onChange={(e) => setWarning(e.target.value)}
+                placeholder="Warning message to the provider"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] text-gray-800 outline-none focus:border-brand"
+              />
+              <button
+                disabled={capacityBusy || !warning.trim()}
+                onClick={sendWarning}
+                className="flex-shrink-0 rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2 text-[12px] font-semibold text-amber-700 disabled:opacity-50"
+              >
+                Send warning
+              </button>
+            </div>
           </Section>
 
           {provider.verificationStatus === "pending" && (

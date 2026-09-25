@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { api } from "../api";
 import { useApp } from "../context/AppContext";
 import { StarIcon, CheckIcon, XIcon } from "../components/icons";
 import ProviderDetailModal from "../components/ProviderDetailModal";
@@ -15,6 +16,11 @@ export default function ProvidersPage() {
   const { providers, approveProvider, rejectProvider } = useApp();
   const [tab, setTab] = useState("All");
   const [openProviderId, setOpenProviderId] = useState(null);
+  const [capacities, setCapacities] = useState({});
+
+  useEffect(() => {
+    api.listProviderCapacities().then(setCapacities).catch(() => {});
+  }, [openProviderId]);
 
   const filtered = useMemo(() => {
     if (tab === "All") return providers;
@@ -68,6 +74,11 @@ export default function ProvidersPage() {
 
             <div className="mt-3 flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2 text-[11px] text-gray-500">
               <span>{p.live ? "🟢 Connected via Provider App" : "⚪ Managed by admin (no live app)"}</span>
+              {capacities[p.id]?.restricted && (
+                <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-600">
+                  Hidden from customers
+                </span>
+              )}
             </div>
 
             {p.phone && <p className="mt-2 text-[11.5px] text-gray-400">{p.phone}</p>}

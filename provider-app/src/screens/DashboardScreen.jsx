@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { api } from "../api";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { BellIcon, StarIcon, ShieldCheckIcon, TrendUpIcon, TrendDownIcon, AlertIcon } from "../components/icons";
@@ -8,6 +9,11 @@ export default function DashboardScreen() {
   const { provider: providerProfile, requests, earnings, wallet, notifications, setAcceptingRequests, showToast } = useApp();
   const accepting = providerProfile.coverage?.acceptingRequests !== false;
   const [togglingRequests, setTogglingRequests] = useState(false);
+  const [capacity, setCapacity] = useState(null);
+  const openRequestCount = requests.filter((r) => ["Pending", "Accepted", "In Progress"].includes(r.status)).length;
+  useEffect(() => {
+    api.getCapacity().then(setCapacity).catch(() => {});
+  }, [openRequestCount]);
   const toggleAccepting = async () => {
     setTogglingRequests(true);
     try {
@@ -85,6 +91,23 @@ export default function DashboardScreen() {
           <span className="switch-knob" />
         </button>
       </div>
+
+      {capacity?.restricted && (
+        <div className="mx-4 mt-3 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-card lg:mx-8 lg:p-6">
+          <AlertIcon width={20} height={20} className="mt-0.5 flex-shrink-0 text-amber-500" />
+          <div>
+            <p className="text-[13px] font-bold text-amber-700">Your services are hidden from new customers</p>
+            <ul className="mt-0.5 list-disc pl-4 text-[11.5px] leading-snug text-amber-700">
+              {capacity.reasons.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+            <p className="mt-1 text-[11px] text-amber-600">
+              They become visible again once these requests are completed or resolved.
+            </p>
+          </div>
+        </div>
+      )}
 
       {wallet.suspended && (
         <div className="mx-4 mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 shadow-card lg:mx-8 lg:mt-6 lg:p-6">

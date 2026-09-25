@@ -14,6 +14,9 @@ export default function SettingsPage() {
   const [friendDiscountInput, setFriendDiscountInput] = useState("");
   const [rewardInput, setRewardInput] = useState("");
   const [savingReferral, setSavingReferral] = useState(false);
+  const [maxOpenInput, setMaxOpenInput] = useState("");
+  const [staleDaysInput, setStaleDaysInput] = useState("");
+  const [savingLimits, setSavingLimits] = useState(false);
   const [cpcRateInput, setCpcRateInput] = useState("");
   const [savingCpcRate, setSavingCpcRate] = useState(false);
   const [confirmingCleanup, setConfirmingCleanup] = useState(false);
@@ -28,6 +31,8 @@ export default function SettingsPage() {
         setFriendDiscountInput(String(s.referralFriendDiscount));
         setRewardInput(String(s.referralReward));
         setCpcRateInput(String(s.cpcRate));
+        setMaxOpenInput(String(s.defaultMaxOpenRequests));
+        setStaleDaysInput(String(s.staleRequestDays));
       })
       .catch((e) => showToast(e.message || "Failed to load settings"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -95,6 +100,33 @@ export default function SettingsPage() {
       showToast(e.message || "Failed to update settings");
     } finally {
       setSavingCpcRate(false);
+    }
+  };
+
+  const limitsValid =
+    maxOpenInput.trim() !== "" &&
+    staleDaysInput.trim() !== "" &&
+    Number.isInteger(Number(maxOpenInput)) &&
+    Number(maxOpenInput) >= 0 &&
+    Number(staleDaysInput) > 0;
+  const limitsDirty =
+    settings &&
+    (Number(maxOpenInput) !== settings.defaultMaxOpenRequests || Number(staleDaysInput) !== settings.staleRequestDays);
+
+  const handleSaveLimits = async () => {
+    if (!limitsValid || savingLimits) return;
+    setSavingLimits(true);
+    try {
+      const updated = await api.updateSettings({
+        defaultMaxOpenRequests: Number(maxOpenInput),
+        staleRequestDays: Number(staleDaysInput),
+      });
+      setSettings(updated);
+      showToast("Open request limits updated");
+    } catch (e) {
+      showToast(e.message || "Failed to update settings");
+    } finally {
+      setSavingLimits(false);
     }
   };
 
@@ -234,6 +266,53 @@ export default function SettingsPage() {
               className="w-full rounded-xl bg-brand py-2.5 text-[13px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50 sm:w-auto sm:px-6"
             >
               {savingCpcRate ? "Saving…" : "Save"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="max-w-md rounded-2xl bg-white p-4 shadow-card sm:p-5">
+        <h2 className="text-[14px] font-bold text-gray-900">Open Request Limits</h2>
+        <p className="mt-1 text-[12px] text-gray-400">
+          A provider is hidden from new customers once they hold this many open (pending, accepted or in-progress)
+          requests, or if any request stays open longer than the day limit. You can override both per provider in
+          Providers Verification.
+        </p>
+        {settings === null ? (
+          <p className="mt-4 text-[12.5px] text-gray-400">Loading…</p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Max open requests</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={maxOpenInput}
+                  onChange={(e) => setMaxOpenInput(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Stale after (days)</label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={staleDaysInput}
+                  onChange={(e) => setStaleDaysInput(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+            </div>
+            {!limitsValid && <p className="text-[11px] text-red-500">Enter a whole number of requests and days.</p>}
+            <button
+              onClick={handleSaveLimits}
+              disabled={!limitsValid || !limitsDirty || savingLimits}
+              className="w-full rounded-xl bg-brand py-2.5 text-[13px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50 sm:w-auto sm:px-6"
+            >
+              {savingLimits ? "Saving…" : "Save"}
             </button>
           </div>
         )}

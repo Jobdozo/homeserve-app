@@ -253,6 +253,30 @@ app.patch("/api/admin/providers/:id/coverage", auth.requireAuth("admin"), ah(asy
   res.json(coverage);
 }));
 
+// ---- open-request capacity & visibility (Provider Verification module) ----
+app.get("/api/admin/provider-capacity", auth.requireAuth("admin"), ah(async (req, res) => {
+  res.json(await store.getAllProviderCapacities());
+}));
+
+app.get("/api/admin/providers/:id/capacity", auth.requireAuth("admin"), ah(async (req, res) => {
+  res.json(await store.getProviderCapacity(req.params.id));
+}));
+
+app.patch("/api/admin/providers/:id/capacity", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { maxOpenRequests, overrideHours } = req.body || {};
+  res.json(await store.updateProviderCapacity(req.params.id, { maxOpenRequests, overrideHours }));
+}));
+
+app.post("/api/admin/providers/:id/warn", auth.requireAuth("admin"), ah(async (req, res) => {
+  const sent = await store.sendProviderWarning(req.params.id, req.body?.message);
+  if (!sent) return res.status(404).json({ error: "Provider not found" });
+  res.json({ sent: true });
+}));
+
+app.get("/api/provider/capacity", auth.requireAuth("provider"), ah(async (req, res) => {
+  res.json(await store.getProviderCapacity(req.user.id));
+}));
+
 // ---- providers ----
 app.get("/api/providers", ah(async (req, res) => res.json(await store.listProviders())));
 

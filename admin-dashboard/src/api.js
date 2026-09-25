@@ -39,6 +39,12 @@ export const api = {
   getProviderEarnings: (id) => request(`/providers/${id}/earnings`),
   getProviderReviews: (id) => request(`/providers/${id}/reviews`),
   getProviderKycDocuments: (id) => request(`/admin/providers/${id}/kyc-documents`),
+  listProviderCapacities: () => request("/admin/provider-capacity"),
+  getProviderCapacity: (id) => request(`/admin/providers/${id}/capacity`),
+  updateProviderCapacity: (id, patch) =>
+    request(`/admin/providers/${id}/capacity`, { method: "PATCH", body: JSON.stringify(patch) }),
+  warnProvider: (id, message) =>
+    request(`/admin/providers/${id}/warn`, { method: "POST", body: JSON.stringify({ message }) }),
   getProviderWallet: (id) => request(`/admin/providers/${id}/wallet`),
   rechargeProviderWallet: (id, amount, note) =>
     request(`/admin/providers/${id}/wallet/recharge`, { method: "POST", body: JSON.stringify({ amount, note }) }),

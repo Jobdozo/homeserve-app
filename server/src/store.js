@@ -169,6 +169,20 @@ function updateProviderCoverage(providerId, patch, { allowServeAllAreas = true }
   if (patch.acceptingRequests !== undefined) {
     next.acceptingRequests = !!patch.acceptingRequests;
   }
+  if (patch.maxOpenRequests !== undefined) {
+    if (patch.maxOpenRequests === null) {
+      next.maxOpenRequests = null;
+    } else {
+      const max = Number(patch.maxOpenRequests);
+      if (!Number.isInteger(max) || max < 0) {
+        throw Object.assign(new Error("Maximum open requests must be a whole number, 0 or more"), { status: 400 });
+      }
+      next.maxOpenRequests = max;
+    }
+  }
+  if (patch.capacityOverride !== undefined) {
+    next.capacityOverride = patch.capacityOverride;
+  }
   const hasExisting = jsonStore.readAll("providerCoverage").some((c) => c.id === providerId);
   const saved = hasExisting ? jsonStore.update("providerCoverage", providerId, next) : jsonStore.insert("providerCoverage", next);
   cacheClear("providers");
@@ -536,7 +550,10 @@ async function listServices({ activeOnly = false, pincode } = {}) {
   // remain visible to admin (activeOnly: false) so they aren't hidden there.
   if (!activeOnly) return all;
   const active = listActiveWalletProviderIds();
-  let result = all.filter((s) => active.has(s.providerId) && isProviderAcceptingRequests(s.providerId));
+  const restrictedIds = await getCapacityRestrictedProviderIds();
+  let result = all.filter(
+    (s) => active.has(s.providerId) && isProviderAcceptingRequests(s.providerId) && !restrictedIds.has(s.providerId)
+  );
   if (pincode) {
     result = result.filter((s) => isProviderVisibleForPincode(s.providerId, pincode));
   }
@@ -851,6 +868,9 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
   if (!isProviderAcceptingRequests(service.providerId)) {
     throw Object.assign(new Error("This provider isn't currently accepting new bookings"), { status: 409 });
   }
+  if ((await getProviderCapacity(service.providerId)).restricted) {
+    throw Object.assign(new Error("This provider isn't currently accepting new bookings"), { status: 409 });
+  }
   if (isProviderSuspended(service.providerId)) {
     throw Object.assign(new Error("This provider isn't currently accepting new bookings"), { status: 409 });
   }
@@ -892,6 +912,7 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
     }
   );
   const bookingId = booking_insert.id;
+  cacheClear("openBookings");
   await mutate(
     `mutation($bookingId: UUID!, $status: String!, $at: Timestamp!) {
       bookingStatusEvent_insert(data: { bookingId: $bookingId, status: $status, at: $at })
@@ -997,6 +1018,7 @@ async function updateBookingStatus(id, status) {
     );
   }
 
+  cacheClear("openBookings");
   const provider = await getProvider(existing.providerId);
   const serviceName = existing.service?.name || "Service";
   await logActivity("booking", `Booking #${id} (${serviceName}) marked ${status}`);
@@ -1062,6 +1084,7 @@ async function updateBookingStatus(id, status) {
 // category rather than leaving the customer stuck ----
 
 async function findAlternativeProviderService(categorySlug, excludeProviderIds) {
+  const restrictedIds = await getCapacityRestrictedProviderIds();
   const categoryUuid = await getCategoryUuidBySlug(categorySlug);
   if (!categoryUuid) return null;
   const { services } = await query(
@@ -1077,7 +1100,8 @@ async function findAlternativeProviderService(categorySlug, excludeProviderIds) 
       s.provider &&
       !excludeProviderIds.includes(s.provider.id) &&
       !isProviderSuspended(s.provider.id) &&
-      isProviderAcceptingRequests(s.provider.id)
+      isProviderAcceptingRequests(s.provider.id) &&
+      !restrictedIds.has(s.provider.id)
   );
   if (!candidate) return null;
   return { serviceId: candidate.id, providerId: candidate.provider.id, amount: candidate.price };
@@ -1103,6 +1127,7 @@ async function reassignBooking(bookingId, excludeProviderIds) {
       }`,
       { id: bookingId, serviceId: candidate.serviceId, providerId: candidate.providerId, amount: candidate.amount }
     );
+    cacheClear("openBookings");
     await logActivity("booking", `Booking #${bookingId} reassigned to another provider after no response`);
     const updated = await fetchBookingWithRelations(bookingId);
     const bookingMessage = `${updated.customer?.name || "A customer"} requested ${updated.service?.name || "a service"} for ${updated.date}`;
@@ -1133,6 +1158,7 @@ async function reassignBooking(bookingId, excludeProviderIds) {
     }`,
     { bookingId, status: "Rejected", at: now }
   );
+  cacheClear("openBookings");
   await logActivity("booking", `Booking #${bookingId} rejected — no providers available`);
   const updated = await fetchBookingWithRelations(bookingId);
   await addNotification({
@@ -1671,7 +1697,7 @@ function validateOffer(code) {
 
 // ---- platform settings (single record, same jsonStore approach as banners/offers) ----
 
-const DEFAULT_SETTINGS = { platformFeePct: 10, referralFriendDiscount: 50, referralReward: 50, cpcRate: 2 };
+const DEFAULT_SETTINGS = { platformFeePct: 10, referralFriendDiscount: 50, referralReward: 50, cpcRate: 2, defaultMaxOpenRequests: 5, staleRequestDays: 5 };
 
 function getSettings() {
   const [existing] = jsonStore.readAll("settings");
@@ -1686,7 +1712,7 @@ function updateSettings(patch) {
     }
     patch = { ...patch, platformFeePct: pct };
   }
-  for (const key of ["referralFriendDiscount", "referralReward", "cpcRate"]) {
+  for (const key of ["referralFriendDiscount", "referralReward", "cpcRate", "defaultMaxOpenRequests", "staleRequestDays"]) {
     if (patch[key] !== undefined) {
       const amount = Number(patch[key]);
       if (!Number.isFinite(amount) || amount < 0) {
@@ -2049,6 +2075,137 @@ async function sendSuspendedWalletReminders() {
       console.error(`Suspended wallet reminder failed for provider ${wallet.id}:`, e);
     }
   }
+}
+
+// ---- open-request capacity & visibility. A provider stops appearing to new
+// customers when (a) they hold at least their maximum number of open
+// requests, or (b) any open request has been waiting longer than the stale
+// threshold; they reappear on their own as requests are completed/resolved.
+// "Open" = not yet resolved: Pending, Accepted or In Progress. An admin can
+// change a provider's limit, or override the restriction (for a set time or
+// indefinitely) — the reason is always available to show them. ----
+
+const OPEN_REQUEST_STATUSES = ["Pending", "Accepted", "In Progress"];
+
+async function getOpenRequestRows() {
+  const cached = cacheGet("openBookings");
+  if (cached) return cached;
+  const { bookings } = await query(
+    `query($statuses: [String!]) { bookings(where: { status: { in: $statuses } }) { id providerId createdAt } }`,
+    { statuses: OPEN_REQUEST_STATUSES }
+  );
+  return cacheSet("openBookings", bookings);
+}
+
+function capacityFor(providerId, rows, settings) {
+  const coverage = getProviderCoverage(providerId);
+  const maxOpen = coverage.maxOpenRequests ?? settings.defaultMaxOpenRequests;
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const times = rows.map((r) => new Date(r.createdAt).getTime());
+  const oldest = times.length ? Math.min(...times) : null;
+  const staleCount = times.filter((t) => now - t > settings.staleRequestDays * dayMs).length;
+  const oldestOpenDays = oldest === null ? 0 : Math.floor((now - oldest) / dayMs);
+
+  const reasons = [];
+  if (rows.length >= maxOpen) {
+    reasons.push(`Reached the maximum of ${maxOpen} open requests (${rows.length}/${maxOpen})`);
+  }
+  if (staleCount > 0) {
+    reasons.push(
+      `${staleCount} request${staleCount > 1 ? "s have" : " has"} been open for more than ${settings.staleRequestDays} days (oldest: ${oldestOpenDays} days)`
+    );
+  }
+  const ov = coverage.capacityOverride;
+  const overrideActive = !!ov && (!ov.until || new Date(ov.until).getTime() > now);
+  return {
+    providerId,
+    openCount: rows.length,
+    maxOpen,
+    customMax: coverage.maxOpenRequests ?? null,
+    oldestOpenDays,
+    staleCount,
+    reasons,
+    override: overrideActive ? ov : null,
+    restricted: reasons.length > 0 && !overrideActive,
+  };
+}
+
+async function getProviderCapacity(providerId) {
+  const settings = getSettings();
+  const rows = (await getOpenRequestRows()).filter((r) => r.providerId === providerId);
+  return capacityFor(providerId, rows, settings);
+}
+
+async function getAllProviderCapacities() {
+  const settings = getSettings();
+  const rows = await getOpenRequestRows();
+  const byProvider = new Map();
+  for (const r of rows) {
+    if (!byProvider.has(r.providerId)) byProvider.set(r.providerId, []);
+    byProvider.get(r.providerId).push(r);
+  }
+  // Providers with a custom limit but no open requests still matter (a limit
+  // of 0 hides them outright), so include every coverage record too.
+  for (const c of jsonStore.readAll("providerCoverage")) {
+    if (!byProvider.has(c.id)) byProvider.set(c.id, []);
+  }
+  const result = {};
+  for (const [id, providerRows] of byProvider) result[id] = capacityFor(id, providerRows, settings);
+  return result;
+}
+
+async function getCapacityRestrictedProviderIds() {
+  const all = await getAllProviderCapacities();
+  return new Set(Object.values(all).filter((c) => c.restricted).map((c) => c.providerId));
+}
+
+// overrideHours: a positive number = visible for that long; "indefinite" =
+// until removed; null = clear any override.
+async function updateProviderCapacity(providerId, { maxOpenRequests, overrideHours }) {
+  const patch = {};
+  if (maxOpenRequests !== undefined) patch.maxOpenRequests = maxOpenRequests;
+  if (overrideHours !== undefined) {
+    if (overrideHours === null) {
+      patch.capacityOverride = null;
+    } else if (overrideHours === "indefinite") {
+      patch.capacityOverride = { until: null, at: new Date().toISOString() };
+    } else {
+      const hours = Number(overrideHours);
+      if (!Number.isFinite(hours) || hours <= 0) {
+        throw Object.assign(new Error("overrideHours must be a positive number, \"indefinite\" or null"), { status: 400 });
+      }
+      patch.capacityOverride = {
+        until: new Date(Date.now() + hours * 60 * 60 * 1000).toISOString(),
+        at: new Date().toISOString(),
+      };
+    }
+  }
+  updateProviderCoverage(providerId, patch);
+  const provider = await getProvider(providerId);
+  await logActivity("provider", `Capacity settings changed for ${provider?.name || "a provider"}`);
+  return getProviderCapacity(providerId);
+}
+
+async function sendProviderWarning(providerId, message) {
+  const text = String(message || "").trim();
+  if (!text) throw Object.assign(new Error("A warning message is required"), { status: 400 });
+  const provider = await getProvider(providerId);
+  if (!provider) return false;
+  await addNotification({
+    recipientType: "provider",
+    recipientId: providerId,
+    type: "warning",
+    title: "Warning from Tikdum",
+    message: text,
+  });
+  try {
+    if (provider.phone) await whatsapp.sendWhatsAppMessage(provider.phone, `Tikdum notice: ${text}`);
+  } catch (e) {
+    console.error("Provider warning WhatsApp failed:", e);
+  }
+  await logActivity("provider", `Warning sent to ${provider.name}`);
+  return true;
 }
 
 // ---- CPC advertising (jsonStore-backed). A provider "advertises" one of
@@ -2435,6 +2592,10 @@ module.exports = {
   saveCustomerAddress,
   getProviderCoverage,
   updateProviderCoverage,
+  getProviderCapacity,
+  getAllProviderCapacities,
+  updateProviderCapacity,
+  sendProviderWarning,
   listProviderAdsWithStats,
   createAd,
   setAdStatus,
