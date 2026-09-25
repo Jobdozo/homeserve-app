@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../api";
 import { StarIcon, ChevronRightIcon } from "./icons";
 import { formatCount, discountPct } from "../utils/format";
 import CategoryIcon from "./CategoryIcon";
@@ -24,6 +25,7 @@ const FALLBACK_SECTIONS = [
 function useBannerTarget() {
   const navigate = useNavigate();
   return (b) => {
+    api.trackBannerClick(b.id);
     if (b.linkType === "service" && b.linkId) navigate(`/service/${b.linkId}`);
     else if (b.linkType === "category" && b.linkId) navigate(`/category/${b.linkId}`);
   };

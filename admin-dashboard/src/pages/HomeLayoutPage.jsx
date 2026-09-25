@@ -22,6 +22,16 @@ const PLACEMENTS = [
   { value: "inline", label: "Inline — after the Nth service card" },
   { value: "strip", label: "Strip — small chips under search" },
 ];
+const STATUS_STYLES = {
+  live: ["Live", "bg-emerald-100 text-emerald-700"],
+  scheduled: ["Scheduled", "bg-blue-100 text-blue-700"],
+  expired: ["Expired", "bg-gray-200 text-gray-500"],
+  budget_exhausted: ["Budget used up", "bg-amber-100 text-amber-700"],
+  inactive: ["Inactive", "bg-gray-200 text-gray-500"],
+};
+const inr = (n) => `₹${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+const fmtDay = (d) => (d ? new Date(`${d}T00:00:00+05:30`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "");
+
 const COLORS = {
   brand: "bg-brand",
   emerald: "bg-emerald-500",
@@ -38,7 +48,7 @@ export default function HomeLayoutPage() {
       <div className="flex gap-2">
         {[
           ["sections", "Home sections"],
-          ["banners", "Promotional banners"],
+          ["banners", "Banners & CPC"],
         ].map(([id, label]) => (
           <button
             key={id}
@@ -256,13 +266,29 @@ function BannersPanel() {
         <div>
           <h2 className="text-[14px] font-bold text-gray-900">Promotional banners</h2>
           <p className="text-[12px] text-gray-500">
-            Hero banners sit at the top of home. Inline banners appear after the chosen service card — add one with 3 and one with 5 to get a banner after the 3rd and 5th service.
+            Hero banners sit at the top of home. Inline banners appear after the chosen service card — add one with 3 and one with 5 to get a banner after the 3rd and 5th service. Clicks are counted only when a banner opens a service or category.
           </p>
         </div>
         <button className={btnCls} onClick={() => setEditing({})}>
           + Add banner
         </button>
       </div>
+
+      {banners && banners.length > 0 && (
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            ["Live now", banners.filter((b) => b.status === "live").length],
+            ["Total clicks", banners.reduce((n, b) => n + (b.clicks || 0), 0).toLocaleString("en-IN")],
+            ["CPC banners", banners.filter((b) => b.cpcEnabled).length],
+            ["Ad spend", inr(banners.reduce((n, b) => n + (b.spend || 0), 0))],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-xl bg-gray-50 px-3.5 py-3">
+              <p className="text-[10.5px] font-medium uppercase tracking-wide text-gray-400">{label}</p>
+              <p className="text-[17px] font-bold text-gray-900">{value}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="mt-4 divide-y divide-gray-50">
         {banners === null && <p className="py-6 text-center text-[12px] text-gray-400">Loading…</p>}
@@ -277,16 +303,25 @@ function BannersPanel() {
               <p className="truncate text-[11px] text-gray-400">
                 {placementText(b)}
                 {b.linkType && b.linkType !== "none" ? ` · links to a ${b.linkType}` : ""}
-                {b.subtitle ? ` · ${b.subtitle}` : ""}
+                {b.startsAt || b.endsAt ? ` · ${b.startsAt ? fmtDay(b.startsAt) : "…"} → ${b.endsAt ? fmtDay(b.endsAt) : "no end"}` : ""}
+              </p>
+              <p className="text-[11px] text-gray-500">
+                {(b.clicks || 0).toLocaleString("en-IN")} click{b.clicks === 1 ? "" : "s"}
+                {b.cpcEnabled
+                  ? ` · CPC ${inr(b.effectiveCpcRate)} · spent ${inr(b.spend)}${b.budget > 0 ? ` of ${inr(b.budget)}` : " (no cap)"}${b.advertiser ? ` · ${b.advertiser}` : ""}`
+                  : " · not a CPC banner"}
               </p>
             </div>
+            <span className={`rounded-full px-2.5 py-1 text-[10.5px] font-bold ${(STATUS_STYLES[b.status] || STATUS_STYLES.live)[1]}`}>
+              {(STATUS_STYLES[b.status] || STATUS_STYLES.live)[0]}
+            </span>
             <button
               onClick={() => run(() => api.updateBanner(b.id, { active: b.active === false }))}
               className={`rounded-full px-2.5 py-1 text-[10.5px] font-bold ${
                 b.active !== false ? "bg-emerald-100 text-emerald-700" : "bg-gray-200 text-gray-500"
               }`}
             >
-              {b.active !== false ? "Active" : "Hidden"}
+              {b.active !== false ? "Deactivate" : "Activate"}
             </button>
             <button className={ghostBtnCls} onClick={() => setEditing(b)}>
               Edit
@@ -332,6 +367,12 @@ function BannerModal({ banner, onClose, onSave }) {
     linkType: banner.linkType || "none",
     linkId: banner.linkId || "",
     ctaLabel: banner.ctaLabel || "",
+    startsAt: banner.startsAt || "",
+    endsAt: banner.endsAt || "",
+    cpcEnabled: Boolean(banner.cpcEnabled),
+    cpcRate: banner.cpcRate ?? "",
+    budget: banner.budget || "",
+    advertiser: banner.advertiser || "",
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const targets = f.linkType === "service" ? services : f.linkType === "category" ? categories : [];
@@ -415,6 +456,45 @@ function BannerModal({ banner, onClose, onSave }) {
             )}
           </>
         )}
+        <div className="grid grid-cols-2 gap-2.5">
+          <div>
+            <label className={labelCls}>Start date (optional)</label>
+            <input type="date" className={inputCls} value={f.startsAt} onChange={(e) => set("startsAt", e.target.value)} />
+          </div>
+          <div>
+            <label className={labelCls}>End date (optional)</label>
+            <input type="date" className={inputCls} min={f.startsAt || undefined} value={f.endsAt} onChange={(e) => set("endsAt", e.target.value)} />
+          </div>
+        </div>
+        <p className="-mt-1 text-[11px] text-gray-400">Both dates are inclusive, India time. Leave blank to run with no schedule.</p>
+
+        <div className="rounded-xl border border-gray-100 p-3">
+          <label className="flex items-center gap-2 text-[12.5px] font-semibold text-gray-800">
+            <input type="checkbox" checked={f.cpcEnabled} onChange={(e) => set("cpcEnabled", e.target.checked)} />
+            Run as a CPC (cost-per-click) ad
+          </label>
+          {f.cpcEnabled && (
+            <div className="mt-3 space-y-2.5">
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className={labelCls}>Rate per click (₹)</label>
+                  <input type="number" min={0} step="0.5" className={inputCls} value={f.cpcRate} onChange={(e) => set("cpcRate", e.target.value)} placeholder="Platform default" />
+                </div>
+                <div>
+                  <label className={labelCls}>Budget cap (₹)</label>
+                  <input type="number" min={0} className={inputCls} value={f.budget} onChange={(e) => set("budget", e.target.value)} placeholder="0 = no cap" />
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>Advertiser (optional)</label>
+                <input className={inputCls} value={f.advertiser} onChange={(e) => set("advertiser", e.target.value)} placeholder="Who is paying for this banner" />
+              </div>
+              <p className="text-[11px] text-gray-400">
+                Each customer tap adds the rate to this banner's spend (repeat taps within a minute count once). The banner stops showing when the budget is reached. Blank rate uses the CPC rate from Settings.
+              </p>
+            </div>
+          )}
+        </div>
         <div className="flex justify-end gap-2 pt-1">
           <button className={ghostBtnCls} onClick={onClose}>
             Cancel
@@ -422,7 +502,7 @@ function BannerModal({ banner, onClose, onSave }) {
           <button
             className={btnCls}
             disabled={!f.title.trim() || (f.linkType !== "none" && !f.linkId)}
-            onClick={() => onSave({ ...f, afterItems: Number(f.afterItems) || 3 })}
+            onClick={() => onSave({ ...f, afterItems: Number(f.afterItems) || 3, budget: Number(f.budget) || 0 })}
           >
             Save
           </button>

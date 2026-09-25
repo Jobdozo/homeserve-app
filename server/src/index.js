@@ -576,6 +576,13 @@ app.patch("/api/admin/banners/:id", auth.requireAuth("admin"), ah(async (req, re
   res.json(banner);
 }));
 
+// Tap tracking for banner click/CPC reporting. Anyone can tap, so the
+// counting is deduplicated per customer/device in the store.
+app.post("/api/banners/:id/click", ah(async (req, res) => {
+  const user = await optionalUser(req);
+  res.json(store.registerBannerClick(req.params.id, user?.id || req.ip || "anon"));
+}));
+
 // ---- customer home layout (CMS): sections, banners, booking counts ----
 app.get("/api/home-layout", ah(async (req, res) => res.json(await store.getHomeLayout())));
 

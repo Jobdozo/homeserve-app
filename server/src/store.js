@@ -2015,12 +2015,68 @@ async function getAdminReports() {
 // ---- banners (admin-managed promo carousel — small, low-volume config data,
 // stored as flat JSON rather than a Postgres table; see jsonStore.js) ----
 
+// Schedule dates are calendar days (YYYY-MM-DD) in India time.
+const IST = "+05:30";
+const dayStart = (d) => new Date(`${d}T00:00:00.000${IST}`).getTime();
+const dayEnd = (d) => new Date(`${d}T23:59:59.999${IST}`).getTime();
+
+// live | scheduled | expired | budget_exhausted | inactive — what the customer
+// app will actually show right now.
+function bannerStatus(b, now = Date.now()) {
+  if (b.active === false) return "inactive";
+  if (b.startsAt && now < dayStart(b.startsAt)) return "scheduled";
+  if (b.endsAt && now > dayEnd(b.endsAt)) return "expired";
+  if (b.cpcEnabled && b.budget > 0 && (b.spend || 0) >= b.budget) return "budget_exhausted";
+  return "live";
+}
+
 function listBanners() {
-  return jsonStore.readAll("banners").sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const { cpcRate } = getSettings();
+  return jsonStore
+    .readAll("banners")
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map((b) => ({
+      ...b,
+      clicks: b.clicks || 0,
+      spend: b.spend || 0,
+      effectiveCpcRate: b.cpcEnabled ? (b.cpcRate ?? cpcRate) : 0,
+      status: bannerStatus(b),
+    }));
 }
 
 function listActiveBanners() {
-  return listBanners().filter((b) => b.active !== false);
+  return listBanners()
+    .filter((b) => b.status === "live")
+    .map(({ clicks, spend, cpcRate, cpcEnabled, budget, effectiveCpcRate, advertiser, ...pub }) => pub);
+}
+
+// Repeat taps from one customer/device inside this window are one click — a
+// double-tap or refresh shouldn't run up an advertiser's bill.
+const BANNER_CLICK_WINDOW_MS = 60 * 1000;
+const recentBannerClicks = new Map();
+
+// Records a tap on a live banner. Every tap on a live banner counts as a click;
+// CPC banners also add the per-click rate to their spend, and stop showing once
+// the budget is reached.
+function registerBannerClick(id, clientKey) {
+  const banner = jsonStore.readAll("banners").find((b) => b.id === id);
+  if (!banner || bannerStatus(banner) !== "live") return { counted: false, charged: false };
+  const key = `${id}:${clientKey}`;
+  const last = recentBannerClicks.get(key);
+  const now = Date.now();
+  if (last && now - last < BANNER_CLICK_WINDOW_MS) return { counted: false, charged: false, duplicate: true };
+  recentBannerClicks.set(key, now);
+  if (recentBannerClicks.size > 5000) {
+    for (const [k, t] of recentBannerClicks) if (now - t > BANNER_CLICK_WINDOW_MS) recentBannerClicks.delete(k);
+  }
+  const { cpcRate } = getSettings();
+  const rate = banner.cpcEnabled ? Number(banner.cpcRate ?? cpcRate) || 0 : 0;
+  jsonStore.update("banners", id, {
+    clicks: (banner.clicks || 0) + 1,
+    spend: Math.round(((banner.spend || 0) + rate) * 100) / 100,
+    lastClickAt: new Date().toISOString(),
+  });
+  return { counted: true, charged: rate > 0 };
 }
 
 const BANNER_PLACEMENTS = ["strip", "hero", "inline"];
@@ -2045,6 +2101,29 @@ function cleanBannerFields(input) {
   if (input.linkType !== undefined) out.linkType = ["none", "service", "category"].includes(input.linkType) ? input.linkType : "none";
   if (input.linkId !== undefined) out.linkId = String(input.linkId || "");
   if (input.ctaLabel !== undefined) out.ctaLabel = String(input.ctaLabel || "").trim().slice(0, 24);
+  for (const k of ["startsAt", "endsAt"]) {
+    if (input[k] === undefined) continue;
+    const d = String(input[k] || "").trim();
+    if (d && (!/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(dayStart(d)))) throw new Error("Dates must be valid (YYYY-MM-DD)");
+    out[k] = d;
+  }
+  if (out.startsAt && out.endsAt && out.endsAt < out.startsAt) throw new Error("End date can't be before the start date");
+  if (input.cpcEnabled !== undefined) out.cpcEnabled = Boolean(input.cpcEnabled);
+  if (input.cpcRate !== undefined) {
+    // Blank = use the platform-wide CPC rate from Settings.
+    if (input.cpcRate === "" || input.cpcRate === null) out.cpcRate = null;
+    else {
+      const r = Number(input.cpcRate);
+      if (!Number.isFinite(r) || r < 0) throw new Error("CPC rate must be 0 or more");
+      out.cpcRate = Math.round(r * 100) / 100;
+    }
+  }
+  if (input.budget !== undefined) {
+    const b = Number(input.budget || 0);
+    if (!Number.isFinite(b) || b < 0) throw new Error("Budget must be 0 or more (0 = no limit)");
+    out.budget = b;
+  }
+  if (input.advertiser !== undefined) out.advertiser = String(input.advertiser || "").trim().slice(0, 60);
   return out;
 }
 
@@ -3155,6 +3234,7 @@ module.exports = {
   getAdminReports,
   listBanners,
   listActiveBanners,
+  registerBannerClick,
   listHomeSections,
   createHomeSection,
   updateHomeSection,

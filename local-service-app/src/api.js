@@ -54,6 +54,7 @@ export const api = {
   getBookingOtp: (bookingId) => request(`/bookings/${bookingId}/otp`),
   listBanners: () => request("/banners"),
   getHomeLayout: () => request("/home-layout"),
+  trackBannerClick: (id) => request(`/banners/${id}/click`, { method: "POST" }).catch(() => null),
   getVapidPublicKey: () => request("/push/vapid-public-key"),
   subscribePush: (subscription) => request("/push/subscribe", { method: "POST", body: JSON.stringify({ subscription }) }),
   unsubscribePush: (endpoint) => request("/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
