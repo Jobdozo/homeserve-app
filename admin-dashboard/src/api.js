@@ -106,6 +106,9 @@ export const api = {
   updateBanner: (id, patch) => request(`/admin/banners/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteBanner: (id) => request(`/admin/banners/${id}`, { method: "DELETE" }),
 
+  getMonitoring: (params) => request(`/admin/monitoring?${new URLSearchParams(params)}`),
+  getMonitoringReport: (type, params) => request(`/admin/monitoring/report?${new URLSearchParams({ ...params, type })}`),
+
   getCommunicationFees: () => request("/admin/communication-fees"),
   setCommunicationFee: (type, id, data) =>
     request(`/admin/communication-fees/${type}/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(data) }),

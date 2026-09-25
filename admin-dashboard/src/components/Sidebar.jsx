@@ -18,6 +18,7 @@ import {
   ArchiveIcon,
   SupportIcon,
   DownloadIcon,
+  RequestIcon,
 } from "./icons";
 
 const sections = [
@@ -31,6 +32,7 @@ const sections = [
   {
     items: [
       { label: "Providers Verification", icon: ShieldCheckIcon, to: "/providers" },
+      { label: "Live Provider Monitoring", icon: RequestIcon, to: "/monitoring" },
       { label: "Services & Categories", icon: GridIcon, to: "/services" },
       { label: "Locations", icon: MapPinIcon, sub: "Cities / Areas / PIN Codes" },
       { label: "Bookings", icon: CalendarIcon, to: "/bookings" },

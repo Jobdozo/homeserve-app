@@ -7,6 +7,7 @@ import CustomersPage from "./pages/CustomersPage";
 import ProvidersPage from "./pages/ProvidersPage";
 import ServicesPage from "./pages/ServicesPage";
 import HomeLayoutPage from "./pages/HomeLayoutPage";
+import MonitoringPage from "./pages/MonitoringPage";
 import BookingsPage from "./pages/BookingsPage";
 import ReviewsPage from "./pages/ReviewsPage";
 import DisputesPage from "./pages/DisputesPage";
@@ -38,6 +39,7 @@ function AppRoutes() {
         <Route path="/providers" element={<ProvidersPage />} />
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/home-layout" element={<HomeLayoutPage />} />
+        <Route path="/monitoring" element={<MonitoringPage />} />
         <Route path="/bookings" element={<BookingsPage />} />
         <Route path="/reviews" element={<ReviewsPage />} />
         <Route path="/disputes" element={<DisputesPage />} />

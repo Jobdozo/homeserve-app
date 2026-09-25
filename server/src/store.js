@@ -3425,6 +3425,7 @@ module.exports = {
   listBanners,
   listActiveBanners,
   calcCommunicationFee,
+  getFeeLedger: feeLedger,
   resolveFeeConfig,
   bookingCommunicationFee,
   listFeeOverrides,

@@ -6,6 +6,7 @@ const compression = require("compression");
 const http = require("http");
 const { Server } = require("socket.io");
 const store = require("./store");
+const monitoring = require("./monitoring");
 const csvImport = require("./csvImport");
 const auth = require("./auth");
 const { sendOtpViaWhatsApp } = require("./whatsapp");
@@ -32,6 +33,14 @@ app.use(compression());
 app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json());
 app.use("/uploads", express.static(UPLOADS_DIR));
+
+// Every authenticated provider request doubles as a presence heartbeat for
+// Live Service Provider Monitoring (the app polls every ~30s while open).
+app.use((req, res, next) => {
+  const user = optionalUser(req);
+  if (user?.role === "provider") monitoring.touchProvider(user.id);
+  next();
+});
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: ALLOWED_ORIGINS } });
@@ -1157,6 +1166,15 @@ app.delete("/api/admin/communication-fees/:type/:id", auth.requireAuth("admin"),
     return res.status(404).json({ error: "No custom charge set" });
   }
   res.status(204).end();
+}));
+
+// ---- Live Service Provider Monitoring ----
+app.get("/api/admin/monitoring", auth.requireAuth("admin"), ah(async (req, res) => {
+  res.json(await monitoring.snapshot(req.query));
+}));
+
+app.get("/api/admin/monitoring/report", auth.requireAuth("admin"), ah(async (req, res) => {
+  res.json(await monitoring.report(String(req.query.type || ""), req.query));
 }));
 
 app.get("/api/admin/transactions", auth.requireAuth("admin"), ah(async (req, res) => {
