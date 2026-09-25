@@ -475,6 +475,7 @@ app.patch("/api/admin/categories/:id", auth.requireAuth("admin"), ah(async (req,
 
 app.delete("/api/admin/categories/:id", auth.requireAuth("admin"), ah(async (req, res) => {
   const deleted = await store.deleteCategory(req.params.id, actorOf(req));
+  if (deleted) store.dropFeeOverride("category", req.params.id);
   if (!deleted) return res.status(404).json({ error: "Category not found" });
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.json({ deleted: true });
@@ -715,6 +716,7 @@ app.patch("/api/admin/services/:id", auth.requireAuth("admin"), ah(async (req, r
 
 app.delete("/api/admin/services/:id", auth.requireAuth("admin"), ah(async (req, res) => {
   const deleted = await store.adminDeleteService(req.params.id, actorOf(req));
+  if (deleted) store.dropFeeOverride("service", req.params.id);
   if (!deleted) return res.status(404).json({ error: "Service not found" });
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.json({ deleted: true });
@@ -1127,6 +1129,34 @@ app.patch("/api/admin/settings", auth.requireAuth("admin"), ah(async (req, res) 
     );
   }
   res.json(settings);
+}));
+
+// Communication charges per service / category (priority: service > category > global).
+app.get("/api/admin/communication-fees", auth.requireAuth("admin"), ah(async (req, res) => {
+  const s = store.getSettings();
+  res.json({
+    defaults: {
+      enabled: s.communicationFeeEnabled,
+      pct: s.communicationFeePct,
+      max: s.communicationFeeMax,
+      min: s.communicationFeeMin,
+    },
+    overrides: store.listFeeOverrides(),
+  });
+}));
+
+app.put("/api/admin/communication-fees/:type/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const record = await store.setFeeOverride(req.params.type, req.params.id, req.body || {}, actorOf(req));
+  if (!record) return res.status(404).json({ error: "Not found" });
+  res.json(record);
+}));
+
+app.delete("/api/admin/communication-fees/:type/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  if (!["service", "category"].includes(req.params.type)) return res.status(400).json({ error: "Invalid type" });
+  if (!(await store.clearFeeOverride(req.params.type, req.params.id, actorOf(req)))) {
+    return res.status(404).json({ error: "No custom charge set" });
+  }
+  res.status(204).end();
 }));
 
 app.get("/api/admin/transactions", auth.requireAuth("admin"), ah(async (req, res) => {

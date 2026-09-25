@@ -5,6 +5,7 @@ import { StarIcon, CheckIcon, XIcon } from "../components/icons";
 import { formatCount, discountPct } from "../utils/format";
 import CategoryIcon from "../components/CategoryIcon";
 import { ChangeHistoryModal } from "../components/ChangeHistory";
+import { CommunicationChargesProvider, ChargesCell } from "../components/CommunicationCharges";
 
 const TABS = [
   { label: "All", status: null },
@@ -28,6 +29,14 @@ const statusLabels = { pending_approval: "pending approval" };
 // One module for both: the tiles at the top are the six headline numbers and
 // jump straight to the matching list below.
 export default function ServicesPage() {
+  return (
+    <CommunicationChargesProvider>
+      <ServicesModule />
+    </CommunicationChargesProvider>
+  );
+}
+
+function ServicesModule() {
   const { categories, services, refreshData } = useApp();
   const [view, setView] = useState("services");
   const [pendingChanges, setPendingChanges] = useState([]);
@@ -163,6 +172,7 @@ function ServicesPanel({ tab, setTab }) {
                 <th className="px-4 py-3 font-medium">Price</th>
                 <th className="px-4 py-3 font-medium">Rating</th>
                 <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Communication charge</th>
                 <th className="px-4 py-3 font-medium">Moderate</th>
               </tr>
             </thead>
@@ -210,6 +220,9 @@ function ServicesPanel({ tab, setTab }) {
                       >
                         {statusLabels[s.status] || s.status}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <ChargesCell type="service" id={s.id} name={s.name} categoryId={s.categoryId} />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -283,7 +296,7 @@ function ServicesPanel({ tab, setTab }) {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={8} className="px-4 py-10 text-center text-gray-400">
                     No {tab.toLowerCase()} services.
                   </td>
                 </tr>
@@ -546,6 +559,7 @@ function CategoriesPanel({ filter, setFilter }) {
                 <th className="px-4 py-3 font-medium">Category</th>
                 <th className="px-4 py-3 font-medium">Services</th>
                 <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Communication charge</th>
                 <th className="px-4 py-3 font-medium">Manage</th>
               </tr>
             </thead>
@@ -569,6 +583,9 @@ function CategoriesPanel({ filter, setFilter }) {
                       >
                         {active ? "active" : "inactive"}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <ChargesCell type="category" id={c.id} name={c.name} />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -613,7 +630,7 @@ function CategoriesPanel({ filter, setFilter }) {
               })}
               {visible.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={5} className="px-4 py-10 text-center text-gray-400">
                     No {filter === "all" ? "" : filter} categories.
                   </td>
                 </tr>

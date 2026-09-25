@@ -1793,9 +1793,10 @@ function buildEarningsPeriod({ completed, cancelled, inProgressTotal, platformFe
   const prevTotal = sumInRange(completed, prevStart, prevEnd);
   const changePct = prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : total > 0 ? 100 : 0;
   const cancelledJobs = sumInRange(cancelled, start);
+  const ctx = { overrides: listFeeOverrides(), ledger: feeLedger() };
   const platformFeeAmt = completed
     .filter((b) => earningsEventDate(b) >= start)
-    .reduce((sum, b) => sum + bookingCommunicationFee(b, cfg), 0);
+    .reduce((sum, b) => sum + bookingCommunicationFee(b, cfg, ctx), 0);
   return {
     total,
     changePct,
@@ -1948,11 +1949,12 @@ async function getAdminOverview() {
 async function getTransactions() {
   const [bookings, providers] = await Promise.all([listBookings(), listProviders()]);
   const cfg = getSettings();
+  const ctx = { overrides: listFeeOverrides(), ledger: feeLedger() };
   return bookings
     .filter((b) => b.status === "Completed")
     .map((b) => {
       const provider = providers.find((p) => p.id === b.providerId);
-      const platformFee = bookingCommunicationFee(b, cfg);
+      const platformFee = bookingCommunicationFee(b, cfg, ctx);
       return {
         id: b.id,
         service: b.service?.name,
@@ -2010,7 +2012,8 @@ async function getAdminReports() {
     .sort((a, b) => b.revenue - a.revenue);
 
   const cfg = getSettings();
-  const platformRevenue = completed.reduce((sum, b) => sum + bookingCommunicationFee(b, cfg), 0);
+  const feeCtx = { overrides: listFeeOverrides(), ledger: feeLedger() };
+  const platformRevenue = completed.reduce((sum, b) => sum + bookingCommunicationFee(b, cfg, feeCtx), 0);
 
   return { revenueByCategory, statusDistribution, providerLeaderboard, platformRevenue };
 }
@@ -2366,8 +2369,106 @@ function calcCommunicationFee(amount, cfg = getSettings()) {
   return Math.round(Math.min(fee, amt));
 }
 
-function bookingCommunicationFee(booking, cfg = getSettings()) {
-  return calcCommunicationFee(applicableAmount(booking, cfg), cfg);
+// ---- per-service / per-category communication charges. Priority: the
+// service's own charge, else its category's, else the global default above.
+// An override replaces enabled/percentage/max/min; the applicable-amount basis
+// and apply-from threshold stay global. ----
+
+const FEE_OVERRIDES = "communicationFeeOverrides";
+const feeKey = (type, id) => `${type}:${id}`;
+
+function listFeeOverrides() {
+  return jsonStore.readAll(FEE_OVERRIDES);
+}
+
+function cleanFeeOverride(input) {
+  const pct = Number(input.pct);
+  if (input.pct === "" || input.pct === null || input.pct === undefined || !Number.isFinite(pct) || pct < 0 || pct > 100) {
+    throw Object.assign(new Error("Percentage must be between 0 and 100"), { status: 400 });
+  }
+  const max = Number(input.max || 0);
+  const min = Number(input.min || 0);
+  if (!Number.isFinite(max) || max < 0 || !Number.isFinite(min) || min < 0) {
+    throw Object.assign(new Error("Fee amounts must be 0 or more"), { status: 400 });
+  }
+  if (max > 0 && min > max) throw Object.assign(new Error("Minimum fee can't be higher than the maximum fee"), { status: 400 });
+  return { enabled: input.enabled !== false, pct, max, min };
+}
+
+async function setFeeOverride(type, id, input, actor) {
+  if (!["service", "category"].includes(type)) throw Object.assign(new Error("Invalid type"), { status: 400 });
+  const entity = type === "service" ? await getService(id).catch(() => null) : (await listCategories()).find((c) => c.id === id);
+  if (!entity) return null;
+  const next = cleanFeeOverride(input);
+  const before = jsonStore.readAll(FEE_OVERRIDES).find((o) => o.id === feeKey(type, id));
+  const record = { id: feeKey(type, id), entityType: type, entityId: id, ...next, updatedAt: new Date().toISOString() };
+  if (before) jsonStore.update(FEE_OVERRIDES, record.id, record);
+  else jsonStore.insert(FEE_OVERRIDES, record);
+  recordAdminChange({
+    actor,
+    action: "fee.update",
+    entityType: type,
+    entityId: id,
+    entityName: entity.name,
+    changes: diffValues(before || {}, next, ["enabled", "pct", "max", "min"]).map((c) => ({ ...c, field: `fee.${c.field}` })),
+  });
+  return record;
+}
+
+async function clearFeeOverride(type, id, actor) {
+  const before = jsonStore.readAll(FEE_OVERRIDES).find((o) => o.id === feeKey(type, id));
+  if (!before) return false;
+  jsonStore.remove(FEE_OVERRIDES, before.id);
+  const entity = type === "service" ? await getService(id).catch(() => null) : null;
+  recordAdminChange({
+    actor,
+    action: "fee.clear",
+    entityType: type,
+    entityId: id,
+    entityName: entity?.name || id,
+    changes: [],
+  });
+  return true;
+}
+
+// Drops overrides for a service/category that no longer exists.
+function dropFeeOverride(type, id) {
+  jsonStore.remove(FEE_OVERRIDES, feeKey(type, id));
+}
+
+// The rules that apply to a booking: { cfg, source: "service" | "category" | "default" }.
+function resolveFeeConfig(booking, cfg = getSettings(), overrides = listFeeOverrides()) {
+  const serviceId = booking?.serviceId || booking?.service?.id;
+  const categoryId = booking?.service?.categoryId;
+  const byService = serviceId && overrides.find((o) => o.id === feeKey("service", serviceId));
+  const byCategory = categoryId && overrides.find((o) => o.id === feeKey("category", categoryId));
+  const o = byService || byCategory;
+  if (!o) return { cfg, source: "default" };
+  return {
+    cfg: {
+      ...cfg,
+      communicationFeeEnabled: o.enabled !== false,
+      communicationFeePct: o.pct,
+      communicationFeeMax: o.max || 0,
+      communicationFeeMin: o.min || 0,
+    },
+    source: byService ? "service" : "category",
+  };
+}
+
+// Fees actually charged at completion, so later rule changes never rewrite
+// what a finished job paid. Build once per report and pass it in.
+function feeLedger() {
+  return new Map(jsonStore.readAll("bookingFees").map((r) => [r.id, r]));
+}
+
+// A completed booking's recorded fee if there is one, otherwise what the
+// rules currently give. `ctx` = { cfg, overrides, ledger } to reuse across many bookings.
+function bookingCommunicationFee(booking, cfg = getSettings(), ctx = {}) {
+  const recorded = ctx.ledger?.get(booking?.id);
+  if (recorded) return recorded.fee;
+  const { cfg: effective } = resolveFeeConfig(booking, cfg, ctx.overrides);
+  return calcCommunicationFee(applicableAmount(booking, effective), effective);
 }
 
 function updateSettings(patch) {
@@ -2732,9 +2833,20 @@ async function applyWalletDeduction(providerId, amount, { bookingId, reason } = 
 }
 
 async function deductWalletCommission(providerId, booking, bookingId) {
-  const fee = bookingCommunicationFee(booking);
+  if (jsonStore.readAll("bookingFees").some((r) => r.id === bookingId)) return null; // already charged
+  const { cfg, source } = resolveFeeConfig(booking);
+  const fee = calcCommunicationFee(applicableAmount(booking, cfg), cfg);
   if (fee <= 0) return null; // fee switched off, below the threshold, or a zero-value job
-  return applyWalletDeduction(providerId, fee, { bookingId, reason: "commission" });
+  const result = await applyWalletDeduction(providerId, fee, { bookingId, reason: "commission" });
+  jsonStore.insert("bookingFees", {
+    id: bookingId,
+    fee,
+    source,
+    pct: cfg.communicationFeePct,
+    max: cfg.communicationFeeMax,
+    at: new Date().toISOString(),
+  });
+  return result;
 }
 
 // Called periodically (see index.js) — re-sends the recharge reminder to any
@@ -3313,6 +3425,12 @@ module.exports = {
   listBanners,
   listActiveBanners,
   calcCommunicationFee,
+  resolveFeeConfig,
+  bookingCommunicationFee,
+  listFeeOverrides,
+  setFeeOverride,
+  clearFeeOverride,
+  dropFeeOverride,
   registerBannerClick,
   listHomeSections,
   createHomeSection,

@@ -106,6 +106,12 @@ export const api = {
   updateBanner: (id, patch) => request(`/admin/banners/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteBanner: (id) => request(`/admin/banners/${id}`, { method: "DELETE" }),
 
+  getCommunicationFees: () => request("/admin/communication-fees"),
+  setCommunicationFee: (type, id, data) =>
+    request(`/admin/communication-fees/${type}/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(data) }),
+  clearCommunicationFee: (type, id) =>
+    request(`/admin/communication-fees/${type}/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
   listHomeSections: () => request("/admin/home-sections"),
   createHomeSection: (data) => request("/admin/home-sections", { method: "POST", body: JSON.stringify(data) }),
   updateHomeSection: (id, patch) => request(`/admin/home-sections/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
