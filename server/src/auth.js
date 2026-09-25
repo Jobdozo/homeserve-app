@@ -83,6 +83,7 @@ function requireAuth(...allowedRoles) {
 module.exports = {
   normalizePhone,
   isAdminPhone,
+  adminPhones: () => [...ADMIN_PHONES],
   requestOtp,
   verifyOtp,
   signToken,

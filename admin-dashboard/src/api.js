@@ -35,8 +35,24 @@ async function importCsv(moduleName, csvText, dryRun) {
   return body;
 }
 
+// Evidence goes up as multipart (photo/PDF/document), so no JSON content type.
+async function uploadComplaintEvidence(id, file, note) {
+  const body = new FormData();
+  body.append("file", file);
+  if (note) body.append("note", note);
+  const res = await fetch(`${API_BASE}/admin/complaints/${id}/evidence`, {
+    method: "POST",
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    body,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Upload failed: ${res.status}`);
+  return data;
+}
+
 export const api = {
   importCsv,
+  uploadComplaintEvidence,
   requestOtp: (phone, role) => request("/auth/otp/request", { method: "POST", body: JSON.stringify({ phone, role }) }),
   verifyOtp: (phone, code, role) =>
     request("/auth/otp/verify", { method: "POST", body: JSON.stringify({ phone, code, role }) }),
@@ -106,6 +122,23 @@ export const api = {
   updateBanner: (id, patch) => request(`/admin/banners/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteBanner: (id) => request(`/admin/banners/${id}`, { method: "DELETE" }),
 
+  listComplaints: (params = {}) => request(`/admin/complaints?${new URLSearchParams(params)}`),
+  lookupComplaintBookings: (q) => request(`/admin/complaints/lookup?q=${encodeURIComponent(q)}`),
+  createComplaint: (data) => request("/admin/complaints", { method: "POST", body: JSON.stringify(data) }),
+  getComplaint: (id) => request(`/admin/complaints/${id}`),
+  updateComplaint: (id, patch) => request(`/admin/complaints/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  assignComplaint: (id, assigneeId) => request(`/admin/complaints/${id}/assign`, { method: "POST", body: JSON.stringify({ assigneeId }) }),
+  setComplaintStatus: (id, data) => request(`/admin/complaints/${id}/status`, { method: "POST", body: JSON.stringify(data) }),
+  reopenComplaint: (id, reason) => request(`/admin/complaints/${id}/reopen`, { method: "POST", body: JSON.stringify({ reason }) }),
+  addComplaintEntry: (id, data) => request(`/admin/complaints/${id}/entries`, { method: "POST", body: JSON.stringify(data) }),
+  listComplaintStages: () => request("/admin/complaint-stages"),
+  createComplaintStage: (data) => request("/admin/complaint-stages", { method: "POST", body: JSON.stringify(data) }),
+  updateComplaintStage: (key, patch) => request(`/admin/complaint-stages/${key}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deleteComplaintStage: (key) => request(`/admin/complaint-stages/${key}`, { method: "DELETE" }),
+  reorderComplaintStages: (keys) => request("/admin/complaint-stages/reorder", { method: "POST", body: JSON.stringify({ keys }) }),
+  listStaff: () => request("/admin/staff"),
+  addStaff: (data) => request("/admin/staff", { method: "POST", body: JSON.stringify(data) }),
+  removeStaff: (id) => request(`/admin/staff/${encodeURIComponent(id)}`, { method: "DELETE" }),
   getBookingSwaps: (id) => request(`/admin/bookings/${id}/swaps`),
   getMonitoring: (params) => request(`/admin/monitoring?${new URLSearchParams(params)}`),
   getMonitoringReport: (type, params) => request(`/admin/monitoring/report?${new URLSearchParams({ ...params, type })}`),

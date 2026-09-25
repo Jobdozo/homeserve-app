@@ -30,4 +30,24 @@ const upload = multer({
   },
 });
 
-module.exports = { upload, UPLOADS_DIR };
+// Complaint evidence: photos plus PDF / Word / Excel / text documents.
+const EVIDENCE_TYPES = new Set([
+  ...ALLOWED_TYPES,
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+]);
+
+const uploadEvidence = multer({
+  storage,
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!EVIDENCE_TYPES.has(file.mimetype)) return cb(new Error("Upload a photo, PDF, Word, Excel or text file"));
+    cb(null, true);
+  },
+});
+
+module.exports = { upload, uploadEvidence, UPLOADS_DIR };

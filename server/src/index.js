@@ -7,13 +7,14 @@ const http = require("http");
 const { Server } = require("socket.io");
 const store = require("./store");
 const monitoring = require("./monitoring");
+const complaints = require("./complaints");
 const csvImport = require("./csvImport");
 const auth = require("./auth");
 const { sendOtpViaWhatsApp } = require("./whatsapp");
 const liveLocation = require("./liveLocation");
 const push = require("./push");
 const fcm = require("./fcm");
-const { upload, UPLOADS_DIR } = require("./uploads");
+const { upload, uploadEvidence, UPLOADS_DIR } = require("./uploads");
 
 const PORT = process.env.PORT || 4000;
 
@@ -1218,6 +1219,81 @@ app.delete("/api/admin/communication-fees/:type/:id", auth.requireAuth("admin"),
   res.status(204).end();
 }));
 
+// ---- Complaints & Disputes CRM ----
+// Service errors thrown with a status (validation, not-found, conflicts) are
+// returned as-is; anything else falls through to the generic 500 handler.
+const crm = (fn) =>
+  ah(async (req, res) => {
+    try {
+      await fn(req, res);
+    } catch (e) {
+      if (e.status) return res.status(e.status).json({ error: e.message });
+      throw e;
+    }
+  });
+const notFound = (res) => res.status(404).json({ error: "Complaint not found" });
+const adminOnly = auth.requireAuth("admin");
+
+app.get("/api/admin/complaints", adminOnly, crm(async (req, res) => res.json({ ...complaints.listComplaints(req.query), meta: complaints.meta() })));
+app.get("/api/admin/complaints/lookup", adminOnly, crm(async (req, res) => res.json(await complaints.lookup(req.query.q))));
+app.post("/api/admin/complaints", adminOnly, crm(async (req, res) => res.status(201).json(await complaints.createComplaint(req.body || {}, actorOf(req)))));
+app.get("/api/admin/complaints/:id", adminOnly, crm(async (req, res) => {
+  const found = complaints.getComplaint(req.params.id);
+  if (!found) return notFound(res);
+  res.json(found);
+}));
+app.patch("/api/admin/complaints/:id", adminOnly, crm(async (req, res) => {
+  const c = complaints.updateComplaint(req.params.id, req.body || {}, actorOf(req));
+  if (!c) return notFound(res);
+  res.json(c);
+}));
+app.post("/api/admin/complaints/:id/assign", adminOnly, crm(async (req, res) => {
+  const c = await complaints.assign(req.params.id, req.body?.assigneeId || null, actorOf(req));
+  if (!c) return notFound(res);
+  res.json(c);
+}));
+app.post("/api/admin/complaints/:id/status", adminOnly, crm(async (req, res) => {
+  const c = complaints.changeStatus(req.params.id, req.body?.status, req.body || {}, actorOf(req));
+  if (!c) return notFound(res);
+  res.json(c);
+}));
+app.post("/api/admin/complaints/:id/reopen", adminOnly, crm(async (req, res) => {
+  const c = complaints.reopen(req.params.id, req.body?.reason, actorOf(req));
+  if (!c) return notFound(res);
+  res.json(c);
+}));
+app.post("/api/admin/complaints/:id/entries", adminOnly, crm(async (req, res) => {
+  const e = await complaints.addComm(req.params.id, req.body || {}, actorOf(req));
+  if (!e) return notFound(res);
+  res.status(201).json(e);
+}));
+app.post("/api/admin/complaints/:id/evidence", adminOnly, uploadEvidence.single("file"), crm(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "file is required" });
+  const e = complaints.addEvidence(req.params.id, req.file, req.body?.note, actorOf(req));
+  if (!e) return notFound(res);
+  res.status(201).json(e);
+}));
+
+app.get("/api/admin/complaint-stages", adminOnly, crm(async (req, res) => res.json(complaints.listStages())));
+app.post("/api/admin/complaint-stages", adminOnly, crm(async (req, res) => res.status(201).json(complaints.createStage(req.body || {}))));
+app.post("/api/admin/complaint-stages/reorder", adminOnly, crm(async (req, res) => res.json(complaints.reorderStages(Array.isArray(req.body?.keys) ? req.body.keys.map(String) : []))));
+app.patch("/api/admin/complaint-stages/:key", adminOnly, crm(async (req, res) => {
+  const s = complaints.updateStage(req.params.key, req.body || {});
+  if (!s) return res.status(404).json({ error: "Stage not found" });
+  res.json(s);
+}));
+app.delete("/api/admin/complaint-stages/:key", adminOnly, crm(async (req, res) => {
+  if (!complaints.deleteStage(req.params.key)) return res.status(404).json({ error: "Stage not found" });
+  res.status(204).end();
+}));
+
+app.get("/api/admin/staff", adminOnly, crm(async (req, res) => res.json(await complaints.listStaff())));
+app.post("/api/admin/staff", adminOnly, crm(async (req, res) => res.status(201).json(complaints.addStaff(req.body || {}))));
+app.delete("/api/admin/staff/:id", adminOnly, crm(async (req, res) => {
+  if (!complaints.removeStaff(req.params.id)) return res.status(404).json({ error: "Staff member not found" });
+  res.status(204).end();
+}));
+
 // ---- Live Service Provider Monitoring ----
 app.get("/api/admin/monitoring", auth.requireAuth("admin"), ah(async (req, res) => {
   res.json(await monitoring.snapshot(req.query));
@@ -1242,7 +1318,7 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   console.error(err);
-  if (err instanceof multer.MulterError || /^Only image uploads/.test(err.message || "")) {
+  if (err instanceof multer.MulterError || /^(Only image uploads|Upload a photo)/.test(err.message || "")) {
     return res.status(400).json({ error: err.message });
   }
   const status = err.status || (["Unknown service", "Unknown customer"].includes(err.message) ? 400 : 500);
