@@ -5,7 +5,7 @@ import ScreenHeader from "../components/ScreenHeader";
 
 export default function EditProfileScreen() {
   const navigate = useNavigate();
-  const { provider, categories, updateProfile, showToast } = useApp();
+  const { provider, categories, updateProfile, updateCoverage, showToast } = useApp();
   const locked = provider.verificationStatus === "approved";
 
   const [name, setName] = useState(provider.name || "");
@@ -133,6 +133,8 @@ export default function EditProfileScreen() {
           </div>
         </div>
 
+        <PincodeCoverage provider={provider} updateCoverage={updateCoverage} />
+
         <div>
           <h2 className="mb-2 text-[13px] font-bold text-gray-900">Contact</h2>
           <div className="space-y-3">
@@ -164,6 +166,60 @@ export default function EditProfileScreen() {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// Always editable, regardless of verification lock — a provider's service
+// area is an ongoing operational choice, not an identity fact worth locking
+// down for fraud prevention the way name/category/business info are.
+function PincodeCoverage({ provider, updateCoverage }) {
+  const coverage = provider.coverage || { pincodes: [], serveAllAreas: false };
+  const [input, setInput] = useState(coverage.pincodes.join(", "));
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    const pincodes = input
+      .split(/[,\s]+/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    setSaving(true);
+    try {
+      await updateCoverage(pincodes);
+    } catch (e) {
+      // updateCoverage's caller (context) already shows a toast on success;
+      // on failure the input just stays as typed so they can retry.
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div>
+      <h2 className="mb-2 text-[13px] font-bold text-gray-900">Service Area — PIN Codes</h2>
+      <p className="mb-2 text-[11.5px] text-gray-400">
+        Only customers in these PIN codes will see your services. Leave empty to be visible everywhere.
+      </p>
+      {coverage.serveAllAreas && (
+        <p className="mb-2 rounded-lg bg-emerald-50 px-3 py-2 text-[11.5px] font-medium text-emerald-700">
+          Tikdum has set your account to serve all areas, regardless of PIN codes below.
+        </p>
+      )}
+      <div className="rounded-xl border border-gray-200 px-3 py-2.5">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="e.g. 110001, 110002"
+          className="w-full bg-transparent text-[13.5px] text-gray-800 outline-none placeholder:text-gray-400"
+        />
+      </div>
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="mt-2 rounded-lg bg-brand-light px-4 py-2 text-[12px] font-semibold text-brand-dark disabled:opacity-50"
+      >
+        {saving ? "Saving…" : "Save PIN Codes"}
+      </button>
     </div>
   );
 }

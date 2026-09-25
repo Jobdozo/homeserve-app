@@ -2,21 +2,28 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { ChevronRightIcon, StarIcon } from "../components/icons";
 
-const menuItems = [
-  { icon: "📍", label: "Saved Addresses" },
-  { icon: "💳", label: "Payment Methods" },
-  { icon: "🎁", label: "Refer & Earn", path: "/refer" },
-  { icon: "🛡️", label: "Booking Protection", path: "/booking-protection" },
-  { icon: "🎟️", label: "Coupons & Offers" },
-  { icon: "🔔", label: "Notification Settings" },
-  { icon: "❓", label: "Help & Support" },
-  { icon: "📄", label: "Terms & Privacy Policy", href: "/privacy.html" },
-];
-
 export default function ProfileScreen() {
   const navigate = useNavigate();
   const { customer, bookings, showToast, logout } = useApp();
   const completed = bookings.filter((b) => b.status === "Completed").length;
+
+  const menuItems = [
+    {
+      icon: "📍",
+      label: "Saved Addresses",
+      path: "/address",
+      badge: customer?.address
+        ? { text: `PIN ${customer.address.pincode}`, className: "bg-gray-100 text-gray-600" }
+        : { text: "Set PIN code", className: "bg-amber-100 text-amber-700" },
+    },
+    { icon: "💳", label: "Payment Methods" },
+    { icon: "🎁", label: "Refer & Earn", path: "/refer" },
+    { icon: "🛡️", label: "Booking Protection", path: "/booking-protection" },
+    { icon: "🎟️", label: "Coupons & Offers" },
+    { icon: "🔔", label: "Notification Settings" },
+    { icon: "❓", label: "Help & Support" },
+    { icon: "📄", label: "Terms & Privacy Policy", href: "/privacy.html" },
+  ];
 
   return (
     <div className="flex flex-1 flex-col pb-4 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-16 lg:pt-8">
@@ -61,6 +68,11 @@ export default function ProfileScreen() {
           >
             <span className="text-lg">{item.icon}</span>
             <span className="flex-1 text-[13px] font-medium text-gray-700 lg:text-[14px]">{item.label}</span>
+            {item.badge && (
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${item.badge.className}`}>
+                {item.badge.text}
+              </span>
+            )}
             <ChevronRightIcon width={16} height={16} className="text-gray-300" />
           </button>
         ))}

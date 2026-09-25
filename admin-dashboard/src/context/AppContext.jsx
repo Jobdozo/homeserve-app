@@ -213,6 +213,16 @@ export function AppProvider({ children }) {
     [showToast, scheduleRefresh]
   );
 
+  const updateProviderCoverage = useCallback(
+    async (id, patch) => {
+      const coverage = await api.updateProviderCoverage(id, patch);
+      setProviders((prev) => prev.map((p) => (p.id === id ? { ...p, coverage } : p)));
+      showToast("Service area updated");
+      return coverage;
+    },
+    [showToast]
+  );
+
   const toggleServiceStatus = useCallback(
     async (id, currentStatus) => {
       const nextStatus = currentStatus === "active" ? "inactive" : "active";
@@ -284,6 +294,7 @@ export function AppProvider({ children }) {
       approveProvider,
       rejectProvider,
       deleteProvider,
+      updateProviderCoverage,
       toggleServiceStatus,
       addCategory,
       addProvider,
@@ -308,6 +319,7 @@ export function AppProvider({ children }) {
       approveProvider,
       rejectProvider,
       deleteProvider,
+      updateProviderCoverage,
       toggleServiceStatus,
       addCategory,
       addProvider,

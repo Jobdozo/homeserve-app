@@ -50,6 +50,8 @@ export const api = {
   setProviderVerification: (id, status) =>
     request(`/providers/${id}/verification`, { method: "PATCH", body: JSON.stringify({ status }) }),
   deleteProvider: (id) => request(`/admin/providers/${id}`, { method: "DELETE" }),
+  updateProviderCoverage: (id, patch) =>
+    request(`/admin/providers/${id}/coverage`, { method: "PATCH", body: JSON.stringify(patch) }),
   setServiceStatus: (id, status) =>
     request(`/services/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
   getTransactions: () => request("/admin/transactions"),

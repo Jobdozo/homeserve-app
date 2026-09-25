@@ -214,12 +214,38 @@ app.get("/api/auth/me", auth.requireAuth(), ah(async (req, res) => {
 
 // ---- bootstrap (public catalog only — per-user data comes from auth) ----
 app.get("/api/bootstrap", ah(async (req, res) => {
+  const pincode = typeof req.query.pincode === "string" ? req.query.pincode.trim() : undefined;
   const [providers, categories, services] = await Promise.all([
     store.listProviders(),
     store.listCategories(),
-    store.listServices({ activeOnly: true }),
+    store.listServices({ activeOnly: true, pincode }),
   ]);
   res.json({ providers, categories, services });
+}));
+
+// ---- customer's registered address (drives PIN-code catalog visibility) ----
+app.get("/api/customer/address", auth.requireAuth("customer"), ah(async (req, res) => {
+  res.json(store.getCustomerAddress(req.user.id));
+}));
+
+app.put("/api/customer/address", auth.requireAuth("customer"), ah(async (req, res) => {
+  const address = store.saveCustomerAddress(req.user.id, req.body || {});
+  res.json(address);
+}));
+
+// ---- provider service-area coverage (PIN codes; serveAllAreas is admin-only) ----
+app.patch("/api/providers/:id/coverage", auth.requireAuth("provider"), ah(async (req, res) => {
+  if (req.params.id !== req.user.id) return res.status(403).json({ error: "Not your profile" });
+  const coverage = store.updateProviderCoverage(req.params.id, { pincodes: req.body?.pincodes }, { allowServeAllAreas: false });
+  res.json(coverage);
+}));
+
+app.patch("/api/admin/providers/:id/coverage", auth.requireAuth("admin"), ah(async (req, res) => {
+  const coverage = store.updateProviderCoverage(req.params.id, {
+    pincodes: req.body?.pincodes,
+    serveAllAreas: req.body?.serveAllAreas,
+  });
+  res.json(coverage);
 }));
 
 // ---- providers ----

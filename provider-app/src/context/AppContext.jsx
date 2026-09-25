@@ -492,6 +492,17 @@ export function AppProvider({ children }) {
     return updated;
   }, []);
 
+  const updateCoverage = useCallback(
+    async (pincodes) => {
+      if (!provider) return;
+      const coverage = await api.updateCoverage(provider.id, pincodes);
+      setProvider((prev) => (prev ? { ...prev, coverage } : prev));
+      showToast("Service area updated");
+      return coverage;
+    },
+    [provider, showToast]
+  );
+
   const markNotificationRead = useCallback(async (id) => {
     const notification = await api.markNotificationRead(id);
     setNotifications((prev) => prev.map((n) => (n.id === id ? notification : n)));
@@ -528,6 +539,7 @@ export function AppProvider({ children }) {
       toggleServiceStatus,
       addService,
       updateProfile,
+      updateCoverage,
       acceptAgreement,
       notifications,
       notificationPrefs,
@@ -562,6 +574,7 @@ export function AppProvider({ children }) {
       toggleServiceStatus,
       addService,
       updateProfile,
+      updateCoverage,
       acceptAgreement,
       notifications,
       notificationPrefs,

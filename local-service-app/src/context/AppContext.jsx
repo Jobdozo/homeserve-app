@@ -203,26 +203,33 @@ export function AppProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Public catalog data — loads regardless of auth so browsing works pre-login.
-  useEffect(() => {
-    let cancelled = false;
-    async function loadCatalog() {
-      try {
-        const [boot, bannerData] = await Promise.all([api.bootstrap(), api.listBanners().catch(() => [])]);
-        if (cancelled) return;
-        setProviders(Object.fromEntries(boot.providers.map((p) => [p.id, p])));
-        setCategories(boot.categories);
-        setServices(boot.services);
-        setBanners(bannerData);
-      } catch (e) {
-        console.error("Failed to load catalog", e);
-      }
+  // Public catalog data — loads regardless of auth so browsing works
+  // pre-login. Re-callable with a pincode once the customer's registered
+  // address is known, so the catalog can be re-filtered to their area
+  // without a full page reload.
+  const loadCatalog = useCallback(async (pincode) => {
+    try {
+      const [boot, bannerData] = await Promise.all([api.bootstrap(pincode), api.listBanners().catch(() => [])]);
+      setProviders(Object.fromEntries(boot.providers.map((p) => [p.id, p])));
+      setCategories(boot.categories);
+      setServices(boot.services);
+      setBanners(bannerData);
+    } catch (e) {
+      console.error("Failed to load catalog", e);
     }
-    loadCatalog();
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  useEffect(() => {
+    loadCatalog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Re-filter the catalog to the customer's registered area as soon as it's
+  // known (right after login, or right after they save/change their address).
+  useEffect(() => {
+    if (customer?.address?.pincode) loadCatalog(customer.address.pincode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customer?.address?.pincode]);
 
   // Per-customer data — only once logged in.
   useEffect(() => {
@@ -356,6 +363,16 @@ export function AppProvider({ children }) {
   }, [toast]);
 
   const showToast = useCallback((message) => setToast(message), []);
+
+  const saveAddress = useCallback(
+    async (addressData) => {
+      const saved = await api.saveMyAddress(addressData);
+      setCustomer((prev) => (prev ? { ...prev, address: saved } : prev));
+      showToast("Address saved");
+      return saved;
+    },
+    [showToast]
+  );
 
   const getService = useCallback((id) => services.find((s) => s.id === id), [services]);
   const getProvider = useCallback((id) => providers[id], [providers]);
@@ -529,6 +546,7 @@ export function AppProvider({ children }) {
       referral,
       refreshReferral,
       submitRefundClaim,
+      saveAddress,
       notifications,
       markNotificationRead,
       markAllNotificationsRead,
@@ -575,6 +593,7 @@ export function AppProvider({ children }) {
       referral,
       refreshReferral,
       submitRefundClaim,
+      saveAddress,
       notifications,
       markNotificationRead,
       markAllNotificationsRead,

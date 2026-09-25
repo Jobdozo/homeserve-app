@@ -33,7 +33,7 @@ export const api = {
     request("/auth/otp/verify", { method: "POST", body: JSON.stringify({ phone, code, role, name }) }),
   me: () => request("/auth/me"),
 
-  bootstrap: () => request("/bootstrap"),
+  bootstrap: (pincode) => request(`/bootstrap${pincode ? `?pincode=${encodeURIComponent(pincode)}` : ""}`),
   listBookings: () => request("/bookings"),
   createBooking: (data) => request("/bookings", { method: "POST", body: JSON.stringify(data) }),
   createOrder: (data) => request("/orders", { method: "POST", body: JSON.stringify(data) }),
@@ -62,4 +62,6 @@ export const api = {
     request("/customer/referral/validate", { method: "POST", body: JSON.stringify({ code }) }),
   submitRefundClaim: (bookingId, reason) =>
     request(`/bookings/${bookingId}/refund-claim`, { method: "POST", body: JSON.stringify({ reason }) }),
+  getMyAddress: () => request("/customer/address"),
+  saveMyAddress: (data) => request("/customer/address", { method: "PUT", body: JSON.stringify(data) }),
 };

@@ -107,7 +107,60 @@ function mapProvider(p) {
   // responseRate is never written at signup (no rejected/late responses yet
   // to compute it from) — default a brand-new provider to 100% rather than
   // showing a raw null (renders as the literal string "null%" in the UI).
-  return { ...p, responseRate: p.responseRate ?? 100, agreementAccepted: hasAcceptedAgreement(p.id) };
+  return {
+    ...p,
+    responseRate: p.responseRate ?? 100,
+    agreementAccepted: hasAcceptedAgreement(p.id),
+    coverage: getProviderCoverage(p.id),
+  };
+}
+
+// ---- PIN-code-based service visibility (jsonStore-backed — a small,
+// per-provider coverage record). Deliberately shaped to grow into the
+// larger "Service Provider Visibility & Coverage" system later (radius,
+// city, temporary availability, online/offline, request caps,
+// category-specific coverage) without a rework: those just become more
+// fields on this same record and more conditions in
+// isProviderVisibleForPincode, instead of a new subsystem. ----
+
+function getProviderCoverage(providerId) {
+  const existing = jsonStore.readAll("providerCoverage").find((c) => c.id === providerId);
+  return existing || { id: providerId, pincodes: [], serveAllAreas: false };
+}
+
+// A provider with no coverage configured yet (the common case today, since
+// this is a new feature) is visible everywhere — restriction is opt-in, so
+// existing providers aren't silently hidden from every customer the moment
+// this ships. Once they (or an admin) set specific PIN codes, only matching
+// customers see them — unless an admin sets serveAllAreas to override that.
+function isProviderVisibleForPincode(providerId, pincode) {
+  const coverage = getProviderCoverage(providerId);
+  if (coverage.serveAllAreas) return true;
+  if (!coverage.pincodes || coverage.pincodes.length === 0) return true;
+  return coverage.pincodes.includes(String(pincode || "").trim());
+}
+
+function updateProviderCoverage(providerId, patch, { allowServeAllAreas = true } = {}) {
+  const existing = getProviderCoverage(providerId);
+  const next = { ...existing };
+  if (patch.pincodes !== undefined) {
+    const cleaned = (Array.isArray(patch.pincodes) ? patch.pincodes : [])
+      .map((p) => String(p).trim())
+      .filter(Boolean);
+    for (const pin of cleaned) {
+      if (!/^\d{4,10}$/.test(pin)) {
+        throw Object.assign(new Error(`"${pin}" is not a valid PIN code`), { status: 400 });
+      }
+    }
+    next.pincodes = [...new Set(cleaned)];
+  }
+  if (allowServeAllAreas && patch.serveAllAreas !== undefined) {
+    next.serveAllAreas = !!patch.serveAllAreas;
+  }
+  const hasExisting = jsonStore.readAll("providerCoverage").some((c) => c.id === providerId);
+  const saved = hasExisting ? jsonStore.update("providerCoverage", providerId, next) : jsonStore.insert("providerCoverage", next);
+  cacheClear("providers");
+  return saved;
 }
 
 function mapService(s) {
@@ -211,14 +264,47 @@ async function createCategory({ name, icon }) {
 
 async function getCustomerById(id) {
   const { customer } = await query(`query($id: UUID!) { customer(id: $id) { id name avatar phone email } }`, { id });
-  return customer || undefined;
+  if (!customer) return undefined;
+  return { ...customer, address: getCustomerAddress(id) };
+}
+
+// ---- registered customer address (jsonStore-backed — a single primary
+// address per customer, entered manually; the PIN code on it drives which
+// providers are visible to them, see isProviderVisibleForPincode below) ----
+
+function getCustomerAddress(customerId) {
+  return jsonStore.readAll("customerAddresses").find((a) => a.id === customerId) || null;
+}
+
+function saveCustomerAddress(customerId, { label, line, pincode, lat, lng }) {
+  const trimmedPincode = String(pincode || "").trim();
+  if (!/^\d{4,10}$/.test(trimmedPincode)) {
+    throw Object.assign(new Error("Enter a valid PIN code"), { status: 400 });
+  }
+  if (!line || !String(line).trim()) {
+    throw Object.assign(new Error("Address line is required"), { status: 400 });
+  }
+  const address = {
+    id: customerId,
+    label: (label || "Home").trim() || "Home",
+    line: String(line).trim(),
+    pincode: trimmedPincode,
+    lat: typeof lat === "number" ? lat : null,
+    lng: typeof lng === "number" ? lng : null,
+    updatedAt: new Date().toISOString(),
+  };
+  const existing = jsonStore.readAll("customerAddresses").find((a) => a.id === customerId);
+  if (existing) jsonStore.update("customerAddresses", customerId, address);
+  else jsonStore.insert("customerAddresses", address);
+  return address;
 }
 
 async function getCustomerByPhone(phone) {
   const target = normalizePhone(phone);
   if (!target) return undefined;
   const { customers } = await query(`query { customers { id name avatar phone email } }`, {});
-  return customers.find((c) => normalizePhone(c.phone) === target);
+  const match = customers.find((c) => normalizePhone(c.phone) === target);
+  return match ? getCustomerById(match.id) : undefined;
 }
 
 async function listCustomerIds() {
@@ -422,7 +508,7 @@ async function updateProviderProfile(providerId, patch) {
 
 // ---- services ----
 
-async function listServices({ activeOnly = false } = {}) {
+async function listServices({ activeOnly = false, pincode } = {}) {
   const cacheKey = `services:${activeOnly ? "active" : "all"}`;
   let all = cacheGet(cacheKey);
   if (!all) {
@@ -436,7 +522,11 @@ async function listServices({ activeOnly = false } = {}) {
   // remain visible to admin (activeOnly: false) so they aren't hidden there.
   if (!activeOnly) return all;
   const active = listActiveWalletProviderIds();
-  return all.filter((s) => active.has(s.providerId));
+  let result = all.filter((s) => active.has(s.providerId));
+  if (pincode) {
+    result = result.filter((s) => isProviderVisibleForPincode(s.providerId, pincode));
+  }
+  return result;
 }
 
 async function getService(id) {
@@ -2106,6 +2196,10 @@ module.exports = {
   setProviderVerification,
   deleteProvider,
   updateProviderProfile,
+  getCustomerAddress,
+  saveCustomerAddress,
+  getProviderCoverage,
+  updateProviderCoverage,
   getEarnings,
   listActivities,
   logActivity,

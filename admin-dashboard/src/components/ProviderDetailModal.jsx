@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, SERVER_URL } from "../api";
 import { useApp } from "../context/AppContext";
-import { StarIcon, CheckIcon, XIcon, WalletIcon, FileIcon } from "./icons";
+import { StarIcon, CheckIcon, XIcon, WalletIcon, FileIcon, MapPinIcon } from "./icons";
 
 const verificationStyles = {
   pending: "bg-amber-100 text-amber-700",
@@ -15,7 +15,7 @@ const DOC_LABELS = {
 };
 
 export default function ProviderDetailModal({ providerId, onClose }) {
-  const { providers, approveProvider, rejectProvider, deleteProvider, showToast } = useApp();
+  const { providers, approveProvider, rejectProvider, deleteProvider, updateProviderCoverage, showToast } = useApp();
   const provider = providers.find((p) => p.id === providerId);
   const [services, setServices] = useState(null);
   const [earnings, setEarnings] = useState(null);
@@ -27,6 +27,8 @@ export default function ProviderDetailModal({ providerId, onClose }) {
   const [recharging, setRecharging] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [pincodeInput, setPincodeInput] = useState(provider?.coverage?.pincodes.join(", ") || "");
+  const [savingCoverage, setSavingCoverage] = useState(false);
 
   const loadWallet = () => api.getProviderWallet(providerId).then(setWallet).catch(() => setWallet(null));
 
@@ -74,6 +76,32 @@ export default function ProviderDetailModal({ providerId, onClose }) {
   };
 
   if (!provider) return null;
+
+  const handleSaveCoverage = async () => {
+    const pincodes = pincodeInput
+      .split(/[,\s]+/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    setSavingCoverage(true);
+    try {
+      await updateProviderCoverage(provider.id, { pincodes });
+    } catch (err) {
+      showToast(err.message || "Failed to update service area");
+    } finally {
+      setSavingCoverage(false);
+    }
+  };
+
+  const toggleServeAllAreas = async () => {
+    setSavingCoverage(true);
+    try {
+      await updateProviderCoverage(provider.id, { serveAllAreas: !provider.coverage?.serveAllAreas });
+    } catch (err) {
+      showToast(err.message || "Failed to update service area");
+    } finally {
+      setSavingCoverage(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!confirmingDelete) {
@@ -197,6 +225,38 @@ export default function ProviderDetailModal({ providerId, onClose }) {
             <Field label="Response rate" value={provider.responseRate != null ? `${provider.responseRate}%` : null} />
             <Field label="Joined" value={provider.joinedAt ? new Date(provider.joinedAt).toLocaleDateString("en-IN") : null} />
           </div>
+
+          <Section title="Service Area">
+            <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 text-[12.5px]">
+              <span className="flex items-center gap-2 text-gray-500">
+                <MapPinIcon width={16} height={16} className="text-gray-400" />
+                Serve all areas (ignore PIN codes)
+              </span>
+              <input
+                type="checkbox"
+                checked={!!provider.coverage?.serveAllAreas}
+                onChange={toggleServeAllAreas}
+                disabled={savingCoverage}
+                className="h-4 w-4 accent-brand"
+              />
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={pincodeInput}
+                onChange={(e) => setPincodeInput(e.target.value)}
+                placeholder="PIN codes, e.g. 110001, 110002"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] text-gray-800 outline-none focus:border-brand"
+              />
+              <button
+                onClick={handleSaveCoverage}
+                disabled={savingCoverage}
+                className="flex-shrink-0 rounded-lg bg-brand px-3.5 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
+              >
+                {savingCoverage ? "Saving…" : "Save"}
+              </button>
+            </div>
+            <p className="text-[11px] text-gray-400">Empty PIN codes means visible to customers everywhere.</p>
+          </Section>
 
           {provider.verificationStatus === "pending" && (
             <div className="flex gap-2">
