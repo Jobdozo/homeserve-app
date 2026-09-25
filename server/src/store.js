@@ -822,7 +822,7 @@ async function updateBookingStatus(id, status) {
     // Never let a wallet-side failure block marking the job Completed — the
     // booking status update above has already succeeded at this point.
     try {
-      await deductWalletCommission(existing.providerId, existing.amount);
+      await deductWalletCommission(existing.providerId, existing.amount, id);
     } catch (e) {
       console.error(`Wallet commission deduction failed for booking ${id}:`, e);
     }
@@ -1709,26 +1709,37 @@ async function rechargeProviderWallet(providerId, amount, note) {
 
   // The recharge itself is already committed above — a WhatsApp/lookup
   // hiccup past this point must never surface as a failed recharge.
+  const rechargeMessage = `Your Tikdum wallet has been recharged with ₹${amount}. New balance: ₹${wallet.balance}. You're all set to keep receiving job requests.`;
   try {
     const provider = await getProvider(providerId);
     if (provider?.phone) {
-      await whatsapp.sendWhatsAppMessage(
-        provider.phone,
-        `Your Tikdum wallet has been recharged with ₹${amount}. New balance: ₹${wallet.balance}. You're all set to keep receiving job requests.`
-      );
+      await whatsapp.sendWhatsAppMessage(provider.phone, rechargeMessage);
     }
   } catch (e) {
     console.error("Recharge WhatsApp notification failed:", e);
+  }
+  try {
+    await addNotification({
+      recipientType: "provider",
+      recipientId: providerId,
+      type: "wallet",
+      title: "Wallet recharged",
+      message: rechargeMessage,
+    });
+  } catch (e) {
+    console.error("Recharge in-app notification failed:", e);
   }
   await logActivity("provider", `Wallet recharged for provider ${providerId}: +₹${amount}`);
   return wallet;
 }
 
 // Deducts this job's commission from the provider's wallet and fires the
-// low-balance / suspended WhatsApp alert the first time each is crossed
-// (tracked via the *AlertSentAt flags so a provider isn't messaged on every
-// single job once they're already below the threshold).
-async function deductWalletCommission(providerId, bookingAmount) {
+// low-balance / suspended/negative-balance alert the first time each is
+// crossed (tracked via the *AlertSentAt flags so a provider isn't messaged
+// on every single job once they're already below the threshold). Every
+// alert goes out both in-app (bell icon + push) and via WhatsApp, since a
+// provider may not have WhatsApp connected or may miss it.
+async function deductWalletCommission(providerId, bookingAmount, bookingId) {
   const { platformFeePct } = getSettings();
   const commission = Math.round(bookingAmount * (platformFeePct / 100));
   if (commission <= 0) return getWallet(providerId);
@@ -1753,20 +1764,37 @@ async function deductWalletCommission(providerId, bookingAmount) {
 
   // Commit the deduction (and alert-flag bookkeeping) before ever touching
   // the network — this is the source of truth for whether the provider is
-  // suspended, and must never be lost to a WhatsApp/lookup failure below.
+  // suspended, and must never be lost to a WhatsApp/push failure below.
   saveWallet(wallet);
 
   if (justSuspended || justWentLow) {
+    const message = justSuspended
+      ? `Your Tikdum wallet balance is now ₹${wallet.balance}. Your account is paused from receiving new job requests until you recharge. Please contact Tikdum support to recharge your account.`
+      : `Your Tikdum wallet balance is running low (₹${wallet.balance}). Recharge soon to keep receiving job requests without interruption.`;
+    const title = justSuspended
+      ? wallet.balance < 0
+        ? "Wallet balance is negative — account paused"
+        : "Wallet balance reached ₹0 — account paused"
+      : "Wallet balance running low";
     try {
       const provider = await getProvider(providerId);
       if (provider?.phone) {
-        const message = justSuspended
-          ? `Your Tikdum wallet balance has reached ₹0. Your account is paused from receiving new job requests until you recharge. Please contact Tikdum support to recharge your account.`
-          : `Your Tikdum wallet balance is running low (₹${wallet.balance}). Recharge soon to keep receiving job requests without interruption.`;
         await whatsapp.sendWhatsAppMessage(provider.phone, message);
       }
     } catch (e) {
       console.error("Wallet balance WhatsApp alert failed:", e);
+    }
+    try {
+      await addNotification({
+        recipientType: "provider",
+        recipientId: providerId,
+        type: "wallet",
+        title,
+        message,
+        bookingId: bookingId || undefined,
+      });
+    } catch (e) {
+      console.error("Wallet balance in-app notification failed:", e);
     }
   }
 
@@ -1786,13 +1814,18 @@ async function sendSuspendedWalletReminders() {
     // One provider's lookup/send failure shouldn't stop the rest from
     // getting their reminder in this sweep.
     try {
+      const reminderMessage = `Reminder: your Tikdum wallet balance is ₹${wallet.balance} and your account is still paused from receiving new job requests. Contact Tikdum support to recharge and resume.`;
       const provider = await getProvider(wallet.id);
       if (provider?.phone) {
-        await whatsapp.sendWhatsAppMessage(
-          provider.phone,
-          `Reminder: your Tikdum wallet balance is ₹0 and your account is still paused from receiving new job requests. Contact Tikdum support to recharge and resume.`
-        );
+        await whatsapp.sendWhatsAppMessage(provider.phone, reminderMessage);
       }
+      await addNotification({
+        recipientType: "provider",
+        recipientId: wallet.id,
+        type: "wallet",
+        title: "Still paused — recharge to resume",
+        message: reminderMessage,
+      });
       wallet.lastReminderAt = new Date().toISOString();
       saveWallet(wallet);
     } catch (e) {
