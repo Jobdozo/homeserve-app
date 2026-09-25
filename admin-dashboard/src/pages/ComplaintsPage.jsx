@@ -817,7 +817,6 @@ function PipelineSettings() {
   const [stages, setStages] = useState(null);
   const [staff, setStaff] = useState([]);
   const [newStage, setNewStage] = useState({ label: "", kind: "open" });
-  const [newStaff, setNewStaff] = useState({ name: "", phone: "", role: "" });
 
   const load = () => {
     api.listComplaintStages().then(setStages).catch(() => setStages([]));
@@ -869,31 +868,18 @@ function PipelineSettings() {
       </div>
 
       <div className="rounded-2xl bg-white p-5 shadow-card">
-        <h2 className="text-[14px] font-bold text-gray-900">Staff</h2>
-        <p className="mt-1 text-[12px] text-gray-500">People complaints can be assigned to. Super Admin logins are always included.</p>
+        <h2 className="text-[14px] font-bold text-gray-900">Who can be assigned</h2>
+        <p className="mt-1 text-[12px] text-gray-500">
+          Complaints are assigned to the internal accounts created in User Management (Super Admin → User Management). Add a staff member there and they appear here.
+        </p>
         <div className="mt-3 divide-y divide-gray-50">
           {staff.map((s) => (
-            <div key={s.id} className="flex items-center gap-3 py-2.5">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-semibold text-gray-800">{s.name}</p>
-                <p className="text-[11px] text-gray-400">{s.source === "admin" ? "Super Admin login" : [s.role, s.phone].filter(Boolean).join(" · ") || "Staff"}</p>
-              </div>
-              {s.source === "staff" && (
-                <button className="text-gray-300 hover:text-red-500" aria-label="Remove" onClick={() => run(() => api.removeStaff(s.id), "Staff member removed")}>
-                  <XIcon width={15} height={15} />
-                </button>
-              )}
+            <div key={s.id} className="py-2.5">
+              <p className="truncate text-[13px] font-semibold text-gray-800">{s.name}</p>
+              <p className="text-[11px] text-gray-400">{[s.role, s.phone].filter(Boolean).join(" · ")}</p>
             </div>
           ))}
         </div>
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          <input className={inputCls} value={newStaff.name} onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })} placeholder="Name" />
-          <input className={inputCls} value={newStaff.role} onChange={(e) => setNewStaff({ ...newStaff, role: e.target.value })} placeholder="Role" />
-          <input className={inputCls} value={newStaff.phone} onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })} placeholder="Phone" />
-        </div>
-        <button className={`${btnCls} mt-2`} disabled={!newStaff.name.trim()} onClick={() => run(() => api.addStaff(newStaff), "Staff member added").then((ok) => ok && setNewStaff({ name: "", phone: "", role: "" }))}>
-          Add staff member
-        </button>
       </div>
     </div>
   );

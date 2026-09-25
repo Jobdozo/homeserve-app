@@ -3674,6 +3674,8 @@ module.exports = {
   listBanners,
   listActiveBanners,
   calcCommunicationFee,
+  recordAdminChange,
+  diffValues,
   SWAP_REASONS,
   listOrderSwaps,
   swapCutoffs,

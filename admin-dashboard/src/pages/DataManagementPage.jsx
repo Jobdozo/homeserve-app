@@ -29,7 +29,7 @@ const IMPORTS = {
 };
 
 export default function DataManagementPage() {
-  const { providers, services, bookings, categories, showToast } = useApp();
+  const { providers, services, bookings, categories, showToast, can } = useApp();
   const [busy, setBusy] = useState(null);
 
   const exporters = [
@@ -177,6 +177,7 @@ export default function DataManagementPage() {
 
   return (
     <div className="space-y-6">
+      {can("data.export") && (
       <section>
         <h2 className="text-[14px] font-bold text-gray-900">Export</h2>
         <p className="mt-0.5 text-[12px] text-gray-400">Download any module's data as a CSV file (opens in Excel or Google Sheets).</p>
@@ -198,7 +199,9 @@ export default function DataManagementPage() {
           ))}
         </div>
       </section>
+      )}
 
+      {can("data.import") && (
       <section>
         <h2 className="text-[14px] font-bold text-gray-900">Import</h2>
         <p className="mt-0.5 text-[12px] text-gray-400">
@@ -211,6 +214,7 @@ export default function DataManagementPage() {
           ))}
         </div>
       </section>
+      )}
     </div>
   );
 }

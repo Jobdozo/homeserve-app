@@ -18,9 +18,19 @@ import AuditLogsPage from "./pages/AuditLogsPage";
 import SettingsPage from "./pages/SettingsPage";
 import DataManagementPage from "./pages/DataManagementPage";
 import NotificationsPage from "./pages/NotificationsPage";
+import UserManagementPage from "./pages/UserManagementPage";
+
+function NoAccess() {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 py-24 text-center">
+      <p className="text-[15px] font-bold text-gray-800">You don't have access to this section</p>
+      <p className="max-w-sm text-[12.5px] text-gray-500">Ask a Super Admin to update your role's permissions in User Management.</p>
+    </div>
+  );
+}
 
 function AppRoutes() {
-  const { admin, authLoading } = useApp();
+  const { admin, authLoading, can } = useApp();
 
   if (authLoading) {
     return (
@@ -32,27 +42,37 @@ function AppRoutes() {
 
   if (!admin) return <LoginScreen />;
 
+  // Each route needs a permission; the landing page is the first one this
+  // staff account can open.
+  const routes = [
+    ["/dashboard", <DashboardPage />, "dashboard.view"],
+    ["/customers", <CustomersPage />, "customers.view"],
+    ["/providers", <ProvidersPage />, "providers.view"],
+    ["/services", <ServicesPage />, "services.view"],
+    ["/home-layout", <HomeLayoutPage />, "cms.view"],
+    ["/monitoring", <MonitoringPage />, "monitoring.view"],
+    ["/complaints", <ComplaintsPage />, "complaints.view"],
+    ["/bookings", <BookingsPage />, "bookings.view"],
+    ["/reviews", <ReviewsPage />, "reviews.view"],
+    ["/disputes", <DisputesPage />, "complaints.view"],
+    ["/payments", <PaymentsPage />, "payments.view"],
+    ["/reports", <ReportsPage />, "reports.view"],
+    ["/audit-logs", <AuditLogsPage />, "audit.view"],
+    ["/settings", <SettingsPage />, "settings.view"],
+    ["/data", <DataManagementPage />, ["data.export", "data.import"]],
+    ["/notifications", <NotificationsPage />, "notifications.view"],
+    ["/users", <UserManagementPage />, "users.view"],
+  ];
+  const landing = routes.find(([, , perm]) => can(perm))?.[0];
+
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/customers" element={<CustomersPage />} />
-        <Route path="/providers" element={<ProvidersPage />} />
-        <Route path="/services" element={<ServicesPage />} />
-        <Route path="/home-layout" element={<HomeLayoutPage />} />
-        <Route path="/monitoring" element={<MonitoringPage />} />
-        <Route path="/complaints" element={<ComplaintsPage />} />
-        <Route path="/bookings" element={<BookingsPage />} />
-        <Route path="/reviews" element={<ReviewsPage />} />
-        <Route path="/disputes" element={<DisputesPage />} />
-        <Route path="/payments" element={<PaymentsPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/audit-logs" element={<AuditLogsPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/data" element={<DataManagementPage />} />
-        <Route path="/notifications" element={<NotificationsPage />} />
+        {routes.map(([path, page, perm]) => (
+          <Route key={path} path={path} element={can(perm) ? page : <NoAccess />} />
+        ))}
       </Route>
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={landing ? <Navigate to={landing} replace /> : <NoAccess />} />
     </Routes>
   );
 }

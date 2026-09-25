@@ -8,6 +8,8 @@ const { Server } = require("socket.io");
 const store = require("./store");
 const monitoring = require("./monitoring");
 const complaints = require("./complaints");
+const access = require("./access");
+auth.setAdminGuard(access.guard);
 const csvImport = require("./csvImport");
 const auth = require("./auth");
 const { sendOtpViaWhatsApp } = require("./whatsapp");
@@ -191,7 +193,13 @@ function optionalUser(req) {
 }
 
 // Admin ids look like "admin:<phone>"; that's what the change log records.
-const actorOf = (req) => String(req.user?.id || "admin").replace(/^admin:/, "");
+const actorOf = (req) => (req.admin ? `${req.admin.name} (${req.admin.phone})` : String(req.user?.id || "admin").replace(/^admin:/, ""));
+
+// The signed-in admin/staff account for a request, if any (permissions resolved live).
+function viewerAdmin(req) {
+  const u = optionalUser(req);
+  return u?.role === "admin" ? access.resolveByPhone(u.phone) : null;
+}
 
 function ah(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -205,7 +213,7 @@ app.post("/api/auth/otp/request", ah(async (req, res) => {
   if (!phone || !OTP_ROLES.includes(role)) {
     return res.status(400).json({ error: "phone and a valid role are required" });
   }
-  if (role === "admin" && !auth.isAdminPhone(phone)) {
+  if (role === "admin" && !access.resolveByPhone(phone)) {
     return res.status(403).json({ error: "This number is not registered as an admin" });
   }
   const code = auth.requestOtp(role, phone);
@@ -224,10 +232,11 @@ app.post("/api/auth/otp/verify", ah(async (req, res) => {
   if (!result.ok) return res.status(400).json({ error: result.error });
 
   if (role === "admin") {
-    if (!auth.isAdminPhone(phone)) return res.status(403).json({ error: "This number is not registered as an admin" });
-    const id = `admin:${auth.normalizePhone(phone)}`;
-    const token = auth.signToken({ id, role: "admin", phone });
-    return res.json({ token, user: { id, phone, name: "Admin" } });
+    const admin = access.resolveByPhone(phone);
+    if (!admin) return res.status(403).json({ error: "This number is not registered as an admin" });
+    access.recordLogin(phone);
+    const token = auth.signToken({ id: admin.id, role: "admin", phone: admin.phone });
+    return res.json({ token, user: adminProfile(admin) });
   }
 
   if (role === "customer") {
@@ -255,6 +264,10 @@ app.post("/api/provider/agreement/accept", auth.requireAuth("provider"), ah(asyn
   res.status(201).json(provider);
 }));
 
+function adminProfile(a) {
+  return { id: a.id, phone: a.phone, name: a.name, roleId: a.roleId, roleName: a.roleName, permissions: a.permissions, owner: Boolean(a.owner) };
+}
+
 app.get("/api/auth/me", auth.requireAuth(), ah(async (req, res) => {
   if (req.user.role === "customer") {
     const customer = await store.getCustomerById(req.user.id);
@@ -266,7 +279,7 @@ app.get("/api/auth/me", auth.requireAuth(), ah(async (req, res) => {
     if (!provider) return res.status(404).json({ error: "Not found" });
     return res.json({ role: "provider", user: provider });
   }
-  res.json({ role: "admin", user: { id: req.user.id, phone: req.user.phone, name: "Admin" } });
+  res.json({ role: "admin", user: adminProfile(req.admin) });
 }));
 
 // ---- bootstrap (public catalog only — per-user data comes from auth) ----
@@ -361,14 +374,14 @@ app.get("/api/provider/capacity", auth.requireAuth("provider"), ah(async (req, r
 // ---- providers ----
 app.get("/api/providers", ah(async (req, res) => {
   const providers = await store.listProviders();
-  res.json(optionalUser(req)?.role === "admin" ? providers : providers.map(publicProvider));
+  res.json(access.adminCan(viewerAdmin(req), "providers.view") ? providers : providers.map(publicProvider));
 }));
 
 app.get("/api/providers/:id", ah(async (req, res) => {
   const provider = await store.getProvider(req.params.id);
   if (!provider) return res.status(404).json({ error: "Provider not found" });
   const viewer = optionalUser(req);
-  const fullAccess = viewer && (viewer.role === "admin" || (viewer.role === "provider" && viewer.id === provider.id));
+  const fullAccess = (viewer && viewer.role === "provider" && viewer.id === provider.id) || access.adminCan(viewerAdmin(req), "providers.view");
   res.json(fullAccess ? provider : publicProvider(provider));
 }));
 
@@ -481,7 +494,7 @@ app.get("/api/providers/:id/reviews", ah(async (req, res) => {
 // (each carries an `active` flag).
 app.get("/api/categories", ah(async (req, res) => {
   const categories = await store.listCategories();
-  res.json(optionalUser(req)?.role === "admin" ? categories : categories.filter((c) => c.active));
+  res.json(access.adminCan(viewerAdmin(req), ["services.view", "customers.view", "providers.view", "bookings.view", "dashboard.view"]) ? categories : categories.filter((c) => c.active));
 }));
 
 app.patch("/api/admin/categories/:id", auth.requireAuth("admin"), ah(async (req, res) => {
@@ -1288,9 +1301,56 @@ app.delete("/api/admin/complaint-stages/:key", adminOnly, crm(async (req, res) =
 }));
 
 app.get("/api/admin/staff", adminOnly, crm(async (req, res) => res.json(await complaints.listStaff())));
-app.post("/api/admin/staff", adminOnly, crm(async (req, res) => res.status(201).json(complaints.addStaff(req.body || {}))));
-app.delete("/api/admin/staff/:id", adminOnly, crm(async (req, res) => {
-  if (!complaints.removeStaff(req.params.id)) return res.status(404).json({ error: "Staff member not found" });
+
+// ---- User management: internal staff accounts, roles, permissions ----
+const audit = (req, action, entityType, entityId, entityName, changes = []) =>
+  store.recordAdminChange({ actor: actorOf(req), action, entityType, entityId, entityName, changes });
+
+app.get("/api/admin/permissions/catalogue", adminOnly, crm(async (req, res) => res.json(access.catalogue())));
+
+app.get("/api/admin/users", adminOnly, crm(async (req, res) => res.json(access.listUsers())));
+app.post("/api/admin/users", adminOnly, crm(async (req, res) => {
+  const user = access.createUser(req.body || {}, actorOf(req));
+  audit(req, "user.create", "user", user.id, user.name, [{ field: "role", from: null, to: user.roleId }]);
+  res.status(201).json(user);
+}));
+app.patch("/api/admin/users/:id", adminOnly, crm(async (req, res) => {
+  const before = access.listUsers().find((u) => u.id === req.params.id);
+  const user = access.updateUser(req.params.id, req.body || {}, req.admin.id);
+  if (!user) return res.status(404).json({ error: "User not found" });
+  const changes = store.diffValues(before || {}, user, ["name", "phone", "email", "roleId", "active"]);
+  if (changes.length) audit(req, "user.update", "user", user.id, user.name, changes);
+  res.json(user);
+}));
+app.delete("/api/admin/users/:id", adminOnly, crm(async (req, res) => {
+  const before = access.listUsers().find((u) => u.id === req.params.id);
+  if (!access.deleteUser(req.params.id, req.admin.id)) return res.status(404).json({ error: "User not found" });
+  audit(req, "user.delete", "user", req.params.id, before?.name);
+  res.status(204).end();
+}));
+
+app.get("/api/admin/roles", adminOnly, crm(async (req, res) => res.json(access.listRoles())));
+app.post("/api/admin/roles", adminOnly, crm(async (req, res) => {
+  const role = access.createRole(req.body || {});
+  audit(req, "role.create", "role", role.id, role.name);
+  res.status(201).json(role);
+}));
+app.patch("/api/admin/roles/:id", adminOnly, crm(async (req, res) => {
+  const before = access.listRoles().find((r) => r.id === req.params.id);
+  const role = access.updateRole(req.params.id, req.body || {});
+  if (!role) return res.status(404).json({ error: "Role not found" });
+  const changes = store.diffValues(before || {}, role, ["name", "description"]);
+  const added = role.permissions.filter((p) => !(before?.permissions || []).includes(p));
+  const removed = (before?.permissions || []).filter((p) => !role.permissions.includes(p));
+  if (added.length) changes.push({ field: "permissions added", from: null, to: added.join(", ") });
+  if (removed.length) changes.push({ field: "permissions removed", from: removed.join(", "), to: null });
+  if (changes.length) audit(req, "role.update", "role", role.id, role.name, changes);
+  res.json(role);
+}));
+app.delete("/api/admin/roles/:id", adminOnly, crm(async (req, res) => {
+  const before = access.listRoles().find((r) => r.id === req.params.id);
+  if (!access.deleteRole(req.params.id)) return res.status(404).json({ error: "Role not found" });
+  audit(req, "role.delete", "role", req.params.id, before?.name);
   res.status(204).end();
 }));
 

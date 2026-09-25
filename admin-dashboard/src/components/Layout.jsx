@@ -11,6 +11,7 @@ const TITLES = {
   "/providers": { title: "Providers Verification", subtitle: "Review and manage service providers" },
   "/services": { title: "Services & Categories", subtitle: "Moderate the live service catalog" },
   "/home-layout": { title: "Home Layout (CMS)", subtitle: "Customer home sections and promotional banners" },
+  "/users": { title: "User Management", subtitle: "Staff accounts, roles and permissions" },
   "/complaints": { title: "Complaints & Disputes", subtitle: "Track, assign and resolve every complaint" },
   "/monitoring": { title: "Live Service Provider Monitoring", subtitle: "Real-time provider status, orders and reports" },
   "/bookings": { title: "Bookings", subtitle: "All bookings across every provider" },

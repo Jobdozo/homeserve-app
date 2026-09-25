@@ -66,6 +66,13 @@ function verifyToken(token) {
   }
 }
 
+// Installed by access.js: for admin-role tokens, checks the account is still
+// active and that its role permits this route (see access.guard).
+let adminGuard = null;
+function setAdminGuard(fn) {
+  adminGuard = fn;
+}
+
 function requireAuth(...allowedRoles) {
   return (req, res, next) => {
     const header = req.headers.authorization || "";
@@ -76,6 +83,10 @@ function requireAuth(...allowedRoles) {
       return res.status(403).json({ error: "Not authorized for this action" });
     }
     req.user = payload;
+    if (payload.role === "admin" && adminGuard) {
+      const denied = adminGuard(req, payload);
+      if (denied) return res.status(denied.status).json({ error: denied.error });
+    }
     next();
   };
 }
@@ -84,6 +95,7 @@ module.exports = {
   normalizePhone,
   isAdminPhone,
   adminPhones: () => [...ADMIN_PHONES],
+  setAdminGuard,
   requestOtp,
   verifyOtp,
   signToken,

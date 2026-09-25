@@ -23,39 +23,43 @@ import {
 
 const sections = [
   {
-    items: [{ label: "Dashboard", icon: DashboardIcon, to: "/dashboard" }],
+    items: [{ label: "Dashboard", icon: DashboardIcon, to: "/dashboard", perm: "dashboard.view" }],
   },
   {
     title: "Users",
-    items: [{ label: "Customers", icon: UsersIcon, to: "/customers" }],
+    items: [{ label: "Customers", icon: UsersIcon, to: "/customers", perm: "customers.view" }],
   },
   {
     items: [
-      { label: "Providers Verification", icon: ShieldCheckIcon, to: "/providers" },
-      { label: "Live Provider Monitoring", icon: RequestIcon, to: "/monitoring" },
-      { label: "Services & Categories", icon: GridIcon, to: "/services" },
-      { label: "Locations", icon: MapPinIcon, sub: "Cities / Areas / PIN Codes" },
-      { label: "Bookings", icon: CalendarIcon, to: "/bookings" },
-      { label: "Payments & Transactions", icon: WalletIcon, to: "/payments" },
-      { label: "Reviews & Ratings", icon: StarIcon, to: "/reviews" },
-      { label: "Complaints & Disputes", icon: AlertIcon, to: "/complaints" },
-      { label: "Notifications", icon: BellIcon, to: "/notifications" },
+      { label: "Providers Verification", icon: ShieldCheckIcon, to: "/providers", perm: "providers.view" },
+      { label: "Live Provider Monitoring", icon: RequestIcon, to: "/monitoring", perm: "monitoring.view" },
+      { label: "Services & Categories", icon: GridIcon, to: "/services", perm: "services.view" },
+      { label: "Locations", icon: MapPinIcon, sub: "Cities / Areas / PIN Codes", perm: "*" },
+      { label: "Bookings", icon: CalendarIcon, to: "/bookings", perm: "bookings.view" },
+      { label: "Payments & Transactions", icon: WalletIcon, to: "/payments", perm: "payments.view" },
+      { label: "Reviews & Ratings", icon: StarIcon, to: "/reviews", perm: "reviews.view" },
+      { label: "Complaints & Disputes", icon: AlertIcon, to: "/complaints", perm: "complaints.view" },
+      { label: "Notifications", icon: BellIcon, to: "/notifications", perm: "notifications.view" },
     ],
   },
   {
     items: [
-      { label: "Reports & Analytics", icon: ChartIcon, to: "/reports" },
-      { label: "Home Layout (CMS)", icon: FileIcon, to: "/home-layout" },
-      { label: "Import & Export", icon: DownloadIcon, to: "/data" },
-      { label: "Settings", icon: SettingsIcon, to: "/settings" },
-      { label: "Audit Logs", icon: ArchiveIcon, to: "/audit-logs" },
-      { label: "Support", icon: SupportIcon },
+      { label: "Reports & Analytics", icon: ChartIcon, to: "/reports", perm: "reports.view" },
+      { label: "Home Layout (CMS)", icon: FileIcon, to: "/home-layout", perm: "cms.view" },
+      { label: "Import & Export", icon: DownloadIcon, to: "/data", perm: ["data.export", "data.import"] },
+      { label: "User Management", icon: UsersIcon, to: "/users", perm: "users.view" },
+      { label: "Settings", icon: SettingsIcon, to: "/settings", perm: "settings.view" },
+      { label: "Audit Logs", icon: ArchiveIcon, to: "/audit-logs", perm: "audit.view" },
+      { label: "Support", icon: SupportIcon, perm: "*" },
     ],
   },
 ];
 
 export default function Sidebar({ open, onClose }) {
-  const { showToast } = useApp();
+  const { showToast, admin, can } = useApp();
+  const visibleSections = sections
+    .map((s) => ({ ...s, items: s.items.filter((item) => !item.perm || can(item.perm)) }))
+    .filter((s) => s.items.length > 0);
 
   return (
     <>
@@ -71,12 +75,12 @@ export default function Sidebar({ open, onClose }) {
           </span>
           <div>
             <p className="text-[15px] font-bold leading-tight">Tikdum</p>
-            <p className="text-[11px] text-white/50">Super Admin</p>
+            <p className="text-[11px] text-white/50">{admin?.roleName || "Super Admin"}</p>
           </div>
         </div>
 
         <nav className="no-scrollbar flex-1 overflow-y-auto px-3 pb-4">
-          {sections.map((section, i) => (
+          {visibleSections.map((section, i) => (
             <div key={i} className="mb-3">
               {section.title && (
                 <p className="mb-1 mt-3 px-3 text-[10.5px] font-semibold uppercase tracking-wide text-white/35">

@@ -55,14 +55,17 @@ export function AppProvider({ children }) {
     setActivities([]);
   }, []);
 
+  // Each dataset loads on its own: a role without access to one (403) just
+  // gets an empty list for it instead of blocking the whole portal.
   const loadAll = useCallback(async () => {
+    const soft = (p, fallback) => p.catch(() => fallback);
     const [overviewData, categoryData, providerData, serviceData, bookingData, activityData] = await Promise.all([
-      api.getOverview(),
-      api.listCategories(),
-      api.listProviders(),
-      api.listServices(),
-      api.listBookings(),
-      api.listActivities(20),
+      soft(api.getOverview(), null),
+      soft(api.listCategories(), []),
+      soft(api.listProviders(), []),
+      soft(api.listServices(), []),
+      soft(api.listBookings(), []),
+      soft(api.listActivities(20), []),
     ]);
     setOverview(overviewData);
     setCategories(categoryData);
@@ -187,6 +190,18 @@ export function AppProvider({ children }) {
   }, [toast]);
 
   const showToast = useCallback((message) => setToast(message), []);
+
+  // Permission check for the signed-in staff account. "*" = Super Admin, and
+  // "<module>.manage" covers every action in that module. Accepts one
+  // permission or an array meaning "any of these".
+  const can = useCallback(
+    (needed) => {
+      const perms = admin?.permissions || [];
+      if (perms.includes("*")) return true;
+      return (Array.isArray(needed) ? needed : [needed]).some((n) => perms.includes(n) || perms.includes(`${n.split(".")[0]}.manage`));
+    },
+    [admin]
+  );
 
   const approveProvider = useCallback(
     async (id) => {
@@ -334,6 +349,7 @@ export function AppProvider({ children }) {
   const value = useMemo(
     () => ({
       admin,
+      can,
       authLoading,
       login,
       logout,
@@ -365,6 +381,7 @@ export function AppProvider({ children }) {
     }),
     [
       admin,
+      can,
       authLoading,
       login,
       logout,

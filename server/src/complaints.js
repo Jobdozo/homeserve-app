@@ -5,12 +5,11 @@
 // Flat-JSON storage (see jsonStore.js) — no schema migration needed.
 const jsonStore = require("./jsonStore");
 const store = require("./store");
-const auth = require("./auth");
+const access = require("./access");
 
 const COMPLAINTS = "complaints";
 const EVENTS = "complaintEvents";
 const STAGES = "complaintStages";
-const STAFF = "complaintStaff";
 
 // kind drives behaviour: open (default), waiting, escalated, resolved, closed.
 // The system stages (new, resolved, closed, reopened) are what the workflow
@@ -93,20 +92,12 @@ function reorderStages(keys) {
 }
 
 // ---- staff (assignees): admin phones from the environment + staff added here ----
+// Assignees are the internal accounts from User Management (owners included).
 async function listStaff() {
-  const admins = auth.adminPhones().map((phone) => ({ id: `admin:${phone}`, name: phone, phone, source: "admin" }));
-  const added = jsonStore.readAll(STAFF).filter((s) => s.active !== false).map((s) => ({ ...s, source: "staff" }));
-  return [...added, ...admins];
-}
-
-function addStaff({ name, phone, role }) {
-  const clean = String(name || "").trim().slice(0, 60);
-  if (!clean) throw fail(400, "Name is required");
-  return jsonStore.insert(STAFF, { name: clean, phone: String(phone || "").trim().slice(0, 20), role: String(role || "").trim().slice(0, 40), active: true });
-}
-
-function removeStaff(id) {
-  return jsonStore.update(STAFF, id, { active: false }) !== undefined;
+  return access
+    .listUsers()
+    .filter((u) => u.active !== false)
+    .map((u) => ({ id: `admin:${String(u.phone).replace(/[^\d+]/g, "")}`, name: u.owner ? `Owner (${u.phone})` : u.name, phone: u.phone, role: u.roleName }));
 }
 
 // ---- events (the complete history) ----
@@ -421,7 +412,7 @@ function meta() {
 
 module.exports = {
   listStages, createStage, updateStage, deleteStage, reorderStages,
-  listStaff, addStaff, removeStaff,
+  listStaff,
   lookup, createComplaint, listComplaints, getComplaint, updateComplaint,
   assign, changeStatus, reopen, addComm, addEvidence, meta,
 };
