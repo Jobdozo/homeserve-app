@@ -64,7 +64,7 @@ export default function EarningsScreen() {
             <Row label="Completed Jobs" value={`+₹${scaled.completed.toLocaleString("en-IN")}`} positive />
             <Row label="In Progress Jobs" value={`+₹${scaled.inProgress.toLocaleString("en-IN")}`} positive />
             <Row label="Cancelled Jobs" value={`₹${scaled.cancelled}`} />
-            <Row label={`Platform Fee (${breakdown.platformFeePct}%)`} value={`-₹${scaled.fee.toLocaleString("en-IN")}`} negative />
+            <Row label="Communication Fee" value={`-₹${scaled.fee.toLocaleString("en-IN")}`} negative />
             <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2">
               <span className="text-[13px] font-bold text-gray-900">Total Earnings</span>
               <span className="text-[15px] font-extrabold text-brand">₹{total.toLocaleString("en-IN")}</span>

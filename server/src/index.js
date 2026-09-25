@@ -1117,7 +1117,15 @@ app.get("/api/admin/settings", auth.requireAuth("admin"), ah(async (req, res) =>
 
 app.patch("/api/admin/settings", auth.requireAuth("admin"), ah(async (req, res) => {
   const settings = store.updateSettings(req.body || {});
-  await store.logActivity("settings", `Platform fee updated to ${settings.platformFeePct}%`);
+  const changedFee = Object.keys(req.body || {}).some((k) => k.startsWith("communicationFee") || k === "platformFeePct");
+  if (changedFee) {
+    await store.logActivity(
+      "settings",
+      settings.communicationFeeEnabled
+        ? `Communication fee updated: ${settings.communicationFeePct}%${settings.communicationFeeMax > 0 ? ` (max ₹${settings.communicationFeeMax})` : ""}`
+        : "Communication fee switched off"
+    );
+  }
   res.json(settings);
 }));
 

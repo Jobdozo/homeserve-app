@@ -4,15 +4,12 @@ import CategoryIcon from "../components/CategoryIcon";
 
 export default function PaymentsPage() {
   const [transactions, setTransactions] = useState([]);
-  const [feePct, setFeePct] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([api.getTransactions(), api.getSettings()])
-      .then(([t, s]) => {
-        setTransactions(t);
-        setFeePct(s.platformFeePct);
-      })
+    api
+      .getTransactions()
+      .then(setTransactions)
       .finally(() => setLoading(false));
   }, []);
 
@@ -28,7 +25,7 @@ export default function PaymentsPage() {
           <p className="mt-1 text-2xl font-extrabold text-gray-900">₹{totalRevenue.toLocaleString("en-IN")}</p>
         </div>
         <div className="rounded-2xl bg-white p-4 shadow-card">
-          <p className="text-[11px] text-gray-400">Platform Fees {feePct != null ? `(${feePct}%)` : ""}</p>
+          <p className="text-[11px] text-gray-400">Communication Fees</p>
           <p className="mt-1 text-2xl font-extrabold text-emerald-600">₹{totalFees.toLocaleString("en-IN")}</p>
         </div>
         <div className="rounded-2xl bg-white p-4 shadow-card">

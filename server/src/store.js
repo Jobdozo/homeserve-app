@@ -1441,7 +1441,7 @@ async function updateBookingStatus(id, status) {
     // Never let a wallet-side failure block marking the job Completed — the
     // booking status update above has already succeeded at this point.
     try {
-      await deductWalletCommission(existing.providerId, existing.amount, id);
+      await deductWalletCommission(existing.providerId, existing, id);
     } catch (e) {
       console.error(`Wallet commission deduction failed for booking ${id}:`, e);
     }
@@ -1788,12 +1788,14 @@ function sumInRange(bookings, start, end) {
 // the immediately preceding period of the same length, so Daily/Weekly/
 // Monthly/Yearly each reflect what actually happened in that window instead
 // of a fixed ratio applied to an all-time total.
-function buildEarningsPeriod({ completed, cancelled, inProgressTotal, platformFeePct, start, prevStart, prevEnd }) {
+function buildEarningsPeriod({ completed, cancelled, inProgressTotal, platformFeePct, cfg, start, prevStart, prevEnd }) {
   const total = sumInRange(completed, start);
   const prevTotal = sumInRange(completed, prevStart, prevEnd);
   const changePct = prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : total > 0 ? 100 : 0;
   const cancelledJobs = sumInRange(cancelled, start);
-  const platformFeeAmt = Math.round(total * (platformFeePct / 100));
+  const platformFeeAmt = completed
+    .filter((b) => earningsEventDate(b) >= start)
+    .reduce((sum, b) => sum + bookingCommunicationFee(b, cfg), 0);
   return {
     total,
     changePct,
@@ -1807,13 +1809,14 @@ async function getEarnings(providerId) {
   const inProgress = bookings.filter((b) => b.status === "In Progress");
   const cancelled = bookings.filter((b) => b.status === "Cancelled");
   const inProgressTotal = inProgress.reduce((sum, b) => sum + b.amount, 0);
-  const { platformFeePct } = getSettings();
+  const cfg = getSettings();
+  const { platformFeePct } = cfg;
 
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const startOfYear = new Date(now.getFullYear(), 0, 1);
-  const args = { completed, cancelled, inProgressTotal, platformFeePct };
+  const args = { completed, cancelled, inProgressTotal, platformFeePct, cfg };
 
   const rollingWindow = (days) => {
     const start = new Date(startOfToday);
@@ -1944,12 +1947,12 @@ async function getAdminOverview() {
 
 async function getTransactions() {
   const [bookings, providers] = await Promise.all([listBookings(), listProviders()]);
-  const { platformFeePct } = getSettings();
+  const cfg = getSettings();
   return bookings
     .filter((b) => b.status === "Completed")
     .map((b) => {
       const provider = providers.find((p) => p.id === b.providerId);
-      const platformFee = Math.round(b.amount * (platformFeePct / 100));
+      const platformFee = bookingCommunicationFee(b, cfg);
       return {
         id: b.id,
         service: b.service?.name,
@@ -2006,8 +2009,8 @@ async function getAdminReports() {
     })
     .sort((a, b) => b.revenue - a.revenue);
 
-  const { platformFeePct } = getSettings();
-  const platformRevenue = completed.reduce((sum, b) => sum + Math.round(b.amount * (platformFeePct / 100)), 0);
+  const cfg = getSettings();
+  const platformRevenue = completed.reduce((sum, b) => sum + bookingCommunicationFee(b, cfg), 0);
 
   return { revenueByCategory, statusDistribution, providerLeaderboard, platformRevenue };
 }
@@ -2312,20 +2315,94 @@ function validateOffer(code) {
 
 // ---- platform settings (single record, same jsonStore approach as banners/offers) ----
 
-const DEFAULT_SETTINGS = { platformFeePct: 10, referralFriendDiscount: 50, referralReward: 50, cpcRate: 2, defaultMaxOpenRequests: 5, staleRequestDays: 5 };
+// Communication fee (what Tikdum charges the provider per completed job):
+// pct of the applicable amount, raised to communicationFeeMin and capped at
+// communicationFeeMax (0 = no cap). Default is 10% or ₹40, whichever is lower.
+const DEFAULT_SETTINGS = {
+  platformFeePct: 10, // legacy mirror of communicationFeePct, kept for older clients
+  communicationFeeEnabled: true,
+  communicationFeePct: 10,
+  communicationFeeMax: 40,
+  communicationFeeMin: 0,
+  communicationFeeBasis: "order", // "order" = booking amount, "service" = listed service price
+  communicationFeeApplyFrom: 0, // amounts below this pay no fee
+  referralFriendDiscount: 50,
+  referralReward: 50,
+  cpcRate: 2,
+  defaultMaxOpenRequests: 5,
+  staleRequestDays: 5,
+};
 
 function getSettings() {
   const [existing] = jsonStore.readAll("settings");
-  return { ...DEFAULT_SETTINGS, ...existing };
+  const merged = { ...DEFAULT_SETTINGS, ...existing };
+  // A custom commission % saved before the communication fee existed carries
+  // over (the stored 10 is just the old default, so it takes the new defaults).
+  if (existing?.communicationFeePct === undefined && existing?.platformFeePct !== undefined && existing.platformFeePct !== 10) {
+    merged.communicationFeePct = existing.platformFeePct;
+  }
+  merged.platformFeePct = merged.communicationFeePct;
+  return merged;
+}
+
+// The amount the fee is computed on for a booking, per the configured basis.
+function applicableAmount(booking, cfg = getSettings()) {
+  const order = Number(booking?.amount) || 0;
+  if (cfg.communicationFeeBasis === "service") {
+    const price = Number(booking?.service?.price);
+    return Number.isFinite(price) && price > 0 ? price : order;
+  }
+  return order;
+}
+
+// Pure fee formula: pct of amount, at least min, at most max, never more than
+// the amount itself; whole rupees.
+function calcCommunicationFee(amount, cfg = getSettings()) {
+  const amt = Number(amount) || 0;
+  if (!cfg.communicationFeeEnabled || amt <= 0 || amt < (cfg.communicationFeeApplyFrom || 0)) return 0;
+  let fee = (amt * cfg.communicationFeePct) / 100;
+  if (cfg.communicationFeeMin > 0) fee = Math.max(fee, cfg.communicationFeeMin);
+  if (cfg.communicationFeeMax > 0) fee = Math.min(fee, cfg.communicationFeeMax);
+  return Math.round(Math.min(fee, amt));
+}
+
+function bookingCommunicationFee(booking, cfg = getSettings()) {
+  return calcCommunicationFee(applicableAmount(booking, cfg), cfg);
 }
 
 function updateSettings(patch) {
-  if (patch.platformFeePct !== undefined) {
-    const pct = Number(patch.platformFeePct);
+  // Old clients still send platformFeePct; treat it as the communication fee %.
+  if (patch.platformFeePct !== undefined && patch.communicationFeePct === undefined) {
+    patch = { ...patch, communicationFeePct: patch.platformFeePct };
+  }
+  delete patch.platformFeePct;
+  if (patch.communicationFeePct !== undefined) {
+    const pct = Number(patch.communicationFeePct);
     if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
-      throw Object.assign(new Error("Platform fee must be a number between 0 and 100"), { status: 400 });
+      throw Object.assign(new Error("Communication fee percentage must be between 0 and 100"), { status: 400 });
     }
-    patch = { ...patch, platformFeePct: pct };
+    patch = { ...patch, communicationFeePct: pct };
+  }
+  if (patch.communicationFeeEnabled !== undefined) patch = { ...patch, communicationFeeEnabled: Boolean(patch.communicationFeeEnabled) };
+  if (patch.communicationFeeBasis !== undefined && !["order", "service"].includes(patch.communicationFeeBasis)) {
+    throw Object.assign(new Error("Applicable amount must be the order amount or the service price"), { status: 400 });
+  }
+  for (const key of ["communicationFeeMax", "communicationFeeMin", "communicationFeeApplyFrom"]) {
+    if (patch[key] !== undefined) {
+      const amount = Number(patch[key] || 0);
+      if (!Number.isFinite(amount) || amount < 0) {
+        throw Object.assign(new Error("Fee amounts must be 0 or more"), { status: 400 });
+      }
+      patch = { ...patch, [key]: amount };
+    }
+  }
+  {
+    const cur = getSettings();
+    const min = patch.communicationFeeMin ?? cur.communicationFeeMin;
+    const max = patch.communicationFeeMax ?? cur.communicationFeeMax;
+    if (max > 0 && min > max) {
+      throw Object.assign(new Error("Minimum fee can't be higher than the maximum fee"), { status: 400 });
+    }
   }
   for (const key of ["referralFriendDiscount", "referralReward", "cpcRate", "defaultMaxOpenRequests", "staleRequestDays"]) {
     if (patch[key] !== undefined) {
@@ -2337,7 +2414,8 @@ function updateSettings(patch) {
     }
   }
   const [existing] = jsonStore.readAll("settings");
-  const next = { ...DEFAULT_SETTINGS, ...existing, ...patch };
+  const next = { ...getSettings(), ...patch };
+  next.platformFeePct = next.communicationFeePct;
   if (existing) jsonStore.update("settings", existing.id, next);
   else jsonStore.insert("settings", { id: "platform", ...next });
   return getSettings();
@@ -2653,10 +2731,10 @@ async function applyWalletDeduction(providerId, amount, { bookingId, reason } = 
   return wallet;
 }
 
-async function deductWalletCommission(providerId, bookingAmount, bookingId) {
-  const { platformFeePct } = getSettings();
-  const commission = Math.round(bookingAmount * (platformFeePct / 100));
-  return applyWalletDeduction(providerId, commission, { bookingId, reason: "commission" });
+async function deductWalletCommission(providerId, booking, bookingId) {
+  const fee = bookingCommunicationFee(booking);
+  if (fee <= 0) return null; // fee switched off, below the threshold, or a zero-value job
+  return applyWalletDeduction(providerId, fee, { bookingId, reason: "commission" });
 }
 
 // Called periodically (see index.js) — re-sends the recharge reminder to any
@@ -3234,6 +3312,7 @@ module.exports = {
   getAdminReports,
   listBanners,
   listActiveBanners,
+  calcCommunicationFee,
   registerBannerClick,
   listHomeSections,
   createHomeSection,
