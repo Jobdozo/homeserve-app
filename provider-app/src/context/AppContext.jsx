@@ -331,7 +331,8 @@ export function AppProvider({ children }) {
     };
     const onProviderUpdated = (updated) => {
       if (updated.id !== providerId) return;
-      setProvider(updated);
+      // The broadcast omits phone/email; merge so they aren't wiped.
+      setProvider((prev) => ({ ...prev, ...updated }));
     };
     const onNotificationCreated = (notification) => {
       if (notification.recipientType !== "provider" || notification.recipientId !== providerId) return;

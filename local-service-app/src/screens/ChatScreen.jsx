@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { BackIcon, PhoneIcon, SendIcon } from "../components/icons";
+import { callProvider } from "../utils/callProvider";
 
 export default function ChatScreen() {
   const { bookingId } = useParams();
   const navigate = useNavigate();
-  const { getBooking, getProvider, messages, sendMessage, loadMessages } = useApp();
+  const { getBooking, getProvider, messages, sendMessage, loadMessages, showToast } = useApp();
   const [text, setText] = useState("");
   const endRef = useRef(null);
 
@@ -61,12 +62,15 @@ export default function ChatScreen() {
             <p className="text-[11px] text-emerald-500">Active</p>
           </div>
         </button>
-        <a
-          href={`tel:${provider?.phone}`}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-light text-brand lg:h-10 lg:w-10"
-        >
-          <PhoneIcon width={16} height={16} />
-        </a>
+        {["Accepted", "In Progress"].includes(booking.status) && (
+          <button
+            onClick={() => callProvider(booking.id, showToast)}
+            aria-label="Call provider"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-light text-brand lg:h-10 lg:w-10"
+          >
+            <PhoneIcon width={16} height={16} />
+          </button>
+        )}
       </div>
 
       <div className="mx-4 mt-3 rounded-xl bg-amber-50 px-3 py-2 text-[11px] text-amber-700 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8">
@@ -80,6 +84,11 @@ export default function ChatScreen() {
         <div ref={endRef} />
       </div>
 
+      {booking.status === "Completed" ? (
+        <div className="flex-shrink-0 border-t border-gray-100 bg-gray-50 px-4 py-3.5 text-center text-[12px] text-gray-500 lg:mx-auto lg:w-full lg:max-w-2xl">
+          This order is completed — messaging and calling the service provider are no longer available.
+        </div>
+      ) : (
       <div className="flex flex-shrink-0 items-center gap-2 border-t border-gray-100 bg-white px-3 py-2.5 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:py-4">
         <input
           value={text}
@@ -96,6 +105,7 @@ export default function ChatScreen() {
           <SendIcon width={16} height={16} />
         </button>
       </div>
+      )}
     </div>
   );
 }

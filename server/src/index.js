@@ -146,6 +146,22 @@ function maskCompleted(booking) {
   return { ...booking, customer: { ...booking.customer, phone: null, email: null } };
 }
 
+// A provider's phone/email are never part of the public catalog: customers
+// get a provider's number only through their own booking (see
+// /api/bookings/:id/provider-contact), and only while the order is live —
+// so it can't be used to call them after the order is Completed.
+function publicProvider(provider) {
+  if (!provider) return provider;
+  const { phone, email, ...rest } = provider;
+  return rest;
+}
+
+function optionalUser(req) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  return (token && auth.verifyToken(token)) || null;
+}
+
 function ah(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 }
@@ -204,7 +220,7 @@ app.post("/api/admin/remove-seed-data", auth.requireAuth("admin"), ah(async (req
 app.post("/api/provider/agreement/accept", auth.requireAuth("provider"), ah(async (req, res) => {
   store.acceptProviderAgreement(req.user.id, { ip: req.ip, userAgent: req.headers["user-agent"] });
   const provider = await store.getProvider(req.user.id);
-  io.emit("provider:updated", provider);
+  io.emit("provider:updated", publicProvider(provider));
   res.status(201).json(provider);
 }));
 
@@ -230,7 +246,7 @@ app.get("/api/bootstrap", ah(async (req, res) => {
     store.listCategories(),
     store.listServices({ activeOnly: true, pincode }),
   ]);
-  res.json({ providers, categories, services });
+  res.json({ providers: providers.map(publicProvider), categories, services });
 }));
 
 // ---- customer's registered address (drives PIN-code catalog visibility) ----
@@ -307,12 +323,17 @@ app.get("/api/provider/capacity", auth.requireAuth("provider"), ah(async (req, r
 }));
 
 // ---- providers ----
-app.get("/api/providers", ah(async (req, res) => res.json(await store.listProviders())));
+app.get("/api/providers", ah(async (req, res) => {
+  const providers = await store.listProviders();
+  res.json(optionalUser(req)?.role === "admin" ? providers : providers.map(publicProvider));
+}));
 
 app.get("/api/providers/:id", ah(async (req, res) => {
   const provider = await store.getProvider(req.params.id);
   if (!provider) return res.status(404).json({ error: "Provider not found" });
-  res.json(provider);
+  const viewer = optionalUser(req);
+  const fullAccess = viewer && (viewer.role === "admin" || (viewer.role === "provider" && viewer.id === provider.id));
+  res.json(fullAccess ? provider : publicProvider(provider));
 }));
 
 app.get("/api/providers/:id/services", ah(async (req, res) => {
@@ -339,7 +360,7 @@ app.patch("/api/providers/:id/profile", auth.requireAuth("provider"), ah(async (
   }
   const provider = await store.updateProviderProfile(req.params.id, req.body || {});
   if (!provider) return res.status(404).json({ error: "Provider not found" });
-  io.emit("provider:updated", provider);
+  io.emit("provider:updated", publicProvider(provider));
   res.json(provider);
 }));
 
@@ -350,7 +371,7 @@ app.patch("/api/providers/:id/verification", auth.requireAuth("admin"), ah(async
   }
   const provider = await store.setProviderVerification(req.params.id, status);
   if (!provider) return res.status(404).json({ error: "Provider not found" });
-  io.emit("provider:updated", provider);
+  io.emit("provider:updated", publicProvider(provider));
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.json(provider);
 }));
@@ -665,6 +686,20 @@ app.patch("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
   res.json(booking);
 }));
 
+// The customer's only way to get the provider's number: their own booking,
+// while it's Accepted or In Progress.
+app.get("/api/bookings/:id/provider-contact", auth.requireAuth("customer"), ah(async (req, res) => {
+  const booking = await store.getBooking(req.params.id);
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  if (booking.customerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
+  if (!["Accepted", "In Progress"].includes(booking.status)) {
+    return res.status(403).json({ error: "You can only call the service provider while the order is active" });
+  }
+  const provider = await store.getProvider(booking.providerId);
+  if (!provider?.phone) return res.status(404).json({ error: "No phone number available" });
+  res.json({ phone: provider.phone });
+}));
+
 app.post("/api/bookings/:id/review", auth.requireAuth("customer"), ah(async (req, res) => {
   const { rating, text } = req.body || {};
   if (typeof rating !== "number" || rating < 1 || rating > 5) {
@@ -675,7 +710,7 @@ app.post("/api/bookings/:id/review", auth.requireAuth("customer"), ah(async (req
   if (existing.customerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
   const result = await store.addReview(req.params.id, rating, text);
   io.emit("booking:updated", maskCompleted(result.booking));
-  if (result.provider) io.emit("provider:updated", result.provider);
+  if (result.provider) io.emit("provider:updated", publicProvider(result.provider));
   if (result.service) io.emit("service:updated", result.service);
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.json(result.booking);
@@ -922,6 +957,9 @@ app.post("/api/messages/:bookingId", auth.requireAuth("customer", "provider"), a
   if (from === "user" && booking.customerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
   if (from === "provider" && booking.status === "Completed") {
     return res.status(403).json({ error: "This order is completed — you can no longer message the customer" });
+  }
+  if (from === "user" && booking.status === "Completed") {
+    return res.status(403).json({ error: "This order is completed — you can no longer message the service provider" });
   }
   const message = await store.addMessage(req.params.bookingId, from, text.trim());
   io.emit("message:created", { bookingId: req.params.bookingId, message });

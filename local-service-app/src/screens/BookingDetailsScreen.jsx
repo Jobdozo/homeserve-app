@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { api } from "../api";
+import { callProvider } from "../utils/callProvider";
 import { STATUS_STEPS } from "../data/mockData";
 import ScreenHeader from "../components/ScreenHeader";
 import { ChatIcon, PhoneIcon, StarIcon, CheckIcon, MapPinIcon } from "../components/icons";
@@ -116,20 +117,24 @@ export default function BookingDetailsScreen() {
                 </div>
               </div>
             </button>
-            <button
-              onClick={() => navigate(`/chat/${booking.id}`)}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-light text-brand"
-              aria-label="Message provider"
-            >
-              <ChatIcon width={16} height={16} />
-            </button>
-            <a
-              href={`tel:${provider?.phone}`}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-light text-brand"
-              aria-label="Call provider"
-            >
-              <PhoneIcon width={16} height={16} />
-            </a>
+            {booking.status !== "Completed" && (
+              <button
+                onClick={() => navigate(`/chat/${booking.id}`)}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-light text-brand"
+                aria-label="Message provider"
+              >
+                <ChatIcon width={16} height={16} />
+              </button>
+            )}
+            {["Accepted", "In Progress"].includes(booking.status) && (
+              <button
+                onClick={() => callProvider(booking.id, showToast)}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-light text-brand"
+                aria-label="Call provider"
+              >
+                <PhoneIcon width={16} height={16} />
+              </button>
+            )}
           </div>
           {liveLocation && (
             <div className="mt-2">

@@ -145,7 +145,12 @@ export function AppProvider({ children }) {
       scheduleRefresh();
     };
     const onProviderUpdated = (provider) => {
-      setProviders((prev) => upsertById(prev, provider));
+      // The broadcast omits phone/email; merge so they aren't wiped from view.
+      setProviders((prev) =>
+        prev.some((p) => p.id === provider.id)
+          ? prev.map((p) => (p.id === provider.id ? { ...p, ...provider } : p))
+          : upsertById(prev, provider)
+      );
       scheduleRefresh();
     };
     const onProviderDeleted = (providerId) => {
