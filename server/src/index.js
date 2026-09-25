@@ -57,7 +57,7 @@ function simulateProviderIfNeeded(booking) {
 
       const updated = await store.updateBookingStatus(booking.id, "Accepted");
       if (!updated) return;
-      io.emit("booking:updated", updated);
+      io.emit("booking:updated", maskCompleted(updated));
 
       const message = await store.addMessage(booking.id, "provider", CANNED_ACCEPT);
       io.emit("message:created", { bookingId: booking.id, message });
@@ -106,7 +106,7 @@ async function dispatchBooking(booking, triedProviderIds = [booking.providerId])
       const current = await store.getBooking(booking.id);
       if (!current || current.status !== "Pending") return; // already accepted/rejected/cancelled
       const result = await store.reassignBooking(booking.id, triedProviderIds);
-      io.emit("booking:updated", result.booking);
+      io.emit("booking:updated", maskCompleted(result.booking));
       io.emit("activity:created", (await store.listActivities(1))[0]);
       if (result.reassigned) {
         io.emit("booking:created", result.booking);
@@ -137,6 +137,15 @@ function simulateReplyIfNeeded(bookingId, from) {
 
 // Wraps a route handler so thrown errors and rejected promises reach the
 // global error handler instead of crashing the process or hanging the request.
+// Once an order is Completed the provider may no longer contact the customer,
+// so the customer's phone/email are stripped from any completed booking that
+// leaves the server (REST responses and the shared socket broadcast) — the
+// number simply isn't there to call, not just hidden in the UI.
+function maskCompleted(booking) {
+  if (!booking || booking.status !== "Completed" || !booking.customer) return booking;
+  return { ...booking, customer: { ...booking.customer, phone: null, email: null } };
+}
+
 function ah(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 }
@@ -588,7 +597,7 @@ app.delete("/api/admin/services/:id", auth.requireAuth("admin"), ah(async (req, 
 app.get("/api/bookings", auth.requireAuth(), ah(async (req, res) => {
   if (req.user.role === "admin") return res.json(await store.listBookings({}));
   if (req.user.role === "customer") return res.json(await store.listBookings({ customerId: req.user.id }));
-  res.json(await store.listBookings({ providerId: req.user.id }));
+  res.json((await store.listBookings({ providerId: req.user.id })).map(maskCompleted));
 }));
 
 app.get("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
@@ -600,7 +609,7 @@ app.get("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
   if (req.user.role === "provider" && booking.providerId !== req.user.id) {
     return res.status(403).json({ error: "Not your booking" });
   }
-  res.json(booking);
+  res.json(req.user.role === "provider" ? maskCompleted(booking) : booking);
 }));
 
 app.post("/api/bookings", auth.requireAuth("customer"), ah(async (req, res) => {
@@ -641,7 +650,7 @@ app.patch("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
   // to another provider in the same category first, same as a ring timeout.
   if (req.user.role === "provider" && status === "Rejected" && existing.status === "Pending") {
     const result = await store.reassignBooking(req.params.id, [req.user.id]);
-    io.emit("booking:updated", result.booking);
+    io.emit("booking:updated", maskCompleted(result.booking));
     io.emit("activity:created", (await store.listActivities(1))[0]);
     if (result.reassigned) {
       io.emit("booking:created", result.booking);
@@ -651,7 +660,7 @@ app.patch("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
   }
 
   const booking = await store.updateBookingStatus(req.params.id, status);
-  io.emit("booking:updated", booking);
+  io.emit("booking:updated", maskCompleted(booking));
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.json(booking);
 }));
@@ -665,7 +674,7 @@ app.post("/api/bookings/:id/review", auth.requireAuth("customer"), ah(async (req
   if (!existing) return res.status(404).json({ error: "Booking not found" });
   if (existing.customerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
   const result = await store.addReview(req.params.id, rating, text);
-  io.emit("booking:updated", result.booking);
+  io.emit("booking:updated", maskCompleted(result.booking));
   if (result.provider) io.emit("provider:updated", result.provider);
   if (result.service) io.emit("service:updated", result.service);
   io.emit("activity:created", (await store.listActivities(1))[0]);
@@ -855,9 +864,9 @@ app.post("/api/bookings/:id/otp/verify", auth.requireAuth("provider"), ah(async 
   if (!booking) return res.status(404).json({ error: "Booking not found" });
   if (booking.providerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
   const updated = await store.verifyBookingOtp(req.params.id, req.body?.type, req.body?.code);
-  io.emit("booking:updated", updated);
+  io.emit("booking:updated", maskCompleted(updated));
   io.emit("activity:created", (await store.listActivities(1))[0]);
-  res.json(updated);
+  res.json(maskCompleted(updated));
 }));
 
 // ---- live location (self-reported every ~30s by the customer/provider apps
@@ -911,6 +920,9 @@ app.post("/api/messages/:bookingId", auth.requireAuth("customer", "provider"), a
   const from = req.user.role === "provider" ? "provider" : "user";
   if (from === "provider" && booking.providerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
   if (from === "user" && booking.customerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
+  if (from === "provider" && booking.status === "Completed") {
+    return res.status(403).json({ error: "This order is completed — you can no longer message the customer" });
+  }
   const message = await store.addMessage(req.params.bookingId, from, text.trim());
   io.emit("message:created", { bookingId: req.params.bookingId, message });
   simulateReplyIfNeeded(req.params.bookingId, from);

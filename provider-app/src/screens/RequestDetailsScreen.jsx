@@ -80,15 +80,17 @@ export default function RequestDetailsScreen() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-semibold text-gray-900">{customer?.name}</p>
-              <p className="text-[11px] text-gray-500">{customer?.phone}</p>
+              {request.status !== "Completed" && <p className="text-[11px] text-gray-500">{customer?.phone}</p>}
             </div>
-            <a
-              href={`tel:${customer?.phone}`}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-light text-brand"
-              aria-label="Call customer"
-            >
-              <PhoneIcon width={16} height={16} />
-            </a>
+            {request.status !== "Completed" && customer?.phone && (
+              <a
+                href={`tel:${customer.phone}`}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-light text-brand"
+                aria-label="Call customer"
+              >
+                <PhoneIcon width={16} height={16} />
+              </a>
+            )}
           </div>
         </div>
 
@@ -161,7 +163,13 @@ export default function RequestDetailsScreen() {
           </div>
         )}
 
-        {["Accepted", "In Progress", "Completed"].includes(request.status) && (
+        {request.status === "Completed" && (
+          <p className="rounded-xl bg-gray-50 px-4 py-3 text-center text-[12px] text-gray-500">
+            This order is completed — contacting the customer is no longer available.
+          </p>
+        )}
+
+        {["Accepted", "In Progress"].includes(request.status) && (
           <button
             onClick={() => navigate(`/chat/${request.id}`)}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-light py-3 text-sm font-semibold text-brand-dark"

@@ -33,9 +33,13 @@ export default function ChatScreen() {
     );
   }
 
+  // Once the order is Completed the provider can no longer contact the
+  // customer (the server also refuses the message and hides the number).
+  const closed = request.status === "Completed";
+
   const handleSend = () => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (closed || !trimmed) return;
     sendMessage(request.id, trimmed);
     setText("");
   };
@@ -54,14 +58,16 @@ export default function ChatScreen() {
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13.5px] font-semibold text-gray-900 lg:text-[15px]">{customer?.name}</p>
-          <p className="text-[11px] text-emerald-500">Online</p>
+          {!closed && <p className="text-[11px] text-emerald-500">Online</p>}
         </div>
-        <a
-          href={`tel:${customer?.phone}`}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-light text-brand lg:h-10 lg:w-10"
-        >
-          <PhoneIcon width={16} height={16} />
-        </a>
+        {!closed && customer?.phone && (
+          <a
+            href={`tel:${customer.phone}`}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-light text-brand lg:h-10 lg:w-10"
+          >
+            <PhoneIcon width={16} height={16} />
+          </a>
+        )}
       </div>
 
       <div className="mx-4 mt-3 rounded-xl bg-amber-50 px-3 py-2 text-[11px] text-amber-700 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8">
@@ -75,6 +81,11 @@ export default function ChatScreen() {
         <div ref={endRef} />
       </div>
 
+      {closed ? (
+        <div className="flex-shrink-0 border-t border-gray-100 bg-gray-50 px-4 py-3.5 text-center text-[12px] text-gray-500 lg:mx-auto lg:w-full lg:max-w-2xl">
+          This order is completed — messaging and calling the customer are no longer available.
+        </div>
+      ) : (
       <div className="flex flex-shrink-0 items-center gap-2 border-t border-gray-100 bg-white px-3 py-2.5 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:py-4">
         <input
           value={text}
@@ -91,6 +102,7 @@ export default function ChatScreen() {
           <SendIcon width={16} height={16} />
         </button>
       </div>
+      )}
     </div>
   );
 }
