@@ -171,7 +171,7 @@ async function createComplaint(input, actor) {
   const description = String(input.description || "").trim().slice(0, 4000);
   if (!subject) throw fail(400, "Subject is required");
   if (!description) throw fail(400, "Please describe the complaint");
-  const category = CATEGORIES.includes(input.category) ? input.category : "Other";
+  const category = categoryList().includes(input.category) ? input.category : categoryList().includes("Other") ? "Other" : categoryList()[0];
   const priority = PRIORITIES.includes(input.priority) ? input.priority : "normal";
 
   // Resolve who it's about from the booking when given; otherwise from the
@@ -273,7 +273,7 @@ function updateComplaint(id, patch, actor) {
   const changes = [];
   if (patch.subject !== undefined && String(patch.subject).trim() && patch.subject.trim() !== c.subject) next.subject = String(patch.subject).trim().slice(0, 120);
   if (patch.description !== undefined && String(patch.description).trim() && patch.description.trim() !== c.description) next.description = String(patch.description).trim().slice(0, 4000);
-  if (patch.category !== undefined && CATEGORIES.includes(patch.category) && patch.category !== c.category) next.category = patch.category;
+  if (patch.category !== undefined && categoryList().includes(patch.category) && patch.category !== c.category) next.category = patch.category;
   if (patch.priority !== undefined && PRIORITIES.includes(patch.priority) && patch.priority !== c.priority) next.priority = patch.priority;
   for (const k of Object.keys(next)) changes.push({ field: k, from: c[k], to: next[k] });
   if (changes.length === 0) return c;
@@ -308,7 +308,7 @@ function cleanResolution(input, existing) {
   const source = input || existing;
   const summary = String(source?.summary || "").trim().slice(0, 2000);
   if (!summary) throw fail(400, "Resolution details are required to resolve or close a complaint");
-  const outcome = OUTCOMES.includes(source?.outcome) ? source.outcome : "Other";
+  const outcome = outcomeList().includes(source?.outcome) ? source.outcome : outcomeList().includes("Other") ? "Other" : outcomeList()[0];
   const refundAmount = Number(source?.refundAmount);
   return {
     summary,
@@ -406,8 +406,13 @@ function addEvidence(id, file, note, actor) {
   return saved;
 }
 
+// Categories and resolution outcomes are Business Rules (Settings); the
+// built-in lists above are only the fallback.
+const categoryList = () => store.getSettings().complaintCategories || CATEGORIES;
+const outcomeList = () => store.getSettings().complaintOutcomes || OUTCOMES;
+
 function meta() {
-  return { categories: CATEGORIES, priorities: PRIORITIES, outcomes: OUTCOMES, channels: COMM_CHANNELS, kinds: KINDS };
+  return { categories: categoryList(), priorities: PRIORITIES, outcomes: outcomeList(), channels: COMM_CHANNELS, kinds: KINDS };
 }
 
 module.exports = {

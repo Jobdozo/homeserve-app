@@ -3,6 +3,7 @@ const jsonStore = require("./jsonStore");
 const push = require("./push");
 const fcm = require("./fcm");
 const presence = require("./presence");
+const rules = require("./rules");
 const whatsapp = require("./whatsapp");
 
 // Short-lived in-memory cache for the catalog reads that hit almost every
@@ -173,6 +174,10 @@ function updateProviderCoverage(providerId, patch, { allowServeAllAreas = true }
       }
     }
     next.pincodes = [...new Set(cleaned)];
+    const maxPins = getSettings().pinMaxPerProvider;
+    if (next.pincodes.length > maxPins) {
+      throw Object.assign(new Error(`A provider can cover at most ${maxPins} PIN codes`), { status: 400 });
+    }
   }
   if (allowServeAllAreas && patch.serveAllAreas !== undefined) {
     next.serveAllAreas = !!patch.serveAllAreas;
@@ -734,10 +739,10 @@ async function addProviderService(providerId, data) {
   }
   const categoryId = (await getCategoryUuidBySlug(data.categorySlug || "ac-repair")) || null;
   const { service_insert } = await mutate(
-    `mutation($providerId: UUID!, $categoryId: UUID, $name: String!, $price: Int!, $originalPrice: Int, $icon: String, $distanceLabel: String) {
+    `mutation($providerId: UUID!, $categoryId: UUID, $name: String!, $price: Int!, $originalPrice: Int, $icon: String, $distanceLabel: String, $status: String!) {
       service_insert(data: {
         providerId: $providerId, categoryId: $categoryId, name: $name, price: $price,
-        originalPrice: $originalPrice, icon: $icon, distanceLabel: $distanceLabel, status: "pending_approval"
+        originalPrice: $originalPrice, icon: $icon, distanceLabel: $distanceLabel, status: $status
       })
     }`,
     {
@@ -748,6 +753,8 @@ async function addProviderService(providerId, data) {
       originalPrice: data.originalPrice || null,
       icon: "🛠️",
       distanceLabel: "3.2 km away",
+      // Whether new provider services wait for admin approval is a Business Rule.
+      status: getSettings().serviceApprovalRequired ? "pending_approval" : "active",
     }
   );
   const serviceId = service_insert.id;
@@ -766,7 +773,7 @@ async function addProviderService(providerId, data) {
     );
   }
   const provider = await getProvider(providerId);
-  await logActivity("service", `${provider?.name || "A provider"} submitted a new service for approval: ${data.name}`);
+  await logActivity("service", `${provider?.name || "A provider"} ${getSettings().serviceApprovalRequired ? "submitted a new service for approval" : "added a new service"}: ${data.name}`);
   return getService(serviceId);
 }
 
@@ -827,15 +834,16 @@ async function updateProviderService(providerId, serviceId, patch) {
   // provider: content changes become a change request for an admin to
   // approve, and the service keeps its current details until then. Turning it
   // on/off (status) is availability, not content, and stays direct.
+  // Which fields need approval (or whether any do) is a Business Rule.
+  const cfg = getSettings();
+  const gatedKeys = cfg.serviceChangeApprovalRequired ? SERVICE_CHANGE_KEYS.filter((k) => cfg.serviceChangeFields.includes(k)) : [];
   const contentPatch = {};
-  for (const key of SERVICE_CHANGE_KEYS) if (patch[key] !== undefined) contentPatch[key] = patch[key];
+  for (const key of gatedKeys) if (patch[key] !== undefined) contentPatch[key] = patch[key];
   const isLive = existing.status === "active" || existing.status === "inactive";
   if (isLive && Object.keys(contentPatch).length > 0) {
     const changeRequest = await submitServiceChange(providerId, existing, contentPatch);
-    const service =
-      patch.status !== undefined
-        ? await applyServiceFieldUpdate(serviceId, { status: patch.status }, PROVIDER_EDITABLE_SERVICE_KEYS)
-        : existing;
+    const direct = Object.fromEntries(Object.entries(patch).filter(([k]) => !(k in contentPatch)));
+    const service = Object.keys(direct).length > 0 ? await applyServiceFieldUpdate(serviceId, direct, PROVIDER_EDITABLE_SERVICE_KEYS) : existing;
     return { service, changeRequest };
   }
   return { service: await applyServiceFieldUpdate(serviceId, patch, PROVIDER_EDITABLE_SERVICE_KEYS), changeRequest: null };
@@ -1605,7 +1613,14 @@ function providerVisibilityChecks(providerId, ctx, { pincode } = {}) {
   const seen = ctx.seen.get(providerId);
   const online = Boolean(seen && Date.now() - seen < graceMs);
   add("online", "Provider is online / available", !required || online, required ? (online ? "Seen recently" : `Not seen in the last ${Math.round(graceMs / 60000)} minutes`) : "Not required (Settings)", true, !required);
-  return checks;
+  if (ctx.settings.pinRequireCoverage) {
+    const hasArea = coverage.serveAllAreas || (coverage.pincodes || []).length > 0;
+    add("coverage", "Provider has set a service area (PIN codes)", hasArea, hasArea ? area : "No PIN codes set and not serving all areas", true);
+  }
+  // Rules the Super Admin has switched off in Business Rules aren't applied.
+  const RULE_OF = { pincode: "pincode", wallet: "wallet", approval: "approval", verification: "verification", requests_switch: "requestsSwitch", open_limit: "openLimit", stale: "stale" };
+  const switchedOff = ctx.settings.visibilityRules || {};
+  return checks.map((c) => (RULE_OF[c.key] && switchedOff[RULE_OF[c.key]] === false ? { ...c, status: "na", detail: "Rule switched off in Business Rules" } : c));
 }
 
 // Effective blocking issues (what actually hides the provider), after the
@@ -1756,14 +1771,12 @@ async function reassignBooking(bookingId, excludeProviderIds) {
 // snapshot, so the original provider keeps a "Swapped" entry in their history
 // and admins can see the full chain. ----
 
-const SWAP_REASONS = {
-  unavailable: "I'm no longer available at that time",
-  emergency: "Personal emergency",
-  location: "I can't reach the customer's location",
-  tools: "I don't have the required tools or parts",
-  other: "Other",
-};
-const MAX_SWAPS_PER_ORDER = 3;
+// Whether swapping is on, how many swaps an order may have, and the reason
+// list are Business Rules (Settings), read at the time of each swap.
+function getSwapRules() {
+  const cfg = getSettings();
+  return { enabled: cfg.swapEnabled, maxPerOrder: cfg.swapMaxPerOrder, reasons: cfg.swapReasons };
+}
 
 function listOrderSwaps({ bookingId, fromProviderId } = {}) {
   return jsonStore
@@ -1827,6 +1840,9 @@ async function findSwapCandidate(booking, excludeIds) {
 // history entry, `excluded` every provider that already had this order.
 async function swapBooking(bookingId, providerId, { reason, note } = {}) {
   const fail = (status, message) => Object.assign(new Error(message), { status });
+  const swapRules = getSwapRules();
+  const SWAP_REASONS = Object.fromEntries(swapRules.reasons.map((r) => [r.key, r.label]));
+  if (!swapRules.enabled) throw fail(403, "Swapping orders isn't available right now");
   const booking = await fetchBookingWithRelations(bookingId);
   if (!booking) throw fail(404, "Booking not found");
   if (booking.providerId !== providerId) throw fail(403, "Not your booking");
@@ -1838,7 +1854,7 @@ async function swapBooking(bookingId, providerId, { reason, note } = {}) {
   if (reason === "other" && !cleanNote) throw fail(400, "Please tell us the reason");
 
   const history = listOrderSwaps({ bookingId });
-  if (history.length >= MAX_SWAPS_PER_ORDER) {
+  if (history.length >= swapRules.maxPerOrder) {
     throw fail(409, "This order has already been swapped several times — please contact Tikdum support");
   }
   const excluded = [...new Set([booking.providerId, ...history.flatMap((s) => [s.fromProviderId, s.toProviderId])])];
@@ -2717,11 +2733,13 @@ const DEFAULT_SETTINGS = {
   staleRequestDays: 5,
   visibilityRequireOnline: false, // hide providers who haven't been seen recently
   visibilityOnlineGraceMinutes: 30,
+  ...rules.DEFAULTS, // the other business rules (see rules.js)
 };
 
 function getSettings() {
   const [existing] = jsonStore.readAll("settings");
   const merged = { ...DEFAULT_SETTINGS, ...existing };
+  merged.visibilityRules = { ...rules.DEFAULTS.visibilityRules, ...(existing?.visibilityRules || {}) };
   // A custom commission % saved before the communication fee existed carries
   // over (the stored 10 is just the old default, so it takes the new defaults).
   if (existing?.communicationFeePct === undefined && existing?.platformFeePct !== undefined && existing.platformFeePct !== 10) {
@@ -2855,6 +2873,9 @@ function bookingCommunicationFee(booking, cfg = getSettings(), ctx = {}) {
 }
 
 function updateSettings(patch) {
+  // Only known settings are stored, and the business-rule ones are validated.
+  patch = Object.fromEntries(Object.entries(patch || {}).filter(([k]) => k in DEFAULT_SETTINGS));
+  patch = rules.validate(patch, getSettings());
   // Old clients still send platformFeePct; treat it as the communication fee %.
   if (patch.platformFeePct !== undefined && patch.communicationFeePct === undefined) {
     patch = { ...patch, communicationFeePct: patch.platformFeePct };
@@ -3428,9 +3449,20 @@ async function createAd(providerId, serviceId) {
   if (service.status !== "active") {
     throw Object.assign(new Error("Only approved, active services can be advertised"), { status: 400 });
   }
+  const cfg = getSettings();
+  if (!cfg.adsEnabled) {
+    throw Object.assign(new Error("Advertising isn't available right now"), { status: 403 });
+  }
   const existing = listProviderAds(providerId).find((a) => a.serviceId === serviceId && a.status !== "stopped");
   if (existing) {
     throw Object.assign(new Error("This service is already being advertised"), { status: 400 });
+  }
+  const running = listProviderAds(providerId).filter((a) => a.status !== "stopped").length;
+  if (cfg.adsMaxActivePerProvider > 0 && running >= cfg.adsMaxActivePerProvider) {
+    throw Object.assign(new Error(`You can run at most ${cfg.adsMaxActivePerProvider} ad${cfg.adsMaxActivePerProvider === 1 ? "" : "s"} at a time`), { status: 400 });
+  }
+  if (cfg.adsMinBalance > 0 && getWallet(providerId).balance < cfg.adsMinBalance) {
+    throw Object.assign(new Error(`Your wallet balance must be at least ₹${cfg.adsMinBalance} to start an ad`), { status: 400 });
   }
   return jsonStore.insert("providerAds", {
     providerId,
@@ -3825,7 +3857,7 @@ module.exports = {
   getVisibilityOverride,
   recordAdminChange,
   diffValues,
-  SWAP_REASONS,
+  getSwapRules,
   listOrderSwaps,
   swapCutoffs,
   listSwappedOutBookings,

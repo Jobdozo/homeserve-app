@@ -23,6 +23,7 @@ const ACTION_LABELS = {
   "role.create": "Role created",
   "role.update": "Role edited",
   "role.delete": "Role deleted",
+  "settings.update": "Business rules changed",
   "visibility.override": "Visibility override changed",
   "fee.update": "Communication charge changed",
   "fee.clear": "Custom communication charge removed",

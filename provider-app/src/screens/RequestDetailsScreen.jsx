@@ -17,6 +17,13 @@ export default function RequestDetailsScreen() {
   const [swapOpen, setSwapOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const canAct = can("orders.act");
+  // Whether swapping is on and which reasons to offer are set by the Super
+  // Admin (Business Rules), so they're read from the server; the built-in
+  // reasons below are only the fallback if that can't be reached.
+  const [swapRules, setSwapRules] = useState(null);
+  useEffect(() => {
+    if (request?.status === "Accepted") api.getSwapRules().then(setSwapRules).catch(() => {});
+  }, [request?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const request = getRequest(requestId);
 
@@ -201,7 +208,7 @@ export default function RequestDetailsScreen() {
           </button>
         )}
 
-        {request.status === "Accepted" && canAct && (
+        {request.status === "Accepted" && canAct && swapRules?.enabled !== false && (
           <button
             onClick={() => setSwapOpen(true)}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 py-3 text-sm font-semibold text-amber-800 active:scale-[0.98]"
@@ -213,6 +220,7 @@ export default function RequestDetailsScreen() {
 
       {swapOpen && (
         <SwapOrderModal
+          reasons={swapRules?.reasons?.map((r) => [r.key, r.label])}
           serviceName={request.service?.name}
           onClose={() => setSwapOpen(false)}
           onConfirm={async (data) => {
@@ -340,7 +348,7 @@ const SWAP_REASONS = [
 ];
 
 // Confirmation + reason before an accepted order is released to another provider.
-function SwapOrderModal({ serviceName, onClose, onConfirm }) {
+function SwapOrderModal({ serviceName, reasons = SWAP_REASONS, onClose, onConfirm }) {
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -368,7 +376,7 @@ function SwapOrderModal({ serviceName, onClose, onConfirm }) {
           You won't be able to get it back, and the customer will be told their provider has changed. Only do this if you truly can't complete it.
         </p>
         <div className="mt-4 space-y-2">
-          {SWAP_REASONS.map(([value, label]) => (
+          {reasons.map(([value, label]) => (
             <label key={value} className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-[13px] ${reason === value ? "border-brand bg-brand-light" : "border-gray-200"}`}>
               <input type="radio" name="swap-reason" checked={reason === value} onChange={() => setReason(value)} />
               {label}

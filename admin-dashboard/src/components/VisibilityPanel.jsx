@@ -19,6 +19,11 @@ export default function VisibilityPanel({ providerId }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Start from the default override length set in Business Rules.
+  useEffect(() => {
+    api.getSettings().then((s) => s.visibilityOverrideDefaultHours > 0 && setHours(String(s.visibilityOverrideDefaultHours))).catch(() => {});
+  }, []);
+
   const load = useCallback(
     () =>
       api

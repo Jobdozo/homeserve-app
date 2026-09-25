@@ -45,6 +45,24 @@ const ROLE_TEMPLATES = {
   Accountant: ["orders.view_all", "earnings.view"],
 };
 
+// Role defaults are a Business Rule: the Super Admin can override any
+// template in Settings; anything not overridden uses the built-ins above.
+function roleTemplates() {
+  const custom = store.getSettings().providerStaffRoleTemplates;
+  return custom ? { ...ROLE_TEMPLATES, ...custom } : ROLE_TEMPLATES;
+}
+
+function validateTemplates(input) {
+  if (input === null) return null;
+  if (typeof input !== "object" || Array.isArray(input)) throw fail(400, "Role templates must be an object");
+  const out = {};
+  for (const [name, perms] of Object.entries(input)) {
+    if (!ROLE_TEMPLATES[name]) throw fail(400, `Unknown staff role: ${name}`);
+    out[name] = cleanPermissions(perms);
+  }
+  return out;
+}
+
 function cleanPermissions(input) {
   const list = [...new Set((Array.isArray(input) ? input : []).map(String))];
   const bad = list.find((p) => !ALL_PERMISSIONS.includes(p));
@@ -97,14 +115,19 @@ function assertCanGrant(actor, perms) {
 }
 
 async function createStaff(providerId, input, actor) {
+  const cfg = store.getSettings();
+  if (!cfg.providerStaffEnabled) throw fail(403, "Adding staff isn't available right now");
+  if (allStaff().filter((s) => s.providerId === providerId && s.active !== false).length >= cfg.providerStaffMax) {
+    throw fail(409, `You can have at most ${cfg.providerStaffMax} active staff members`);
+  }
   const name = String(input.name || "").trim().slice(0, 60);
   if (!name) throw fail(400, "Name is required");
   const phone = normPhone(input.phone);
   if (!/^\+?\d{10,15}$/.test(phone)) throw fail(400, "Enter a valid mobile number (with country code, e.g. +91…)");
   if (activeStaffByPhone(phone)) throw fail(409, "That number is already a staff member");
   if (await store.getProviderByPhone(phone)) throw fail(409, "That number already has its own service provider account, so it can't be added as staff");
-  const role = ROLE_TEMPLATES[input.role] ? input.role : "Field Staff";
-  const permissions = input.permissions !== undefined ? cleanPermissions(input.permissions) : ROLE_TEMPLATES[role];
+  const role = roleTemplates()[input.role] ? input.role : "Field Staff";
+  const permissions = input.permissions !== undefined ? cleanPermissions(input.permissions) : roleTemplates()[role];
   assertCanGrant(actor, permissions);
   const email = String(input.email || "").trim().slice(0, 100);
   if (email && !/^\S+@\S+\.\S+$/.test(email)) throw fail(400, "Enter a valid email address");
@@ -146,7 +169,7 @@ async function updateStaff(providerId, id, input, actor) {
     if (isSelf) throw fail(400, "You can't change your own role, permissions or status");
   }
   if (input.role !== undefined) {
-    if (!ROLE_TEMPLATES[input.role]) throw fail(400, "Choose a valid role");
+    if (!roleTemplates()[input.role]) throw fail(400, "Choose a valid role");
     patch.role = input.role;
   }
   if (input.permissions !== undefined) {
@@ -290,7 +313,7 @@ async function detail(providerId, id) {
 async function catalogue(providerId) {
   return {
     groups: PERMISSION_GROUPS.map((g) => ({ key: g.key, label: g.label, permissions: g.permissions.map(([key, label]) => ({ key, label })) })),
-    roles: Object.entries(ROLE_TEMPLATES).map(([name, permissions]) => ({ name, permissions })),
+    roles: Object.entries(roleTemplates()).map(([name, permissions]) => ({ name, permissions })),
     services: (await store.listProviderServices(providerId)).map((s) => ({ id: s.id, name: s.name, status: s.status })),
   };
 }
@@ -315,6 +338,7 @@ function ruleFor(method, path) {
   const write = method !== "GET" && method !== "HEAD";
   if (/^\/auth\/me$/.test(path)) return { needs: null };
   if (/^\/provider\/agreement/.test(path)) return { needs: "owner" };
+  if (/^\/provider\/swap-rules$/.test(path)) return { needs: null };
   if (/^\/provider\/assignable-staff$/.test(path)) return { needs: "orders.assign" };
   if (/^\/provider\/staff\/activity$/.test(path)) return { needs: ["staff.view", "staff.manage"] };
   if (/^\/provider\/staff/.test(path)) return { needs: write ? "staff.manage" : ["staff.view", "staff.manage"] };
@@ -396,7 +420,7 @@ const emptyEarnings = () => ({
 });
 
 module.exports = {
-  PERMISSION_GROUPS, ROLE_TEMPLATES,
+  PERMISSION_GROUPS, ROLE_TEMPLATES, roleTemplates, validateTemplates,
   getStaff, activeStaffByPhone, createStaff, updateStaff, listWithStats, detail, catalogue,
   assignments, assignmentFor, assignedBookingIds, assignOrder, clearAssignment,
   log, listActivity, loginProfile, recordLogin, guard, ordersScope, emptyEarnings,

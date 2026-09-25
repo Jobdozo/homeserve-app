@@ -10,6 +10,7 @@ const monitoring = require("./monitoring");
 const complaints = require("./complaints");
 const access = require("./access");
 const staff = require("./staff");
+const rulesConfig = require("./rules");
 const csvImport = require("./csvImport");
 const auth = require("./auth");
 // Per-request permission checks for staff sign-ins (admin roles, provider staff).
@@ -86,7 +87,8 @@ function simulateProviderIfNeeded(booking) {
 // gets 90 seconds to accept a booking before it's automatically handed to
 // another active provider in the same category — same idea as ride-hailing
 // dispatch, so a customer never gets stuck waiting on one unresponsive provider.
-const RING_TIMEOUT_MS = 90 * 1000;
+// How long a provider has to accept is a Business Rule (Settings → Requests).
+const ringTimeoutMs = () => store.getSettings().ringTimeoutSeconds * 1000;
 
 async function dispatchBooking(booking, triedProviderIds = [booking.providerId]) {
   const provider = await store.getProvider(booking.providerId);
@@ -130,7 +132,7 @@ async function dispatchBooking(booking, triedProviderIds = [booking.providerId])
     } catch (e) {
       console.error("dispatchBooking timeout failed:", e);
     }
-  }, RING_TIMEOUT_MS);
+  }, ringTimeoutMs());
 }
 
 function simulateReplyIfNeeded(bookingId, from) {
@@ -156,8 +158,22 @@ function simulateReplyIfNeeded(bookingId, from) {
 // so the customer's phone/email are stripped from any completed booking that
 // leaves the server (REST responses and the shared socket broadcast) — the
 // number simply isn't there to call, not just hidden in the UI.
+// Whether chat / calls are open for an order is a Business Rule (Settings →
+// Communication): on/off, which order statuses allow it, and an optional
+// window after completion. Defaults keep the original behaviour.
+function commsWindowOpen(booking) {
+  const hours = store.getSettings().commsAfterCompletionHours;
+  const at = booking.statusHistory?.Completed;
+  return Boolean(hours && booking.status === "Completed" && at && Date.now() < new Date(at).getTime() + hours * 3600 * 1000);
+}
+function commsOpen(booking, kind) {
+  const s = store.getSettings();
+  if (!(kind === "chat" ? s.commsChatEnabled : s.commsCallEnabled)) return false;
+  return (kind === "chat" ? s.commsChatStatuses : s.commsCallStatuses).includes(booking.status) || commsWindowOpen(booking);
+}
+
 function maskCompleted(booking) {
-  if (!booking || booking.status !== "Completed" || !booking.customer) return booking;
+  if (!booking || booking.status !== "Completed" || !booking.customer || commsOpen(booking, "call")) return booking;
   return hideCompletedChat({ ...booking, customer: { ...booking.customer, phone: null, email: null } });
 }
 
@@ -165,7 +181,7 @@ function maskCompleted(booking) {
 // its preview text is dropped from their booking lists too (admins keep it,
 // for dispute handling).
 function hideCompletedChat(booking) {
-  if (!booking || booking.status !== "Completed" || !booking.lastMessage) return booking;
+  if (!booking || booking.status !== "Completed" || !booking.lastMessage || commsOpen(booking, "chat")) return booking;
   const { lastMessage, ...rest } = booking;
   return rest;
 }
@@ -935,7 +951,7 @@ app.get("/api/bookings/:id/provider-contact", auth.requireAuth("customer"), ah(a
   const booking = await store.getBooking(req.params.id);
   if (!booking) return res.status(404).json({ error: "Booking not found" });
   if (booking.customerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
-  if (!["Accepted", "In Progress"].includes(booking.status)) {
+  if (!commsOpen(booking, "call")) {
     return res.status(403).json({ error: "You can only call the service provider while the order is active" });
   }
   const provider = await store.getProvider(booking.providerId);
@@ -1189,7 +1205,7 @@ app.get("/api/messages/:bookingId", auth.requireAuth(), ah(async (req, res) => {
   }
   // Once the order is Completed the conversation is closed to both sides; it
   // stays on record for admin/CRM dispute handling.
-  if (booking.status === "Completed" && req.user.role !== "admin") {
+  if (req.user.role !== "admin" && !commsOpen(booking, "chat")) {
     return res.status(403).json({ error: "This conversation is no longer available" });
   }
   const messages = await store.getMessages(req.params.bookingId);
@@ -1206,11 +1222,15 @@ app.post("/api/messages/:bookingId", auth.requireAuth("customer", "provider"), a
   const from = req.user.role === "provider" ? "provider" : "user";
   if (from === "provider" && booking.providerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
   if (from === "user" && booking.customerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
-  if (from === "provider" && booking.status === "Completed") {
-    return res.status(403).json({ error: "This order is completed — you can no longer message the customer" });
-  }
-  if (from === "user" && booking.status === "Completed") {
-    return res.status(403).json({ error: "This order is completed — you can no longer message the service provider" });
+  if (!commsOpen(booking, "chat")) {
+    const closed = booking.status === "Completed";
+    return res.status(403).json({
+      error: closed
+        ? from === "provider"
+          ? "This order is completed — you can no longer message the customer"
+          : "This order is completed — you can no longer message the service provider"
+        : "Messaging isn't available for this order right now",
+    });
   }
   const message = await store.addMessage(req.params.bookingId, from, text.trim());
   io.emit("message:created", { bookingId: req.params.bookingId, message });
@@ -1263,7 +1283,23 @@ app.get("/api/admin/settings", auth.requireAuth("admin"), ah(async (req, res) =>
 }));
 
 app.patch("/api/admin/settings", auth.requireAuth("admin"), ah(async (req, res) => {
+  const before = store.getSettings();
+  if (req.body?.providerStaffRoleTemplates !== undefined) {
+    try {
+      req.body.providerStaffRoleTemplates = staff.validateTemplates(req.body.providerStaffRoleTemplates);
+    } catch (e) {
+      return res.status(e.status || 400).json({ error: e.message });
+    }
+  }
   const settings = store.updateSettings(req.body || {});
+  // Record every business-rule change (who, what, before → after).
+  const flat = (v) => (Array.isArray(v) ? v.map((x) => (x && typeof x === "object" ? x.label || JSON.stringify(x) : x)) : v && typeof v === "object" ? JSON.stringify(v) : v);
+  const changes = Object.keys(req.body || {})
+    .filter((k) => k in settings && JSON.stringify(before[k] ?? null) !== JSON.stringify(settings[k] ?? null))
+    .map((k) => ({ field: k, from: flat(before[k]) ?? null, to: flat(settings[k]) ?? null }));
+  if (changes.length) {
+    store.recordAdminChange({ actor: actorOf(req), action: "settings.update", entityType: "settings", entityId: "platform", entityName: "Business rules", changes });
+  }
   const changedFee = Object.keys(req.body || {}).some((k) => k.startsWith("communicationFee") || k === "platformFeePct");
   if (changedFee) {
     await store.logActivity(
@@ -1275,6 +1311,33 @@ app.patch("/api/admin/settings", auth.requireAuth("admin"), ah(async (req, res) 
   }
   res.json(settings);
 }));
+
+// Central Business Rules: current values plus what the editor needs (option
+// lists, built-in staff role defaults, active visibility overrides).
+app.get("/api/admin/business-rules", auth.requireAuth("admin"), ah(async (req, res) => {
+  const providers = await store.listProviders();
+  const nameOf = (id) => providers.find((p) => p.id === id)?.name || id;
+  const overrides = require("./jsonStore")
+    .readAll("providerVisibilityOverrides")
+    .filter((o) => !o.until || new Date(o.until).getTime() > Date.now())
+    .map((o) => ({ providerId: o.id, providerName: nameOf(o.id), mode: o.mode, until: o.until, note: o.note, by: o.by, at: o.at }));
+  res.json({
+    settings: store.getSettings(),
+    options: {
+      bookingStatuses: rulesConfig.BOOKING_STATUSES,
+      serviceChangeFields: rulesConfig.SERVICE_CHANGE_FIELDS,
+      visibilityRuleKeys: rulesConfig.VISIBILITY_RULE_KEYS,
+      staffPermissionGroups: staff.PERMISSION_GROUPS.map((g) => ({ key: g.key, label: g.label, permissions: g.permissions.map(([key, label]) => ({ key, label })) })),
+      staffRoleTemplates: staff.roleTemplates(),
+      defaultStaffRoleTemplates: staff.ROLE_TEMPLATES,
+      defaults: rulesConfig.DEFAULTS,
+    },
+    overrides,
+  });
+}));
+
+// The order-swap rules the provider app needs (on/off and the reason list).
+app.get("/api/provider/swap-rules", auth.requireAuth("provider"), ah(async (req, res) => res.json(store.getSwapRules())));
 
 // Communication charges per service / category (priority: service > category > global).
 app.get("/api/admin/communication-fees", auth.requireAuth("admin"), ah(async (req, res) => {

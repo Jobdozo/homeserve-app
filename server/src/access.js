@@ -284,6 +284,7 @@ const RULES = [
   [/^\/admin\/overview/, () => "dashboard.view"],
   [/^\/activities/, () => ["dashboard.view", "audit.view"]],
   [/^\/admin\/change-log/, () => "audit.view"],
+  [/^\/admin\/business-rules/, () => "settings.view"],
   [/^\/admin\/settings/, (m) => (m === "GET" ? "settings.view" : "settings.edit")],
   [/^\/admin\/remove-seed-data/, () => "settings.delete"],
   [/^\/admin\/import\//, () => "data.import"],

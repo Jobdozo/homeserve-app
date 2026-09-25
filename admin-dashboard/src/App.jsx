@@ -15,7 +15,7 @@ import DisputesPage from "./pages/DisputesPage";
 import PaymentsPage from "./pages/PaymentsPage";
 import ReportsPage from "./pages/ReportsPage";
 import AuditLogsPage from "./pages/AuditLogsPage";
-import SettingsPage from "./pages/SettingsPage";
+import SettingsPage from "./pages/SettingsHubPage";
 import DataManagementPage from "./pages/DataManagementPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import UserManagementPage from "./pages/UserManagementPage";
