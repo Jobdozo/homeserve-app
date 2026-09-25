@@ -1,9 +1,12 @@
+import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { ChevronRightIcon, StarIcon } from "../components/icons";
 
 const menuItems = [
   { icon: "📍", label: "Saved Addresses" },
   { icon: "💳", label: "Payment Methods" },
+  { icon: "🎁", label: "Refer & Earn", path: "/refer" },
+  { icon: "🛡️", label: "Booking Protection", path: "/booking-protection" },
   { icon: "🎟️", label: "Coupons & Offers" },
   { icon: "🔔", label: "Notification Settings" },
   { icon: "❓", label: "Help & Support" },
@@ -11,6 +14,7 @@ const menuItems = [
 ];
 
 export default function ProfileScreen() {
+  const navigate = useNavigate();
   const { customer, bookings, showToast, logout } = useApp();
   const completed = bookings.filter((b) => b.status === "Completed").length;
 
@@ -50,7 +54,9 @@ export default function ProfileScreen() {
         {menuItems.map((item) => (
           <button
             key={item.label}
-            onClick={() => (item.href ? window.open(item.href, "_blank") : showToast(`${item.label} coming soon`))}
+            onClick={() =>
+              item.path ? navigate(item.path) : item.href ? window.open(item.href, "_blank") : showToast(`${item.label} coming soon`)
+            }
             className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50 lg:px-5 lg:py-4"
           >
             <span className="text-lg">{item.icon}</span>

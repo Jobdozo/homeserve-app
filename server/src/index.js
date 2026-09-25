@@ -616,6 +616,43 @@ app.post("/api/customer/fcm-token/remove", auth.requireAuth("customer"), ah(asyn
   res.json({ ok: true });
 }));
 
+// ---- referral program ----
+app.get("/api/customer/referral", auth.requireAuth("customer"), ah(async (req, res) => {
+  res.json(await store.getCustomerReferralInfo(req.user.id));
+}));
+
+app.post("/api/customer/referral/validate", auth.requireAuth("customer"), ah(async (req, res) => {
+  const { code } = req.body || {};
+  if (!code) return res.status(400).json({ error: "code is required" });
+  await store.applyReferralCode(code, req.user.id);
+  const { referralFriendDiscount } = await store.getCustomerReferralInfo(req.user.id);
+  res.json({ code: String(code).trim().toUpperCase(), discount: referralFriendDiscount });
+}));
+
+// ---- refund claims ----
+app.post("/api/bookings/:id/refund-claim", auth.requireAuth("customer"), ah(async (req, res) => {
+  const booking = await store.getBooking(req.params.id);
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  if (booking.customerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
+  const reason = (req.body?.reason || "").trim();
+  if (!reason) return res.status(400).json({ error: "reason is required" });
+  const claim = await store.createRefundClaim(req.user.id, req.params.id, reason);
+  io.emit("activity:created", (await store.listActivities(1))[0]);
+  res.status(201).json(claim);
+}));
+
+app.get("/api/admin/refund-claims", auth.requireAuth("admin"), ah(async (req, res) => {
+  res.json(store.listRefundClaims());
+}));
+
+app.patch("/api/admin/refund-claims/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { status, adminNote } = req.body || {};
+  const claim = await store.resolveRefundClaim(req.params.id, status, adminNote);
+  if (!claim) return res.status(404).json({ error: "Claim not found" });
+  io.emit("activity:created", (await store.listActivities(1))[0]);
+  res.json(claim);
+}));
+
 // ---- KYC documents (camera or file upload from Documents & KYC screen) ----
 app.get("/api/provider/kyc-documents", auth.requireAuth("provider"), ah(async (req, res) => {
   res.json(store.listKycDocuments(req.user.id));

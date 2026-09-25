@@ -642,7 +642,7 @@ async function getMessages(bookingId) {
 
 // `offerCode` (never a raw discount percentage) is re-validated here server-side
 // on every call — a client can never supply its own discount amount directly.
-async function createBooking({ serviceId, date, time, address, issue, customerId, orderId, offerCode }) {
+async function createBooking({ serviceId, date, time, address, issue, customerId, orderId, offerCode, flatDiscount = 0 }) {
   const service = await getService(serviceId);
   if (!service) throw new Error("Unknown service");
   if (isProviderSuspended(service.providerId)) {
@@ -655,6 +655,9 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
     const result = validateOffer(offerCode);
     if (!result.valid) throw new Error(result.error);
     amount = Math.max(0, Math.round(service.price * (1 - result.offer.discountPercent / 100)));
+  }
+  if (flatDiscount > 0) {
+    amount = Math.max(0, amount - flatDiscount);
   }
 
   const now = new Date().toISOString();
@@ -708,15 +711,29 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
   return fetchBookingWithRelations(bookingId);
 }
 
-async function createOrder({ items, address, customerId, offerCode }) {
+async function createOrder({ items, address, customerId, offerCode, referralCode, useCredits }) {
   if (!Array.isArray(items) || items.length === 0) throw new Error("Order must have at least one item");
   const orderId = `ORD-${Date.now().toString(36)}`;
   if (offerCode) {
     const result = validateOffer(offerCode);
     if (!result.valid) throw new Error(result.error);
   }
+
+  // A referral code (flat ₹ off, only on a customer's very first order) and
+  // any accumulated referral credit are both applied once, to the first
+  // line item, rather than split across every item in the order.
+  let referrerId = null;
+  let referralDiscount = 0;
+  const { referralFriendDiscount, referralReward } = getSettings();
+  if (referralCode) {
+    referrerId = await applyReferralCode(referralCode, customerId);
+    referralDiscount = referralFriendDiscount;
+  }
+  const creditAmount = useCredits ? getReferralCredits(customerId).balance : 0;
+
   const created = [];
-  for (const item of items) {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
     created.push(
       await createBooking({
         serviceId: item.serviceId,
@@ -727,9 +744,26 @@ async function createOrder({ items, address, customerId, offerCode }) {
         customerId,
         orderId,
         offerCode,
+        flatDiscount: i === 0 ? referralDiscount + creditAmount : 0,
       })
     );
   }
+
+  if (referrerId) {
+    jsonStore.insert("referralRedemptions", {
+      referrerId,
+      refereeId: customerId,
+      bookingId: created[0].id,
+      referrerReward: referralReward,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+    });
+  }
+  if (creditAmount > 0) {
+    deductReferralCredits(customerId, creditAmount, created[0].id);
+  }
+
   await logActivity(
     "booking",
     `New order received: #${orderId} — ${created.length} service${created.length > 1 ? "s" : ""}`
@@ -791,6 +825,27 @@ async function updateBookingStatus(id, status) {
       await deductWalletCommission(existing.providerId, existing.amount);
     } catch (e) {
       console.error(`Wallet commission deduction failed for booking ${id}:`, e);
+    }
+    try {
+      const redemption = jsonStore
+        .readAll("referralRedemptions")
+        .find((r) => r.bookingId === id && r.status === "pending");
+      if (redemption) {
+        creditReferrer(redemption.referrerId, redemption.referrerReward, id);
+        jsonStore.update("referralRedemptions", redemption.id, {
+          status: "completed",
+          completedAt: new Date().toISOString(),
+        });
+        await addNotification({
+          recipientType: "customer",
+          recipientId: redemption.referrerId,
+          type: "referral",
+          title: "Referral reward earned!",
+          message: `Your friend completed their first booking — ₹${redemption.referrerReward} credit added to your account.`,
+        });
+      }
+    } catch (e) {
+      console.error(`Referral reward crediting failed for booking ${id}:`, e);
     }
   }
   return fetchBookingWithRelations(id);
@@ -1406,7 +1461,7 @@ function validateOffer(code) {
 
 // ---- platform settings (single record, same jsonStore approach as banners/offers) ----
 
-const DEFAULT_SETTINGS = { platformFeePct: 10 };
+const DEFAULT_SETTINGS = { platformFeePct: 10, referralFriendDiscount: 50, referralReward: 50 };
 
 function getSettings() {
   const [existing] = jsonStore.readAll("settings");
@@ -1421,11 +1476,156 @@ function updateSettings(patch) {
     }
     patch = { ...patch, platformFeePct: pct };
   }
+  for (const key of ["referralFriendDiscount", "referralReward"]) {
+    if (patch[key] !== undefined) {
+      const amount = Number(patch[key]);
+      if (!Number.isFinite(amount) || amount < 0) {
+        throw Object.assign(new Error(`${key} must be a non-negative number`), { status: 400 });
+      }
+      patch = { ...patch, [key]: amount };
+    }
+  }
   const [existing] = jsonStore.readAll("settings");
   const next = { ...DEFAULT_SETTINGS, ...existing, ...patch };
   if (existing) jsonStore.update("settings", existing.id, next);
   else jsonStore.insert("settings", { id: "platform", ...next });
   return getSettings();
+}
+
+// ---- referral program (jsonStore-backed: a per-customer code, a redeemable
+// credit ledger, and one redemption record per successful "friend's first
+// booking" — the referral discount/reward amounts come from settings above) ----
+
+function generateReferralCode(name) {
+  const prefix = (name || "").replace(/[^A-Za-z]/g, "").slice(0, 4).toUpperCase() || "TIK";
+  const digits = String(Math.floor(1000 + Math.random() * 9000));
+  return `${prefix}${digits}`;
+}
+
+function getOrCreateReferralCode(customerId, customerName) {
+  const codes = jsonStore.readAll("referralCodes");
+  const existing = codes.find((r) => r.id === customerId);
+  if (existing) return existing.code;
+  let code = generateReferralCode(customerName);
+  while (codes.some((r) => r.code === code)) code = generateReferralCode(customerName);
+  jsonStore.insert("referralCodes", { id: customerId, code });
+  return code;
+}
+
+function findReferrerByCode(code) {
+  const norm = String(code || "").trim().toUpperCase();
+  if (!norm) return null;
+  const entry = jsonStore.readAll("referralCodes").find((r) => r.code === norm);
+  return entry ? entry.id : null;
+}
+
+function getReferralCredits(customerId) {
+  const existing = jsonStore.readAll("referralCredits").find((c) => c.id === customerId);
+  return existing || { id: customerId, balance: 0, history: [] };
+}
+
+function saveReferralCredits(credits) {
+  const existing = jsonStore.readAll("referralCredits").find((c) => c.id === credits.id);
+  if (existing) jsonStore.update("referralCredits", credits.id, credits);
+  else jsonStore.insert("referralCredits", credits);
+  return credits;
+}
+
+function creditReferrer(referrerId, amount, bookingId) {
+  const credits = getReferralCredits(referrerId);
+  credits.balance += amount;
+  credits.history = [...credits.history, { amount, bookingId, at: new Date().toISOString() }];
+  saveReferralCredits(credits);
+}
+
+function deductReferralCredits(customerId, amount, bookingId) {
+  const credits = getReferralCredits(customerId);
+  credits.balance = Math.max(0, credits.balance - amount);
+  credits.history = [...credits.history, { amount: -amount, bookingId, at: new Date().toISOString() }];
+  saveReferralCredits(credits);
+}
+
+async function getCustomerReferralInfo(customerId) {
+  const customer = await getCustomerById(customerId);
+  const code = getOrCreateReferralCode(customerId, customer?.name);
+  const credits = getReferralCredits(customerId);
+  const { referralFriendDiscount, referralReward } = getSettings();
+  return {
+    code,
+    balance: credits.balance,
+    history: credits.history,
+    friendDiscount: referralFriendDiscount,
+    reward: referralReward,
+  };
+}
+
+// A code can only ever be applied to the referee's first order ever — checked
+// both against any prior redemption and against real booking history, so it
+// can't be reused across accounts or retried after a cancelled first order.
+async function applyReferralCode(code, refereeId) {
+  const referrerId = findReferrerByCode(code);
+  if (!referrerId) {
+    throw Object.assign(new Error("Invalid referral code"), { status: 400 });
+  }
+  if (referrerId === refereeId) {
+    throw Object.assign(new Error("You can't use your own referral code"), { status: 400 });
+  }
+  if (jsonStore.readAll("referralRedemptions").some((r) => r.refereeId === refereeId)) {
+    throw Object.assign(new Error("Referral codes can only be used on your first booking"), { status: 400 });
+  }
+  const { bookings } = await query(
+    `query($id: UUID!) { bookings(where: { customerId: { eq: $id } }) { id } }`,
+    { id: refereeId }
+  );
+  if (bookings.length > 0) {
+    throw Object.assign(new Error("Referral codes can only be used on your first booking"), { status: 400 });
+  }
+  return referrerId;
+}
+
+// ---- refund claims (jsonStore-backed — a customer-submitted claim that an
+// admin reviews and approves/rejects; the actual refund payment happens
+// outside the app, same as every other customer-provider payment) ----
+
+async function createRefundClaim(customerId, bookingId, reason) {
+  const claim = jsonStore.insert("refundClaims", {
+    customerId,
+    bookingId,
+    reason,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+    resolvedAt: null,
+    adminNote: null,
+  });
+  await logActivity("booking", `Refund claim submitted for booking #${bookingId}`);
+  return claim;
+}
+
+function listRefundClaims() {
+  return jsonStore.readAll("refundClaims").sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+async function resolveRefundClaim(id, status, adminNote) {
+  if (!["approved", "rejected"].includes(status)) {
+    throw Object.assign(new Error("status must be approved or rejected"), { status: 400 });
+  }
+  const claim = jsonStore.update("refundClaims", id, {
+    status,
+    adminNote: adminNote || null,
+    resolvedAt: new Date().toISOString(),
+  });
+  if (!claim) return undefined;
+  await addNotification({
+    recipientType: "customer",
+    recipientId: claim.customerId,
+    type: "refund",
+    title: `Refund claim ${status}`,
+    message:
+      status === "approved"
+        ? "Your refund claim has been approved. Our team will process it shortly."
+        : `Your refund claim was reviewed and could not be approved.${adminNote ? ` ${adminNote}` : ""}`,
+  });
+  return claim;
 }
 
 // ---- per-provider notification preferences (jsonStore, one record per
@@ -1912,6 +2112,11 @@ module.exports = {
   addJobCheckpoint,
   getBookingOtpsForCustomer,
   verifyBookingOtp,
+  getCustomerReferralInfo,
+  applyReferralCode,
+  createRefundClaim,
+  listRefundClaims,
+  resolveRefundClaim,
   AGREEMENT_VERSION,
   getProviderAgreement,
   acceptProviderAgreement,

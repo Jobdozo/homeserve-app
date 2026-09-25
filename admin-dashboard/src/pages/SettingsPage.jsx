@@ -11,6 +11,9 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState(null);
   const [feeInput, setFeeInput] = useState("");
   const [saving, setSaving] = useState(false);
+  const [friendDiscountInput, setFriendDiscountInput] = useState("");
+  const [rewardInput, setRewardInput] = useState("");
+  const [savingReferral, setSavingReferral] = useState(false);
   const [confirmingCleanup, setConfirmingCleanup] = useState(false);
   const [cleaningUp, setCleaningUp] = useState(false);
 
@@ -20,6 +23,8 @@ export default function SettingsPage() {
       .then((s) => {
         setSettings(s);
         setFeeInput(String(s.platformFeePct));
+        setFriendDiscountInput(String(s.referralFriendDiscount));
+        setRewardInput(String(s.referralReward));
       })
       .catch((e) => showToast(e.message || "Failed to load settings"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -40,6 +45,35 @@ export default function SettingsPage() {
       showToast(e.message || "Failed to update settings");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const numericFriendDiscount = Number(friendDiscountInput);
+  const numericReward = Number(rewardInput);
+  const referralValid =
+    friendDiscountInput.trim() !== "" &&
+    rewardInput.trim() !== "" &&
+    Number.isFinite(numericFriendDiscount) &&
+    Number.isFinite(numericReward) &&
+    numericFriendDiscount >= 0 &&
+    numericReward >= 0;
+  const referralDirty =
+    settings && (numericFriendDiscount !== settings.referralFriendDiscount || numericReward !== settings.referralReward);
+
+  const handleSaveReferral = async () => {
+    if (!referralValid || savingReferral) return;
+    setSavingReferral(true);
+    try {
+      const updated = await api.updateSettings({
+        referralFriendDiscount: numericFriendDiscount,
+        referralReward: numericReward,
+      });
+      setSettings(updated);
+      showToast("Referral rewards updated");
+    } catch (e) {
+      showToast(e.message || "Failed to update settings");
+    } finally {
+      setSavingReferral(false);
     }
   };
 
@@ -98,6 +132,53 @@ export default function SettingsPage() {
               className="w-full rounded-xl bg-brand py-2.5 text-[13px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50 sm:w-auto sm:px-6"
             >
               {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="max-w-md rounded-2xl bg-white p-4 shadow-card sm:p-5">
+        <h2 className="text-[14px] font-bold text-gray-900">Referral Program</h2>
+        <p className="mt-1 text-[12px] text-gray-400">
+          The flat ₹ discount a referred friend gets on their first booking, and the ₹ credit the referrer earns
+          once that booking is completed.
+        </p>
+
+        {settings === null ? (
+          <p className="mt-4 text-[12.5px] text-gray-400">Loading…</p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Friend's discount (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={friendDiscountInput}
+                  onChange={(e) => setFriendDiscountInput(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Referrer's reward (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={rewardInput}
+                  onChange={(e) => setRewardInput(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+            </div>
+            {!referralValid && <p className="text-[11px] text-red-500">Enter non-negative amounts for both fields.</p>}
+            <button
+              onClick={handleSaveReferral}
+              disabled={!referralValid || !referralDirty || savingReferral}
+              className="w-full rounded-xl bg-brand py-2.5 text-[13px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50 sm:w-auto sm:px-6"
+            >
+              {savingReferral ? "Saving…" : "Save"}
             </button>
           </div>
         )}

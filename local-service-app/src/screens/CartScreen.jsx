@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
+import { api } from "../api";
 import { timeSlots } from "../data/mockData";
 import ScreenHeader from "../components/ScreenHeader";
 import { CalendarIcon, ClockIcon, MapPinIcon, XIcon } from "../components/icons";
@@ -12,6 +13,7 @@ export default function CartScreen() {
   const {
     cart,
     services,
+    bookings,
     getService,
     updateCartItem,
     removeFromCart,
@@ -20,6 +22,8 @@ export default function CartScreen() {
     offerError,
     applyOfferCode,
     clearOffer,
+    referral,
+    refreshReferral,
     showToast,
     location,
     locationStatus,
@@ -28,6 +32,18 @@ export default function CartScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [couponInput, setCouponInput] = useState("");
   const [applyingCoupon, setApplyingCoupon] = useState(false);
+  const [referralInput, setReferralInput] = useState("");
+  const [appliedReferral, setAppliedReferral] = useState(null);
+  const [referralError, setReferralError] = useState("");
+  const [applyingReferral, setApplyingReferral] = useState(false);
+  const [useCredits, setUseCredits] = useState(false);
+
+  const isFirstOrder = bookings.length === 0;
+
+  useEffect(() => {
+    if (referral === null) refreshReferral();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const lines = useMemo(
     () => cart.map((item) => ({ item, service: getService(item.serviceId) })).filter((l) => l.service),
@@ -35,8 +51,11 @@ export default function CartScreen() {
   );
   const total = lines.reduce((sum, l) => sum + l.service.price, 0);
   const savings = lines.reduce((sum, l) => sum + (l.service.originalPrice ? l.service.originalPrice - l.service.price : 0), 0);
-  const discountAmount = appliedOffer ? Math.round(total * (appliedOffer.discountPercent / 100)) : 0;
-  const payable = total - discountAmount;
+  const offerDiscount = appliedOffer ? Math.round(total * (appliedOffer.discountPercent / 100)) : 0;
+  const referralDiscount = appliedReferral ? appliedReferral.discount : 0;
+  const creditDiscount = useCredits && referral ? Math.min(referral.balance, total - offerDiscount - referralDiscount) : 0;
+  const discountAmount = offerDiscount + referralDiscount + creditDiscount;
+  const payable = Math.max(0, total - discountAmount);
 
   const handleApplyCoupon = async () => {
     if (!couponInput.trim() || applyingCoupon) return;
@@ -49,6 +68,22 @@ export default function CartScreen() {
       setApplyingCoupon(false);
     }
   };
+
+  const handleApplyReferral = async () => {
+    if (!referralInput.trim() || applyingReferral) return;
+    setReferralError("");
+    setApplyingReferral(true);
+    try {
+      const result = await api.validateReferralCode(referralInput.trim());
+      setAppliedReferral(result);
+    } catch (e) {
+      setAppliedReferral(null);
+      setReferralError(e.message || "Invalid referral code");
+    } finally {
+      setApplyingReferral(false);
+    }
+  };
+
   const bookingAddress = location
     ? { label: location.label, line: location.line, lat: location.lat, lng: location.lng }
     : null;
@@ -57,10 +92,13 @@ export default function CartScreen() {
     if (submitting || lines.length === 0 || !bookingAddress) return;
     setSubmitting(true);
     try {
-      const created = await checkout(bookingAddress);
+      const created = await checkout(bookingAddress, {
+        referralCode: appliedReferral?.code,
+        useCredits: creditDiscount > 0,
+      });
       navigate("/bookings", { replace: true, state: { orderId: created[0]?.orderId } });
     } catch (e) {
-      showToast("Something went wrong. Please try again.");
+      showToast(e.message || "Something went wrong. Please try again.");
       setSubmitting(false);
     }
   };
@@ -209,6 +247,61 @@ export default function CartScreen() {
             </div>
           )}
         </div>
+
+        {isFirstOrder && (
+          <div>
+            <h2 className="mb-1.5 text-[13px] font-semibold text-gray-900">Referral Code</h2>
+            {appliedReferral ? (
+              <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-3 py-2.5">
+                <p className="text-[12.5px] font-semibold text-emerald-700">
+                  {appliedReferral.code} applied — ₹{appliedReferral.discount} off
+                </p>
+                <button
+                  onClick={() => {
+                    setAppliedReferral(null);
+                    setReferralInput("");
+                  }}
+                  className="text-[11.5px] font-semibold text-emerald-700 underline"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div className="flex gap-2">
+                  <input
+                    value={referralInput}
+                    onChange={(e) => setReferralInput(e.target.value.toUpperCase())}
+                    placeholder="Have a friend's referral code?"
+                    className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-[13px] uppercase text-gray-800 outline-none focus:border-brand"
+                  />
+                  <button
+                    onClick={handleApplyReferral}
+                    disabled={!referralInput.trim() || applyingReferral}
+                    className="flex-shrink-0 rounded-xl bg-gray-900 px-4 py-2.5 text-[12.5px] font-semibold text-white disabled:opacity-50"
+                  >
+                    {applyingReferral ? "Checking…" : "Apply"}
+                  </button>
+                </div>
+                {referralError && <p className="mt-1.5 text-[11.5px] font-medium text-red-500">{referralError}</p>}
+              </div>
+            )}
+          </div>
+        )}
+
+        {referral && referral.balance > 0 && (
+          <label className="flex items-center justify-between rounded-xl border border-gray-200 px-3.5 py-3">
+            <span className="text-[12.5px] font-medium text-gray-700">
+              Use your ₹{referral.balance} referral credit
+            </span>
+            <input
+              type="checkbox"
+              checked={useCredits}
+              onChange={(e) => setUseCredits(e.target.checked)}
+              className="h-4 w-4 accent-brand"
+            />
+          </label>
+        )}
       </div>
 
       <div className="flex-shrink-0 border-t border-gray-100 bg-white px-4 py-3 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:py-4">
@@ -222,10 +315,22 @@ export default function CartScreen() {
             <span className="font-semibold text-emerald-600">₹{savings}</span>
           </div>
         )}
-        {discountAmount > 0 && (
+        {offerDiscount > 0 && (
           <div className="mb-2.5 flex items-center justify-between text-[12.5px]">
             <span className="text-emerald-600">{appliedOffer.code} discount</span>
-            <span className="font-semibold text-emerald-600">-₹{discountAmount}</span>
+            <span className="font-semibold text-emerald-600">-₹{offerDiscount}</span>
+          </div>
+        )}
+        {referralDiscount > 0 && (
+          <div className="mb-2.5 flex items-center justify-between text-[12.5px]">
+            <span className="text-emerald-600">Referral discount</span>
+            <span className="font-semibold text-emerald-600">-₹{referralDiscount}</span>
+          </div>
+        )}
+        {creditDiscount > 0 && (
+          <div className="mb-2.5 flex items-center justify-between text-[12.5px]">
+            <span className="text-emerald-600">Referral credit used</span>
+            <span className="font-semibold text-emerald-600">-₹{creditDiscount}</span>
           </div>
         )}
         <button

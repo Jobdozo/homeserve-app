@@ -225,6 +225,15 @@ export default function BookingDetailsScreen() {
             You rated this service {booking.review.rating}★
           </div>
         )}
+
+        {["Accepted", "In Progress", "Completed"].includes(booking.status) && (
+          <button
+            onClick={() => navigate("/booking-protection", { state: { bookingId: booking.id } })}
+            className="w-full rounded-xl border border-gray-200 py-2.5 text-[12.5px] font-semibold text-gray-600"
+          >
+            Something wrong with this booking? Claim a refund
+          </button>
+        )}
       </div>
 
       {!isCancelled && (booking.status === "Pending" || booking.status === "Accepted") && (

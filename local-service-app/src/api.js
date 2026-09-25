@@ -57,4 +57,9 @@ export const api = {
   unsubscribePush: (endpoint) => request("/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
   validateOffer: (code) => request("/offers/validate", { method: "POST", body: JSON.stringify({ code }) }),
   saveFcmToken: (token) => request("/customer/fcm-token", { method: "POST", body: JSON.stringify({ token }) }),
+  getReferralInfo: () => request("/customer/referral"),
+  validateReferralCode: (code) =>
+    request("/customer/referral/validate", { method: "POST", body: JSON.stringify({ code }) }),
+  submitRefundClaim: (bookingId, reason) =>
+    request(`/bookings/${bookingId}/refund-claim`, { method: "POST", body: JSON.stringify({ reason }) }),
 };

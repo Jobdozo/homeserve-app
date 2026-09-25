@@ -8,6 +8,7 @@ import ProvidersPage from "./pages/ProvidersPage";
 import ServicesPage from "./pages/ServicesPage";
 import BookingsPage from "./pages/BookingsPage";
 import ReviewsPage from "./pages/ReviewsPage";
+import DisputesPage from "./pages/DisputesPage";
 import PaymentsPage from "./pages/PaymentsPage";
 import ReportsPage from "./pages/ReportsPage";
 import AuditLogsPage from "./pages/AuditLogsPage";
@@ -36,6 +37,7 @@ function AppRoutes() {
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/bookings" element={<BookingsPage />} />
         <Route path="/reviews" element={<ReviewsPage />} />
+        <Route path="/disputes" element={<DisputesPage />} />
         <Route path="/payments" element={<PaymentsPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/audit-logs" element={<AuditLogsPage />} />

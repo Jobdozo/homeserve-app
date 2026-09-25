@@ -417,6 +417,29 @@ export function AppProvider({ children }) {
 
   const [appliedOffer, setAppliedOffer] = useState(null);
   const [offerError, setOfferError] = useState("");
+  const [referral, setReferral] = useState(null);
+
+  // Fetched lazily (Refer & Earn screen, Cart's "use credit" checkbox) rather
+  // than on every app open — most sessions never touch this data.
+  const refreshReferral = useCallback(async () => {
+    try {
+      const info = await api.getReferralInfo();
+      setReferral(info);
+      return info;
+    } catch (e) {
+      console.error("Failed to load referral info", e);
+      return null;
+    }
+  }, []);
+
+  const submitRefundClaim = useCallback(
+    async (bookingId, reason) => {
+      const claim = await api.submitRefundClaim(bookingId, reason);
+      showToast("Refund claim submitted — we'll review it shortly");
+      return claim;
+    },
+    [showToast]
+  );
 
   const applyOfferCode = useCallback(async (code) => {
     setOfferError("");
@@ -437,17 +460,24 @@ export function AppProvider({ children }) {
   }, []);
 
   const checkout = useCallback(
-    async (address) => {
+    async (address, { referralCode, useCredits } = {}) => {
       if (cart.length === 0) return [];
       const items = cart.map(({ serviceId, date, time, issue }) => ({ serviceId, date, time, issue }));
-      const created = await api.createOrder({ items, address, offerCode: appliedOffer?.code });
+      const created = await api.createOrder({
+        items,
+        address,
+        offerCode: appliedOffer?.code,
+        referralCode,
+        useCredits,
+      });
       setBookings((prev) => created.reduce((acc, b) => upsertById(acc, b), prev));
       setCart([]);
       setAppliedOffer(null);
+      if (referralCode || useCredits) refreshReferral();
       showToast(`Order placed! ${created.length} service${created.length > 1 ? "s" : ""} booked`);
       return created;
     },
-    [cart, showToast, appliedOffer]
+    [cart, showToast, appliedOffer, refreshReferral]
   );
 
   const markNotificationRead = useCallback(async (id) => {
@@ -496,6 +526,9 @@ export function AppProvider({ children }) {
       offerError,
       applyOfferCode,
       clearOffer,
+      referral,
+      refreshReferral,
+      submitRefundClaim,
       notifications,
       markNotificationRead,
       markAllNotificationsRead,
@@ -539,6 +572,9 @@ export function AppProvider({ children }) {
       offerError,
       applyOfferCode,
       clearOffer,
+      referral,
+      refreshReferral,
+      submitRefundClaim,
       notifications,
       markNotificationRead,
       markAllNotificationsRead,

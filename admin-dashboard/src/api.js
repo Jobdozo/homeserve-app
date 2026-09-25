@@ -68,6 +68,10 @@ export const api = {
 
   removeSeedData: () => request("/admin/remove-seed-data", { method: "POST" }),
 
+  listRefundClaims: () => request("/admin/refund-claims"),
+  resolveRefundClaim: (id, status, adminNote) =>
+    request(`/admin/refund-claims/${id}`, { method: "PATCH", body: JSON.stringify({ status, adminNote }) }),
+
   listOffers: () => request("/admin/offers"),
   createOffer: (data) => request("/admin/offers", { method: "POST", body: JSON.stringify(data) }),
   updateOffer: (id, patch) => request(`/admin/offers/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),

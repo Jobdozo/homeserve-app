@@ -35,7 +35,7 @@ const sections = [
       { label: "Bookings", icon: CalendarIcon, to: "/bookings" },
       { label: "Payments & Transactions", icon: WalletIcon, to: "/payments" },
       { label: "Reviews & Ratings", icon: StarIcon, to: "/reviews" },
-      { label: "Disputes & Complaints", icon: AlertIcon },
+      { label: "Disputes & Complaints", icon: AlertIcon, to: "/disputes" },
       { label: "Notifications", icon: BellIcon, to: "/notifications" },
     ],
   },

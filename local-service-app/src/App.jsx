@@ -23,6 +23,8 @@ const CartScreen = lazy(() => import("./screens/CartScreen"));
 const NotificationsScreen = lazy(() => import("./screens/NotificationsScreen"));
 const ProviderProfileScreen = lazy(() => import("./screens/ProviderProfileScreen"));
 const AllServicesScreen = lazy(() => import("./screens/AllServicesScreen"));
+const ReferFriendScreen = lazy(() => import("./screens/ReferFriendScreen"));
+const BookingProtectionScreen = lazy(() => import("./screens/BookingProtectionScreen"));
 
 function ScreenFallback() {
   return (
@@ -80,6 +82,8 @@ function AppRoutes() {
           <Route path="/notifications" element={<NotificationsScreen />} />
           <Route path="/provider/:providerId" element={<ProviderProfileScreen />} />
           <Route path="/services" element={<AllServicesScreen />} />
+          <Route path="/refer" element={<ReferFriendScreen />} />
+          <Route path="/booking-protection" element={<BookingProtectionScreen />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/home" replace />} />
