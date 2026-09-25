@@ -143,7 +143,16 @@ function simulateReplyIfNeeded(bookingId, from) {
 // number simply isn't there to call, not just hidden in the UI.
 function maskCompleted(booking) {
   if (!booking || booking.status !== "Completed" || !booking.customer) return booking;
-  return { ...booking, customer: { ...booking.customer, phone: null, email: null } };
+  return hideCompletedChat({ ...booking, customer: { ...booking.customer, phone: null, email: null } });
+}
+
+// A completed order's conversation is closed to the customer and provider, so
+// its preview text is dropped from their booking lists too (admins keep it,
+// for dispute handling).
+function hideCompletedChat(booking) {
+  if (!booking || booking.status !== "Completed" || !booking.lastMessage) return booking;
+  const { lastMessage, ...rest } = booking;
+  return rest;
 }
 
 // A provider's phone/email are never part of the public catalog: customers
@@ -617,7 +626,9 @@ app.delete("/api/admin/services/:id", auth.requireAuth("admin"), ah(async (req, 
 // ---- bookings ----
 app.get("/api/bookings", auth.requireAuth(), ah(async (req, res) => {
   if (req.user.role === "admin") return res.json(await store.listBookings({}));
-  if (req.user.role === "customer") return res.json(await store.listBookings({ customerId: req.user.id }));
+  if (req.user.role === "customer") {
+    return res.json((await store.listBookings({ customerId: req.user.id })).map(hideCompletedChat));
+  }
   res.json((await store.listBookings({ providerId: req.user.id })).map(maskCompleted));
 }));
 
@@ -630,7 +641,9 @@ app.get("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
   if (req.user.role === "provider" && booking.providerId !== req.user.id) {
     return res.status(403).json({ error: "Not your booking" });
   }
-  res.json(req.user.role === "provider" ? maskCompleted(booking) : booking);
+  res.json(
+    req.user.role === "provider" ? maskCompleted(booking) : req.user.role === "customer" ? hideCompletedChat(booking) : booking
+  );
 }));
 
 app.post("/api/bookings", auth.requireAuth("customer"), ah(async (req, res) => {
@@ -943,6 +956,11 @@ app.get("/api/messages/:bookingId", auth.requireAuth(), ah(async (req, res) => {
   }
   if (req.user.role === "provider" && booking.providerId !== req.user.id) {
     return res.status(403).json({ error: "Not your booking" });
+  }
+  // Once the order is Completed the conversation is closed to both sides; it
+  // stays on record for admin/CRM dispute handling.
+  if (booking.status === "Completed" && req.user.role !== "admin") {
+    return res.status(403).json({ error: "This conversation is no longer available" });
   }
   res.json(await store.getMessages(req.params.bookingId));
 }));

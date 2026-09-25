@@ -65,6 +65,7 @@ export const api = {
   listCategories: () => request("/categories"),
   listServices: () => request("/services"),
   listBookings: () => request("/bookings"),
+  getBookingMessages: (id) => request(`/messages/${id}`),
   getBookingPhotos: (id) => request(`/bookings/${id}/photos`),
   getBookingCheckpoints: (id) => request(`/bookings/${id}/checkpoints`),
   setProviderVerification: (id, status) =>

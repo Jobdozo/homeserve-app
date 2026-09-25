@@ -9,7 +9,7 @@ export default function MessagesListScreen() {
 
   const threads = useMemo(() => {
     return bookings
-      .filter((b) => b.lastMessage)
+      .filter((b) => b.lastMessage && b.status !== "Completed")
       .map((b) => ({ booking: b, last: b.lastMessage, service: getService(b.serviceId), provider: getProvider(b.providerId) }))
       .sort((a, b) => new Date(b.last.time) - new Date(a.last.time));
   }, [bookings, getService, getProvider]);

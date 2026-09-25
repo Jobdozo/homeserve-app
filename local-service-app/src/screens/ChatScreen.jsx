@@ -15,9 +15,12 @@ export default function ChatScreen() {
   const provider = booking ? getProvider(booking.providerId) : null;
   const thread = messages[bookingId] || [];
 
+  const completed = booking?.status === "Completed";
+
   useEffect(() => {
-    if (bookingId) loadMessages(bookingId);
-  }, [bookingId, loadMessages]);
+    // A completed order's conversation is closed — never even fetch it.
+    if (bookingId && !completed) loadMessages(bookingId);
+  }, [bookingId, loadMessages, completed]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -29,6 +32,21 @@ export default function ChatScreen() {
         <p className="text-sm text-gray-500">Conversation not found.</p>
         <button onClick={() => navigate("/messages")} className="text-sm font-semibold text-brand">
           Back to Messages
+        </button>
+      </div>
+    );
+  }
+
+  if (completed) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+        <span className="text-3xl">🔒</span>
+        <p className="text-sm font-semibold text-gray-700">This conversation is no longer available</p>
+        <p className="max-w-xs text-xs text-gray-400">
+          Chats are closed once an order is completed. For any issue with this order, use Claim a refund on the booking.
+        </p>
+        <button onClick={() => navigate("/bookings")} className="text-sm font-semibold text-brand">
+          Back to Bookings
         </button>
       </div>
     );
@@ -84,11 +102,6 @@ export default function ChatScreen() {
         <div ref={endRef} />
       </div>
 
-      {booking.status === "Completed" ? (
-        <div className="flex-shrink-0 border-t border-gray-100 bg-gray-50 px-4 py-3.5 text-center text-[12px] text-gray-500 lg:mx-auto lg:w-full lg:max-w-2xl">
-          This order is completed — messaging and calling the service provider are no longer available.
-        </div>
-      ) : (
       <div className="flex flex-shrink-0 items-center gap-2 border-t border-gray-100 bg-white px-3 py-2.5 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:py-4">
         <input
           value={text}
@@ -105,7 +118,6 @@ export default function ChatScreen() {
           <SendIcon width={16} height={16} />
         </button>
       </div>
-      )}
     </div>
   );
 }

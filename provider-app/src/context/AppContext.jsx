@@ -314,6 +314,14 @@ export function AppProvider({ children }) {
         return;
       }
       setRequests((prev) => upsertById(prev, booking));
+      if (booking.status === "Completed") {
+        // The conversation is closed once the order completes — drop any copy
+        // held in memory rather than just hiding the screen.
+        setMessages((prev) => {
+          const { [booking.id]: _closed, ...rest } = prev;
+          return rest;
+        });
+      }
       if (booking.status !== "Pending") {
         setRingingRequest((prev) => (prev?.id === booking.id ? null : prev));
       }

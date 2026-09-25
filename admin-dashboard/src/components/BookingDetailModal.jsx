@@ -34,11 +34,17 @@ export default function BookingDetailModal({ bookingId, onClose }) {
   const booking = bookings.find((b) => b.id === bookingId);
   const [photos, setPhotos] = useState(null);
   const [checkpoints, setCheckpoints] = useState(null);
+  const [messages, setMessages] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     setPhotos(null);
     setCheckpoints(null);
+    setMessages(null);
+    api
+      .getBookingMessages(bookingId)
+      .then((m) => !cancelled && setMessages(m))
+      .catch(() => !cancelled && setMessages([]));
     Promise.all([
       api.getBookingPhotos(bookingId).catch(() => []),
       api.getBookingCheckpoints(bookingId).catch(() => []),
@@ -142,6 +148,28 @@ export default function BookingDetailModal({ bookingId, onClose }) {
                 ))}
               </div>
             )}
+          </Section>
+
+          <Section title="Conversation (admin only)">
+            {messages === null && <p className="text-[12px] text-gray-400">Loading…</p>}
+            {messages?.length === 0 && <p className="text-[12px] text-gray-400">No messages on this booking.</p>}
+            {messages?.length > 0 && (
+              <div className="max-h-52 space-y-1.5 overflow-y-auto rounded-xl bg-gray-50 p-3">
+                {messages.map((m, i) => (
+                  <div key={i} className="text-[12px]">
+                    <span className="font-semibold text-gray-700">{m.from === "provider" ? "Provider" : "Customer"}</span>
+                    <span className="ml-1.5 text-[10px] text-gray-400">
+                      {new Date(m.time).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                    <p className="text-gray-600">{m.text}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-[10.5px] text-gray-400">
+              Chats are hidden from customers and providers once an order is completed; they stay here for dispute
+              handling.
+            </p>
           </Section>
 
           <Section title="Before & After Photos" icon={CameraIcon}>

@@ -321,6 +321,14 @@ export function AppProvider({ children }) {
     const onBookingUpdated = (booking) => {
       if (booking.customerId !== customer?.id) return;
       setBookings((prev) => upsertById(prev, booking));
+      if (booking.status === "Completed") {
+        // The conversation is closed once the order completes — drop any copy
+        // held in memory rather than just hiding the screen.
+        setMessages((prev) => {
+          const { [booking.id]: _closed, ...rest } = prev;
+          return rest;
+        });
+      }
     };
     const onMessageCreated = ({ bookingId, message }) => {
       setMessages((prev) => ({ ...prev, [bookingId]: [...(prev[bookingId] || []), message] }));
