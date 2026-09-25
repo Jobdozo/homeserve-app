@@ -106,6 +106,12 @@ export const api = {
   updateBanner: (id, patch) => request(`/admin/banners/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteBanner: (id) => request(`/admin/banners/${id}`, { method: "DELETE" }),
 
+  listHomeSections: () => request("/admin/home-sections"),
+  createHomeSection: (data) => request("/admin/home-sections", { method: "POST", body: JSON.stringify(data) }),
+  updateHomeSection: (id, patch) => request(`/admin/home-sections/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deleteHomeSection: (id) => request(`/admin/home-sections/${id}`, { method: "DELETE" }),
+  reorderHomeSections: (ids) => request("/admin/home-sections/reorder", { method: "POST", body: JSON.stringify({ ids }) }),
+
   removeSeedData: () => request("/admin/remove-seed-data", { method: "POST" }),
 
   listRefundClaims: () => request("/admin/refund-claims"),

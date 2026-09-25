@@ -2023,13 +2023,41 @@ function listActiveBanners() {
   return listBanners().filter((b) => b.active !== false);
 }
 
-async function createBanner({ title, subtitle, icon, active = true }) {
+const BANNER_PLACEMENTS = ["strip", "hero", "inline"];
+const BANNER_COLORS = ["brand", "emerald", "amber", "violet", "rose", "slate"];
+
+// Normalises the CMS fields of a banner. "strip" is the original small chip
+// carousel; "hero" is a full-width promo at the top of home; "inline" sits
+// after the Nth service card in the service list (afterItems).
+function cleanBannerFields(input) {
+  const out = {};
+  if (input.placement !== undefined) out.placement = BANNER_PLACEMENTS.includes(input.placement) ? input.placement : "strip";
+  if (input.afterItems !== undefined) {
+    const n = Math.round(Number(input.afterItems));
+    out.afterItems = Number.isFinite(n) ? Math.min(Math.max(n, 1), 50) : 3;
+  }
+  if (input.color !== undefined) out.color = BANNER_COLORS.includes(input.color) ? input.color : "brand";
+  if (input.imageUrl !== undefined) {
+    const u = String(input.imageUrl || "").trim();
+    if (u && !/^https:\/\//i.test(u) && !u.startsWith("/uploads/")) throw new Error("Image URL must start with https://");
+    out.imageUrl = u.slice(0, 500);
+  }
+  if (input.linkType !== undefined) out.linkType = ["none", "service", "category"].includes(input.linkType) ? input.linkType : "none";
+  if (input.linkId !== undefined) out.linkId = String(input.linkId || "");
+  if (input.ctaLabel !== undefined) out.ctaLabel = String(input.ctaLabel || "").trim().slice(0, 24);
+  return out;
+}
+
+async function createBanner({ title, subtitle, icon, active = true, ...cms }) {
   const banners = jsonStore.readAll("banners");
   const banner = jsonStore.insert("banners", {
     title,
     subtitle: subtitle || "",
     icon: icon || "📣",
     active,
+    placement: "strip",
+    color: "brand",
+    ...cleanBannerFields(cms),
     order: banners.length,
     createdAt: new Date().toISOString(),
   });
@@ -2040,11 +2068,128 @@ async function createBanner({ title, subtitle, icon, active = true }) {
 }
 
 function updateBanner(id, patch) {
-  return jsonStore.update("banners", id, patch);
+  const { title, subtitle, icon, active } = patch;
+  const clean = cleanBannerFields(patch);
+  if (title !== undefined) clean.title = String(title).trim();
+  if (subtitle !== undefined) clean.subtitle = String(subtitle);
+  if (icon !== undefined) clean.icon = icon;
+  if (active !== undefined) clean.active = Boolean(active);
+  return jsonStore.update("banners", id, clean);
 }
 
 function deleteBanner(id) {
   return jsonStore.remove("banners", id);
+}
+
+// ---- home screen layout (CMS) ----
+// Configurable customer-home sections + richer banner placements. Stored as flat
+// JSON (see jsonStore.js) so no schema migration is needed.
+const HOME_SECTION_TYPES = ["categories", "services", "most_booked", "category"];
+
+// First-run layout matching the launch design: category carousel, most booked,
+// the three themed rows, then the full service-card list (banners are
+// interleaved after its 3rd and 5th items by banner placement).
+const DEFAULT_HOME_SECTIONS = [
+  { key: "categories", type: "categories", title: "Service Categories", enabled: true, limit: 10 },
+  { key: "most_booked", type: "most_booked", title: "Most Booked Services", enabled: true, limit: 8 },
+  { key: "cleaning", type: "category", title: "Cleaning Essentials", match: "clean", enabled: true, limit: 8 },
+  { key: "appliance", type: "category", title: "Appliance Repair & Services", match: "appliance, repair", enabled: true, limit: 8 },
+  { key: "massage", type: "category", title: "Massage for Men", match: "massage", enabled: true, limit: 8 },
+  { key: "services", type: "services", title: "Services For You", enabled: true, limit: 12 },
+];
+
+function listHomeSections() {
+  let sections = jsonStore.readAll("homeSections");
+  if (sections.length === 0) {
+    sections = DEFAULT_HOME_SECTIONS.map((s, i) => jsonStore.insert("homeSections", { ...s, order: i }));
+  }
+  return sections.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+function cleanHomeSection(input, existing = {}) {
+  const out = { ...existing };
+  if (input.type !== undefined) {
+    if (!HOME_SECTION_TYPES.includes(input.type)) throw new Error("Invalid section type");
+    out.type = input.type;
+  }
+  if (input.title !== undefined) {
+    const t = String(input.title).trim();
+    if (!t) throw new Error("Section title is required");
+    out.title = t.slice(0, 60);
+  }
+  if (input.match !== undefined) out.match = String(input.match || "").trim().slice(0, 120);
+  if (input.categoryId !== undefined) out.categoryId = input.categoryId || "";
+  if (input.enabled !== undefined) out.enabled = Boolean(input.enabled);
+  if (input.limit !== undefined) {
+    const n = Math.round(Number(input.limit));
+    out.limit = Number.isFinite(n) ? Math.min(Math.max(n, 1), 30) : 8;
+  }
+  return out;
+}
+
+function createHomeSection(input, actor) {
+  const sections = listHomeSections();
+  const data = cleanHomeSection({}, { type: "category", enabled: true, limit: 8 });
+  Object.assign(data, cleanHomeSection(input, data));
+  if (!data.title) throw new Error("Section title is required");
+  const section = jsonStore.insert("homeSections", {
+    ...data,
+    key: `custom-${Date.now()}`,
+    order: sections.length,
+  });
+  recordAdminChange({ actor, action: "home.section_create", entityType: "home", entityId: section.id, entityName: section.title, changes: [] });
+  return section;
+}
+
+function updateHomeSection(id, patch, actor) {
+  const existing = listHomeSections().find((s) => s.id === id);
+  if (!existing) return null;
+  const next = cleanHomeSection(patch, existing);
+  const changes = diffValues(existing, next, ["title", "match", "categoryId", "enabled", "limit", "type"]);
+  const updated = jsonStore.update("homeSections", id, next);
+  if (changes.length) recordAdminChange({ actor, action: "home.section_update", entityType: "home", entityId: id, entityName: updated.title, changes });
+  return updated;
+}
+
+function deleteHomeSection(id, actor) {
+  const existing = listHomeSections().find((s) => s.id === id);
+  if (!existing) return false;
+  jsonStore.remove("homeSections", id);
+  recordAdminChange({ actor, action: "home.section_delete", entityType: "home", entityId: id, entityName: existing.title, changes: [] });
+  return true;
+}
+
+// Rewrites the whole order from an id list (arrow reordering in admin).
+function reorderHomeSections(ids) {
+  const sections = listHomeSections();
+  const known = new Set(sections.map((s) => s.id));
+  const ordered = [...new Set(ids)].filter((id) => known.has(id));
+  for (const s of sections) if (!ordered.includes(s.id)) ordered.push(s.id);
+  ordered.forEach((id, i) => jsonStore.update("homeSections", id, { order: i }));
+  return listHomeSections();
+}
+
+// Booked-service counts for "Most Booked". Lean query (ids only) and cached —
+// the home screen hits this on every load.
+async function getServiceBookingCounts() {
+  const cached = cacheGet("bookingCounts");
+  if (cached) return cached;
+  const { bookings } = await query(`query { bookings { status service { id } } }`);
+  const counts = {};
+  for (const b of bookings) {
+    if (!b.service?.id || b.status === "Cancelled" || b.status === "Rejected") continue;
+    counts[b.service.id] = (counts[b.service.id] || 0) + 1;
+  }
+  return cacheSet("bookingCounts", counts);
+}
+
+async function getHomeLayout() {
+  const counts = await getServiceBookingCounts().catch(() => ({}));
+  return {
+    sections: listHomeSections().filter((s) => s.enabled !== false),
+    banners: listActiveBanners(),
+    bookingCounts: counts,
+  };
 }
 
 // ---- offers / discount codes (same storage approach as banners) ----
@@ -3010,6 +3155,12 @@ module.exports = {
   getAdminReports,
   listBanners,
   listActiveBanners,
+  listHomeSections,
+  createHomeSection,
+  updateHomeSection,
+  deleteHomeSection,
+  reorderHomeSections,
+  getHomeLayout,
   createBanner,
   updateBanner,
   deleteBanner,

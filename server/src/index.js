@@ -555,16 +555,59 @@ app.get("/api/banners", ah(async (req, res) => res.json(store.listActiveBanners(
 app.get("/api/admin/banners", auth.requireAuth("admin"), ah(async (req, res) => res.json(store.listBanners())));
 
 app.post("/api/admin/banners", auth.requireAuth("admin"), ah(async (req, res) => {
-  const { title, subtitle, icon, active } = req.body || {};
+  const { title } = req.body || {};
   if (!title || !title.trim()) return res.status(400).json({ error: "title is required" });
-  const banner = await store.createBanner({ title: title.trim(), subtitle, icon, active });
-  res.status(201).json(banner);
+  try {
+    const banner = await store.createBanner({ ...req.body, title: title.trim() });
+    res.status(201).json(banner);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 }));
 
 app.patch("/api/admin/banners/:id", auth.requireAuth("admin"), ah(async (req, res) => {
-  const banner = store.updateBanner(req.params.id, req.body || {});
+  let banner;
+  try {
+    banner = store.updateBanner(req.params.id, req.body || {});
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
   if (!banner) return res.status(404).json({ error: "Banner not found" });
   res.json(banner);
+}));
+
+// ---- customer home layout (CMS): sections, banners, booking counts ----
+app.get("/api/home-layout", ah(async (req, res) => res.json(await store.getHomeLayout())));
+
+app.get("/api/admin/home-sections", auth.requireAuth("admin"), ah(async (req, res) => res.json(store.listHomeSections())));
+
+app.post("/api/admin/home-sections", auth.requireAuth("admin"), ah(async (req, res) => {
+  try {
+    res.status(201).json(store.createHomeSection(req.body || {}, actorOf(req)));
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+}));
+
+app.post("/api/admin/home-sections/reorder", auth.requireAuth("admin"), ah(async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
+  res.json(store.reorderHomeSections(ids));
+}));
+
+app.patch("/api/admin/home-sections/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  let section;
+  try {
+    section = store.updateHomeSection(req.params.id, req.body || {}, actorOf(req));
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+  if (!section) return res.status(404).json({ error: "Section not found" });
+  res.json(section);
+}));
+
+app.delete("/api/admin/home-sections/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  if (!store.deleteHomeSection(req.params.id, actorOf(req))) return res.status(404).json({ error: "Section not found" });
+  res.status(204).end();
 }));
 
 app.delete("/api/admin/banners/:id", auth.requireAuth("admin"), ah(async (req, res) => {

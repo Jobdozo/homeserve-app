@@ -17,6 +17,9 @@ const ACTION_LABELS = {
   "category.activate": "Category activated",
   "category.deactivate": "Category deactivated",
   "category.delete": "Category deleted",
+  "home.section_create": "Home section added",
+  "home.section_update": "Home section edited",
+  "home.section_delete": "Home section deleted",
 };
 
 const FIELD_LABELS = {
@@ -31,6 +34,10 @@ const FIELD_LABELS = {
   status: "Status",
   active: "Active",
   reason: "Reason",
+  match: "Keywords",
+  limit: "Max items",
+  type: "Type",
+  enabled: "Visible",
   provider: "Provider",
 };
 

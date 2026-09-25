@@ -60,6 +60,7 @@ export function AppProvider({ children }) {
   const [categories, setCategories] = useState([]);
   const [services, setServices] = useState([]);
   const [banners, setBanners] = useState([]);
+  const [homeLayout, setHomeLayout] = useState({ sections: [], bookingCounts: {} });
   const [bookings, setBookings] = useState([]);
   const [messages, setMessages] = useState({});
   const [loading, setLoading] = useState(true);
@@ -209,11 +210,14 @@ export function AppProvider({ children }) {
   // without a full page reload.
   const loadCatalog = useCallback(async (pincode) => {
     try {
-      const [boot, bannerData] = await Promise.all([api.bootstrap(pincode), api.listBanners().catch(() => [])]);
+      const [boot, layout] = await Promise.all([api.bootstrap(pincode), api.getHomeLayout().catch(() => null)]);
       setProviders(Object.fromEntries(boot.providers.map((p) => [p.id, p])));
       setCategories(boot.categories);
       setServices(boot.services);
-      setBanners(bannerData);
+      if (layout) {
+        setBanners(layout.banners || []);
+        setHomeLayout({ sections: layout.sections || [], bookingCounts: layout.bookingCounts || {} });
+      }
     } catch (e) {
       console.error("Failed to load catalog", e);
     }
@@ -526,6 +530,7 @@ export function AppProvider({ children }) {
       categories,
       services,
       banners,
+      homeLayout,
       bookings,
       messages,
       loading,
@@ -573,6 +578,7 @@ export function AppProvider({ children }) {
       categories,
       services,
       banners,
+      homeLayout,
       bookings,
       messages,
       loading,

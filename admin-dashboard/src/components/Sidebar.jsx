@@ -43,7 +43,7 @@ const sections = [
   {
     items: [
       { label: "Reports & Analytics", icon: ChartIcon, to: "/reports" },
-      { label: "CMS", icon: FileIcon, sub: "Banners / Pages / FAQs" },
+      { label: "Home Layout (CMS)", icon: FileIcon, to: "/home-layout" },
       { label: "Import & Export", icon: DownloadIcon, to: "/data" },
       { label: "Settings", icon: SettingsIcon, to: "/settings" },
       { label: "Audit Logs", icon: ArchiveIcon, to: "/audit-logs" },

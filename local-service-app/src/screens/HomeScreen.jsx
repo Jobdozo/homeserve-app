@@ -1,18 +1,20 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { BellIcon, SearchIcon, StarIcon, ChevronRightIcon, CartIcon } from "../components/icons";
+import { BellIcon, SearchIcon, ChevronRightIcon, CartIcon } from "../components/icons";
 import { useApp } from "../context/AppContext";
-import { formatCount, discountPct } from "../utils/format";
+import { discountPct } from "../utils/format";
 import CategoryIcon from "../components/CategoryIcon";
-import CategoryPhoto from "../components/CategoryPhoto";
 import CartBar from "../components/CartBar";
+import HomeSections, { HeroBanners } from "../components/HomeSections";
 
 export default function HomeScreen() {
   const navigate = useNavigate();
-  const { categories, services, banners, cart, notifications, location, locationStatus, detectLocation } = useApp();
+  const { categories, services, banners, homeLayout, cart, notifications, location, locationStatus, detectLocation } = useApp();
   const unreadCount = notifications.filter((n) => !n.read).length;
-  const topCategories = categories.slice(0, 4);
-  const popular = [...services].sort((a, b) => b.reviewCount - a.reviewCount);
+  // Banner placements are set in the Super Admin CMS; banners saved before
+  // placements existed have none and stay in the small chip strip.
+  const stripBanners = banners.filter((b) => !b.placement || b.placement === "strip");
+  const heroBanners = banners.filter((b) => b.placement === "hero");
 
   // Real promo: feature whichever active service currently has the best discount,
   // computed live from the catalog — not a fabricated marketing claim.
@@ -79,9 +81,9 @@ export default function HomeScreen() {
 
       {/* Admin-managed promo carousel — supplements (doesn't replace) the real
           computed-discount hero banner below. */}
-      {banners.length > 0 && (
+      {stripBanners.length > 0 && (
         <div className="no-scrollbar mt-4 flex gap-2.5 overflow-x-auto px-4 lg:mt-6 lg:px-0">
-          {banners.map((b) => (
+          {stripBanners.map((b) => (
             <div
               key={b.id}
               className="flex flex-shrink-0 items-center gap-2.5 rounded-2xl border border-gray-100 bg-white px-3.5 py-3 shadow-card"
@@ -96,8 +98,10 @@ export default function HomeScreen() {
         </div>
       )}
 
-      {/* Hero banner — real, live discount instead of generic marketing copy */}
-      {bestOffer ? (
+      {/* Admin hero banners (CMS). With none configured, fall back to the live
+          best-discount hero — real numbers instead of generic marketing copy. */}
+      <HeroBanners banners={heroBanners} />
+      {heroBanners.length > 0 ? null : bestOffer ? (
         <button
           onClick={() => navigate(`/service/${bestOffer.service.id}`)}
           className="mx-4 mt-4 flex items-center justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-brand to-brand-dark px-4 py-4 text-left text-white lg:mx-0 lg:mt-6 lg:px-10 lg:py-10"
@@ -142,66 +146,14 @@ export default function HomeScreen() {
         </div>
       )}
 
-      {/* Top categories */}
-      <div className="mt-5 flex items-center justify-between px-4 lg:mt-10 lg:px-0">
-        <h2 className="text-[15px] font-bold text-gray-900 lg:text-xl">Top Categories</h2>
-        <button onClick={() => navigate("/categories")} className="text-xs font-semibold text-brand lg:text-sm">
-          See All
-        </button>
-      </div>
-      <div className="mt-3 grid grid-cols-4 gap-2 px-4 lg:mt-4 lg:gap-4 lg:px-0">
-        {topCategories.map((c) => (
-          <button
-            key={c.id}
-            onClick={() => navigate(`/category/${c.id}`)}
-            className="flex flex-col items-center gap-1.5 rounded-xl bg-white py-3 shadow-card transition-transform hover:-translate-y-0.5 active:scale-95 lg:gap-2.5 lg:py-6"
-          >
-            <CategoryIcon categoryId={c.id} size={40} className="lg:scale-125" />
-            <span className="px-1 text-center text-[10px] font-medium leading-tight text-gray-600 lg:text-[13px]">
-              {c.name}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {/* Popular services */}
-      <div className="mt-5 flex items-center justify-between px-4 lg:mt-10 lg:px-0">
-        <h2 className="text-[15px] font-bold text-gray-900 lg:text-xl">Popular Services</h2>
-        <button onClick={() => navigate("/services")} className="text-xs font-semibold text-brand lg:text-sm">
-          See All
-        </button>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-3 px-4 lg:mt-4 lg:grid-cols-4 lg:gap-5 lg:px-0">
-        {popular.slice(0, 6).map((s) => {
-          const pct = discountPct(s.price, s.originalPrice);
-          return (
-            <button
-              key={s.id}
-              onClick={() => navigate(`/service/${s.id}`)}
-              className="relative overflow-hidden rounded-2xl bg-white text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.98]"
-            >
-              {pct > 0 && (
-                <span className="absolute left-2 top-2 z-10 rounded-full bg-emerald-500 px-2 py-0.5 text-[9.5px] font-bold text-white">
-                  {pct}% OFF
-                </span>
-              )}
-              <div className="flex h-24 items-center justify-center lg:h-36">
-                <CategoryPhoto categoryId={s.categoryId} size={96} />
-              </div>
-              <div className="p-2.5 lg:p-4">
-                <p className="text-[12.5px] font-semibold text-gray-900 lg:text-[15px]">{s.name}</p>
-                <div className="mt-0.5 flex items-center gap-1.5">
-                  <span className="text-[11px] text-gray-500 lg:text-[13px]">Starting ₹{s.price}</span>
-                  {pct > 0 && <span className="text-[10px] text-gray-400 line-through">₹{s.originalPrice}</span>}
-                </div>
-                <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-500 lg:text-[13px]">
-                  <StarIcon filled width={12} height={12} /> {s.rating} ({formatCount(s.reviewCount)})
-                </div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+      {/* Configurable sections (Super Admin → Home Layout) */}
+      <HomeSections
+        sections={homeLayout.sections}
+        services={services}
+        categories={categories}
+        banners={banners}
+        bookingCounts={homeLayout.bookingCounts}
+      />
 
       {/* Can't find */}
       <button
