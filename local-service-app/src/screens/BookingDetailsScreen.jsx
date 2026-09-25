@@ -81,7 +81,7 @@ export default function BookingDetailsScreen() {
     <div className="flex flex-1 flex-col">
       <ScreenHeader
         title="Booking Details"
-        subtitle={booking.orderId ? `#${booking.id} · Order #${booking.orderId}` : `#${booking.id}`}
+        subtitle={booking.orderId ? `#${booking.ref || booking.id} · Order #${booking.orderId}` : `#${booking.ref || booking.id}`}
         right={
           <span className={`rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${statusStyles[booking.status]}`}>
             {booking.status}

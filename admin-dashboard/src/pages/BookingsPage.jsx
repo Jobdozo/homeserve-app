@@ -48,7 +48,7 @@ export default function BookingsPage() {
           <table className="w-full min-w-[780px] text-left text-[12.5px]">
             <thead>
               <tr className="border-b border-gray-100 text-gray-400">
-                <th className="px-4 py-3 font-medium">Booking ID</th>
+                <th className="px-4 py-3 font-medium">Request ID</th>
                 <th className="px-4 py-3 font-medium">Service</th>
                 <th className="px-4 py-3 font-medium">Customer</th>
                 <th className="px-4 py-3 font-medium">Provider</th>
@@ -64,7 +64,7 @@ export default function BookingsPage() {
                   onClick={() => setOpenBookingId(b.id)}
                   className="cursor-pointer border-b border-gray-50 last:border-0 hover:bg-gray-50/60"
                 >
-                  <td className="px-4 py-3 font-semibold text-gray-800">#{b.id}</td>
+                  <td className="px-4 py-3 font-semibold text-gray-800">#{b.ref || b.id}</td>
                   <td className="flex items-center gap-2 px-4 py-3 text-gray-700">
                     <CategoryIcon categoryId={b.service?.categoryId} size={28} rounded="rounded-lg" /> {b.service?.name}
                   </td>

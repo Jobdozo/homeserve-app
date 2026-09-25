@@ -34,7 +34,7 @@ export default function Topbar({ title, subtitle, onMenuClick }) {
     return {
       svc: services.filter((s) => s.name.toLowerCase().includes(q)).slice(0, 4),
       prov: providers.filter((p) => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)).slice(0, 4),
-      book: bookings.filter((b) => b.id.toLowerCase().includes(q) || b.customer?.name.toLowerCase().includes(q)).slice(0, 4),
+      book: bookings.filter((b) => b.id.toLowerCase().includes(q) || (b.ref || "").toLowerCase().includes(q) || b.customer?.name.toLowerCase().includes(q)).slice(0, 4),
     };
   }, [q, services, providers, bookings]);
   const hasResults = results.svc.length || results.prov.length || results.book.length;
@@ -118,7 +118,7 @@ export default function Topbar({ title, subtitle, onMenuClick }) {
                       onClick={() => goTo("/bookings")}
                       className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] text-gray-700 hover:bg-gray-50"
                     >
-                      #{b.id} · {b.customer?.name}
+                      #{b.ref || b.id} · {b.customer?.name}
                     </button>
                   ))}
                 </div>

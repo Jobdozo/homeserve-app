@@ -55,7 +55,7 @@ export default function RequestDetailsScreen() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <ScreenHeader title="Request Details" subtitle={`Request ID: #${request.id}`} />
+      <ScreenHeader title="Request Details" subtitle={`Request ID: #${request.ref || request.id}`} />
 
       <div className="flex-1 space-y-5 px-4 pb-6 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-10">
         {request.status === "Pending" && (

@@ -107,7 +107,7 @@ export default function DashboardPage() {
               <div key={b.id} className="flex items-center gap-2.5 rounded-xl px-1.5 py-2 hover:bg-gray-50">
                 <CategoryIcon categoryId={b.service?.categoryId} size={36} rounded="rounded-lg" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[12.5px] font-semibold text-gray-900">#{b.id}</p>
+                  <p className="truncate text-[12.5px] font-semibold text-gray-900">#{b.ref || b.id}</p>
                   <p className="truncate text-[11px] text-gray-400">{b.customer?.name}</p>
                 </div>
                 <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusStyles[b.status]}`}>

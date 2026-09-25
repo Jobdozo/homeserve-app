@@ -45,7 +45,7 @@ export default function ReviewsPage() {
           </div>
           {b.review.text && <p className="mt-3 text-[13px] leading-relaxed text-gray-600">{b.review.text}</p>}
           <p className="mt-2 text-[11px] text-gray-400">
-            Booking #{b.id} ·{" "}
+            Request #{b.ref || b.id} ·{" "}
             {new Date(b.statusHistory.Completed || b.createdAt).toLocaleDateString("en-IN", {
               day: "2-digit",
               month: "short",

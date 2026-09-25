@@ -51,7 +51,7 @@ export default function PaymentsPage() {
             <tbody>
               {transactions.map((t) => (
                 <tr key={t.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
-                  <td className="px-4 py-3 font-semibold text-gray-800">#{t.id}</td>
+                  <td className="px-4 py-3 font-semibold text-gray-800">#{t.ref || t.id}</td>
                   <td className="flex items-center gap-2 px-4 py-3 text-gray-700">
                     <CategoryIcon categoryId={t.categoryId} size={26} rounded="rounded-lg" /> {t.service}
                   </td>

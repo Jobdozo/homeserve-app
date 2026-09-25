@@ -87,8 +87,8 @@ export default function BookingDetailModal({ bookingId, onClose }) {
       <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <div>
-            <h2 className="text-[15px] font-bold text-gray-900">Booking #{booking.id.slice(0, 10)}</h2>
-            <p className="text-[11px] text-gray-400">Full booking ID: {booking.id}</p>
+            <h2 className="text-[15px] font-bold text-gray-900">Request #{booking.ref || booking.id.slice(0, 10)}</h2>
+            <p className="text-[11px] text-gray-400">Internal ID: {booking.id}</p>
           </div>
           <button onClick={onClose} className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100">
             <XIcon width={16} height={16} />

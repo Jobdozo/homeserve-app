@@ -136,7 +136,7 @@ function BookingRow({ booking: b, service, onClick, compact, wrapped }) {
             {b.status}
           </span>
         </div>
-        <p className="mt-0.5 text-[11px] text-gray-400">Booking ID: #{b.id}</p>
+        <p className="mt-0.5 text-[11px] text-gray-400">Request ID: #{b.ref || b.id}</p>
         <div className="mt-1 flex items-center justify-between">
           <p className="text-[11px] text-gray-500 lg:text-[12.5px]">
             {formatDate(b.date)} · {b.time.split("–")[0].trim()}

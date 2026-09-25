@@ -220,11 +220,60 @@ function mapService(s) {
   };
 }
 
+// ---- request IDs: short, human-friendly codes (2 letters + 2 digits + 2
+// letters + 2 digits, e.g. AB12CD34) shown everywhere instead of the long
+// internal UUID. The database key can't change, so the code lives in a small
+// id -> code table; a booking gets its code the first time it's read
+// (existing bookings are backfilled automatically) and never changes. ----
+const crypto = require("crypto");
+let refByBooking = null; // bookingId -> code
+let refsInUse = null;
+let refFlushQueued = false;
+
+function loadBookingRefs() {
+  if (refByBooking) return;
+  refByBooking = new Map();
+  refsInUse = new Set();
+  for (const r of jsonStore.readAll("bookingRefs")) {
+    refByBooking.set(r.id, r.ref);
+    refsInUse.add(r.ref);
+  }
+}
+
+function generateRefCode() {
+  const L = () => String.fromCharCode(65 + crypto.randomInt(26));
+  const D = () => String(crypto.randomInt(10));
+  return L() + L() + D() + D() + L() + L() + D() + D();
+}
+
+function bookingRef(bookingId) {
+  if (!bookingId) return undefined;
+  loadBookingRefs();
+  let ref = refByBooking.get(bookingId);
+  if (ref) return ref;
+  do {
+    ref = generateRefCode();
+  } while (refsInUse.has(ref));
+  refByBooking.set(bookingId, ref);
+  refsInUse.add(ref);
+  // Persist in one batched write per tick, so backfilling many bookings at
+  // once doesn't rewrite the file for each.
+  if (!refFlushQueued) {
+    refFlushQueued = true;
+    setImmediate(() => {
+      refFlushQueued = false;
+      jsonStore.writeAll("bookingRefs", [...refByBooking].map(([id, code]) => ({ id, ref: code })));
+    });
+  }
+  return ref;
+}
+
 function mapBooking(b, customer, service) {
   const statusHistory = {};
   for (const e of b.bookingStatusEvents_on_booking || []) statusHistory[e.status] = e.at;
   return {
     id: b.id,
+    ref: bookingRef(b.id),
     ...(b.orderId ? { orderId: b.orderId } : {}),
     serviceId: b.service?.id,
     providerId: b.provider?.id,
@@ -1311,7 +1360,7 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
     { bookingId, status: "Pending", at: now }
   );
 
-  if (!orderId) await logActivity("booking", `New booking received: #${bookingId} — ${service.name}`);
+  if (!orderId) await logActivity("booking", `New booking received: #${bookingRef(bookingId)} — ${service.name}`);
   const bookingMessage = `${customer.name} requested ${service.name} for ${date}`;
   await addNotification({
     recipientType: "provider",
@@ -1412,7 +1461,7 @@ async function updateBookingStatus(id, status) {
   cacheClear("openBookings");
   const provider = await getProvider(existing.providerId);
   const serviceName = existing.service?.name || "Service";
-  await logActivity("booking", `Booking #${id} (${serviceName}) marked ${status}`);
+  await logActivity("booking", `Booking #${bookingRef(id)} (${serviceName}) marked ${status}`);
 
   // The customer is handed a fresh 4-digit code the moment a provider
   // accepts — the provider asks for it in person once they've actually
@@ -1519,7 +1568,7 @@ async function reassignBooking(bookingId, excludeProviderIds) {
       { id: bookingId, serviceId: candidate.serviceId, providerId: candidate.providerId, amount: candidate.amount }
     );
     cacheClear("openBookings");
-    await logActivity("booking", `Booking #${bookingId} reassigned to another provider after no response`);
+    await logActivity("booking", `Booking #${bookingRef(bookingId)} reassigned to another provider after no response`);
     const updated = await fetchBookingWithRelations(bookingId);
     const bookingMessage = `${updated.customer?.name || "A customer"} requested ${updated.service?.name || "a service"} for ${updated.date}`;
     await addNotification({
@@ -1550,7 +1599,7 @@ async function reassignBooking(bookingId, excludeProviderIds) {
     { bookingId, status: "Rejected", at: now }
   );
   cacheClear("openBookings");
-  await logActivity("booking", `Booking #${bookingId} rejected — no providers available`);
+  await logActivity("booking", `Booking #${bookingRef(bookingId)} rejected — no providers available`);
   const updated = await fetchBookingWithRelations(bookingId);
   await addNotification({
     recipientType: "customer",
@@ -1682,6 +1731,7 @@ async function swapBooking(bookingId, providerId, { reason, note } = {}) {
 
   const swappedOut = {
     id: booking.id,
+    ref: booking.ref,
     ...(booking.orderId ? { orderId: booking.orderId } : {}),
     serviceId: booking.serviceId,
     providerId,
@@ -1723,7 +1773,7 @@ async function swapBooking(bookingId, providerId, { reason, note } = {}) {
       .forEach((r) => jsonStore.update(name, r.id, { superseded: true }));
   }
 
-  await logActivity("booking", `Booking #${bookingId} swapped from ${fromProvider?.name || "a provider"} to another provider (${SWAP_REASONS[reason]})`);
+  await logActivity("booking", `Booking #${bookingRef(bookingId)} swapped from ${fromProvider?.name || "a provider"} to another provider (${SWAP_REASONS[reason]})`);
   const updated = await fetchBookingWithRelations(bookingId);
   const bookingMessage = `${updated.customer?.name || "A customer"} requested ${updated.service?.name || "a service"} for ${updated.date}`;
   await addNotification({
@@ -2153,6 +2203,7 @@ async function getTransactions() {
       const platformFee = bookingCommunicationFee(b, cfg, ctx);
       return {
         id: b.id,
+        ref: b.ref,
         service: b.service?.name,
         categoryId: b.service?.categoryId,
         providerId: b.providerId,
@@ -2823,7 +2874,7 @@ async function createRefundClaim(customerId, bookingId, reason) {
     resolvedAt: null,
     adminNote: null,
   });
-  await logActivity("booking", `Refund claim submitted for booking #${bookingId}`);
+  await logActivity("booking", `Refund claim submitted for booking #${bookingRef(bookingId)}`);
   return claim;
 }
 

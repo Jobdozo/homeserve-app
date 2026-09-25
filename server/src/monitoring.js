@@ -105,7 +105,8 @@ function toOrderRow(b, ctx) {
   const address = b.address?.line || "";
   return {
     id: b.id,
-    orderRef: b.orderId || b.id,
+    ref: b.ref || "",
+    orderRef: b.orderId || "",
     providerId: b.providerId,
     providerName: p?.name || "—",
     customerName: b.customer?.name || "—",
@@ -128,7 +129,7 @@ function toOrderRow(b, ctx) {
 }
 
 function orderMatches(o, f, { withStatus = true, withDate = true } = {}) {
-  if (f.orderId && !lc(o.id).includes(lc(f.orderId)) && !lc(o.orderRef).includes(lc(f.orderId))) return false;
+  if (f.orderId && ![o.ref, o.id, o.orderRef].some((v) => lc(v).includes(lc(f.orderId)))) return false;
   if (f.pin && o.pin !== f.pin) return false;
   if (f.area && !lc(o.address).includes(lc(f.area))) return false;
   if (f.serviceId && o.serviceId !== f.serviceId) return false;
@@ -232,7 +233,7 @@ async function build(query) {
       fee: mine.reduce((n, o) => n + o.fee, 0),
       responseRate: p.responseRate ?? 100,
       walletBalance: store.getWallet(p.id).balance,
-      openOrders: live.slice(0, 5).map((o) => ({ id: o.id, service: o.serviceName, status: o.status, createdAt: o.createdAt })),
+      openOrders: live.slice(0, 5).map((o) => ({ id: o.id, ref: o.ref, service: o.serviceName, status: o.status, createdAt: o.createdAt })),
     };
     rows.push(row);
   }
@@ -380,7 +381,8 @@ async function report(type, query) {
   } else {
     title = `Order-wise report ${period.from} to ${period.to}`;
     rows = orders.map((o) => ({
-      "Order ID": o.id,
+      "Request ID": o.ref,
+      "Booking ID": o.id,
       Provider: o.providerName,
       Customer: o.customerName,
       Service: o.serviceName,

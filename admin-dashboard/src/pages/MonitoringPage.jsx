@@ -205,7 +205,7 @@ export default function MonitoringPage() {
           </div>
           <div>
             <label className={labelCls}>Order ID</label>
-            <input className={inputCls} value={f.orderId} onChange={(e) => set("orderId", e.target.value)} placeholder="Full or partial ID" />
+            <input className={inputCls} value={f.orderId} onChange={(e) => set("orderId", e.target.value)} placeholder="e.g. AB12CD34" />
           </div>
           <div>
             <label className={labelCls}>Category</label>
@@ -312,7 +312,7 @@ export default function MonitoringPage() {
                     </p>
                     {p.openOrders.map((o) => (
                       <p key={o.id} className="text-[11px] text-gray-400">
-                        #{o.id.slice(0, 8)} · {o.service} · {o.status}
+                        #{o.ref || o.id.slice(0, 8)} · {o.service} · {o.status}
                       </p>
                     ))}
                   </td>
@@ -367,7 +367,7 @@ export default function MonitoringPage() {
             <tbody>
               {data?.orders.map((o) => (
                 <tr key={o.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
-                  <td className="px-4 py-2.5 font-mono text-[11.5px] text-gray-500" title={o.id}>#{o.id.slice(0, 10)}</td>
+                  <td className="px-4 py-2.5 font-mono text-[11.5px] text-gray-500" title={o.id}>#{o.ref || o.id.slice(0, 10)}</td>
                   <td className="px-4 py-2.5 text-gray-800">
                     {o.serviceName}
                     <p className="text-[11px] text-gray-400">{o.categoryName}</p>

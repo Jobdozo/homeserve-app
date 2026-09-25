@@ -84,7 +84,7 @@ export default function BookingProtectionScreen() {
                 >
                   {eligibleBookings.map((b) => (
                     <option key={b.id} value={b.id}>
-                      #{b.id} — {b.service?.name} ({new Date(b.date).toLocaleDateString("en-IN")})
+                      #{b.ref || b.id} — {b.service?.name} ({new Date(b.date).toLocaleDateString("en-IN")})
                     </option>
                   ))}
                 </select>

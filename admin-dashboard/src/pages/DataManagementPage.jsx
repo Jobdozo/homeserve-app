@@ -106,6 +106,7 @@ export default function DataManagementPage() {
       note: "Every booking with customer, provider, status and amount",
       load: async () => bookings,
       columns: [
+        ["Request ID", "ref"],
         ["Booking ID", "id"],
         ["Service", (b) => b.service?.name],
         ["Customer", (b) => b.customer?.name],
@@ -132,6 +133,7 @@ export default function DataManagementPage() {
       note: "Every customer review",
       load: async () => bookings.filter((b) => b.reviewed && b.review),
       columns: [
+        ["Request ID", "ref"],
         ["Booking ID", "id"],
         ["Customer", (b) => b.customer?.name],
         ["Service", (b) => b.service?.name],
