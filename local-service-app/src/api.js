@@ -62,6 +62,7 @@ export const api = {
     request("/customer/referral/validate", { method: "POST", body: JSON.stringify({ code }) }),
   submitRefundClaim: (bookingId, reason) =>
     request(`/bookings/${bookingId}/refund-claim`, { method: "POST", body: JSON.stringify({ reason }) }),
+  registerAdClick: (serviceId) => request(`/services/${serviceId}/ad-click`, { method: "POST" }),
   getMyAddress: () => request("/customer/address"),
   saveMyAddress: (data) => request("/customer/address", { method: "PUT", body: JSON.stringify(data) }),
 };

@@ -321,6 +321,26 @@ app.get("/api/provider/wallet", auth.requireAuth("provider"), ah(async (req, res
   res.json({ balance: wallet.balance, suspended: wallet.balance <= 0 });
 }));
 
+// ---- CPC advertising ----
+app.get("/api/provider/ads", auth.requireAuth("provider"), ah(async (req, res) => {
+  res.json(await store.listProviderAdsWithStats(req.user.id));
+}));
+
+app.post("/api/provider/ads", auth.requireAuth("provider"), ah(async (req, res) => {
+  const ad = await store.createAd(req.user.id, req.body?.serviceId);
+  res.status(201).json(ad);
+}));
+
+app.patch("/api/provider/ads/:id", auth.requireAuth("provider"), ah(async (req, res) => {
+  const ad = store.setAdStatus(req.user.id, req.params.id, req.body?.status);
+  res.json(ad);
+}));
+
+app.post("/api/services/:id/ad-click", auth.requireAuth("customer"), ah(async (req, res) => {
+  const result = await store.registerAdClick(req.params.id);
+  res.json(result);
+}));
+
 app.patch("/api/providers/:id/services/:serviceId", auth.requireAuth("provider"), ah(async (req, res) => {
   if (req.user.id !== req.params.id) return res.status(403).json({ error: "Not your provider account" });
   const service = await store.updateProviderService(req.params.id, req.params.serviceId, req.body || {});

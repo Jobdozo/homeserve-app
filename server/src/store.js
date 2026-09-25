@@ -179,6 +179,7 @@ function mapService(s) {
     providerId: s.provider?.id,
     highlights: (s.serviceHighlights_on_service || []).map((h) => ({ icon: h.icon, label: h.label })),
     includes: (s.serviceIncludes_on_service || []).map((i) => i.text),
+    isAd: isServiceCurrentlyAdvertised(s.id),
   };
 }
 
@@ -1551,7 +1552,7 @@ function validateOffer(code) {
 
 // ---- platform settings (single record, same jsonStore approach as banners/offers) ----
 
-const DEFAULT_SETTINGS = { platformFeePct: 10, referralFriendDiscount: 50, referralReward: 50 };
+const DEFAULT_SETTINGS = { platformFeePct: 10, referralFriendDiscount: 50, referralReward: 50, cpcRate: 2 };
 
 function getSettings() {
   const [existing] = jsonStore.readAll("settings");
@@ -1566,7 +1567,7 @@ function updateSettings(patch) {
     }
     patch = { ...patch, platformFeePct: pct };
   }
-  for (const key of ["referralFriendDiscount", "referralReward"]) {
+  for (const key of ["referralFriendDiscount", "referralReward", "cpcRate"]) {
     if (patch[key] !== undefined) {
       const amount = Number(patch[key]);
       if (!Number.isFinite(amount) || amount < 0) {
@@ -1823,21 +1824,22 @@ async function rechargeProviderWallet(providerId, amount, note) {
   return wallet;
 }
 
-// Deducts this job's commission from the provider's wallet and fires the
-// low-balance / suspended/negative-balance alert the first time each is
-// crossed (tracked via the *AlertSentAt flags so a provider isn't messaged
-// on every single job once they're already below the threshold). Every
-// alert goes out both in-app (bell icon + push) and via WhatsApp, since a
-// provider may not have WhatsApp connected or may miss it.
-async function deductWalletCommission(providerId, bookingAmount, bookingId) {
-  const { platformFeePct } = getSettings();
-  const commission = Math.round(bookingAmount * (platformFeePct / 100));
-  if (commission <= 0) return getWallet(providerId);
+// Shared by every wallet charge (job commission, ad clicks, ...): deducts
+// `amount`, and fires the low-balance / suspended-or-negative-balance alert
+// the first time each is crossed (tracked via the *AlertSentAt flags so a
+// provider isn't messaged on every single charge once they're already below
+// the threshold). Every alert goes out both in-app (bell icon + push) and
+// via WhatsApp, since a provider may not have WhatsApp connected or may miss it.
+async function applyWalletDeduction(providerId, amount, { bookingId, reason } = {}) {
+  if (amount <= 0) return getWallet(providerId);
 
   const wallet = getWallet(providerId);
   const before = wallet.balance;
-  wallet.balance = before - commission;
-  wallet.deductions = [...(wallet.deductions || []), { amount: commission, at: new Date().toISOString() }];
+  wallet.balance = before - amount;
+  wallet.deductions = [
+    ...(wallet.deductions || []),
+    { amount, at: new Date().toISOString(), reason: reason || "commission" },
+  ];
 
   const justSuspended = before > 0 && wallet.balance <= 0 && !wallet.suspendedAlertSentAt;
   const justWentLow =
@@ -1891,6 +1893,12 @@ async function deductWalletCommission(providerId, bookingAmount, bookingId) {
   return wallet;
 }
 
+async function deductWalletCommission(providerId, bookingAmount, bookingId) {
+  const { platformFeePct } = getSettings();
+  const commission = Math.round(bookingAmount * (platformFeePct / 100));
+  return applyWalletDeduction(providerId, commission, { bookingId, reason: "commission" });
+}
+
 // Called periodically (see index.js) — re-sends the recharge reminder to any
 // still-suspended provider roughly once a day, so it doesn't go silent while
 // they remain paused and unpaid.
@@ -1922,6 +1930,105 @@ async function sendSuspendedWalletReminders() {
       console.error(`Suspended wallet reminder failed for provider ${wallet.id}:`, e);
     }
   }
+}
+
+// ---- CPC advertising (jsonStore-backed). A provider "advertises" one of
+// their services; every time a customer opens that service's details, the
+// current CPC rate (admin-configurable, see settings) is deducted from the
+// same wallet used for job commissions — so a click that empties the wallet
+// also suspends new bookings, same as any other deduction. An ad is only
+// ever shown as running (mapService's `isAd`) while its status is "active"
+// AND the wallet can cover at least one more click; the moment a click drops
+// the balance below the rate, it's auto-paused so it never runs on an
+// insufficient balance. ----
+
+function listProviderAds(providerId) {
+  return jsonStore.readAll("providerAds").filter((a) => a.providerId === providerId);
+}
+
+function getAd(adId) {
+  return jsonStore.readAll("providerAds").find((a) => a.id === adId) || null;
+}
+
+async function createAd(providerId, serviceId) {
+  const service = await getService(serviceId);
+  if (!service || service.providerId !== providerId) {
+    throw Object.assign(new Error("Service not found"), { status: 404 });
+  }
+  const existing = listProviderAds(providerId).find((a) => a.serviceId === serviceId && a.status !== "stopped");
+  if (existing) {
+    throw Object.assign(new Error("This service is already being advertised"), { status: 400 });
+  }
+  return jsonStore.insert("providerAds", {
+    providerId,
+    serviceId,
+    status: "active", // "active" | "paused" | "paused_low_balance" | "stopped"
+    clicks: 0,
+    amountSpent: 0,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+function setAdStatus(providerId, adId, status) {
+  if (!["active", "paused", "stopped"].includes(status)) {
+    throw Object.assign(new Error("status must be active, paused or stopped"), { status: 400 });
+  }
+  const ad = getAd(adId);
+  if (!ad || ad.providerId !== providerId) {
+    throw Object.assign(new Error("Ad not found"), { status: 404 });
+  }
+  return jsonStore.update("providerAds", adId, { status });
+}
+
+async function listProviderAdsWithStats(providerId) {
+  const wallet = getWallet(providerId);
+  const ads = listProviderAds(providerId);
+  const result = [];
+  for (const ad of ads) {
+    const service = await getService(ad.serviceId);
+    result.push({
+      ...ad,
+      serviceName: service?.name || "Service",
+      serviceIcon: service?.icon || null,
+      walletBalance: wallet.balance,
+    });
+  }
+  return result;
+}
+
+// A service is "advertised" to customers only while some ad for it is
+// active and its provider's wallet can afford at least one more click.
+function isServiceCurrentlyAdvertised(serviceId) {
+  const ad = jsonStore.readAll("providerAds").find((a) => a.serviceId === serviceId && a.status === "active");
+  if (!ad) return false;
+  const { cpcRate } = getSettings();
+  return getWallet(ad.providerId).balance >= cpcRate;
+}
+
+// Called when a customer opens an advertised service's details. Returns
+// { charged, ad } — charged is false when there was nothing to bill (no
+// running ad, or the wallet already couldn't cover this click).
+async function registerAdClick(serviceId) {
+  const ad = jsonStore.readAll("providerAds").find((a) => a.serviceId === serviceId && a.status === "active");
+  if (!ad) return { charged: false, ad: null };
+
+  const { cpcRate } = getSettings();
+  const wallet = getWallet(ad.providerId);
+  if (wallet.balance < cpcRate) {
+    // Already can't afford this click — stop the ad instead of charging
+    // into it or letting it keep running unpaid.
+    const stopped = jsonStore.update("providerAds", ad.id, { status: "paused_low_balance" });
+    return { charged: false, ad: stopped };
+  }
+
+  await applyWalletDeduction(ad.providerId, cpcRate, { reason: "ad_click" });
+  const remaining = getWallet(ad.providerId).balance;
+  const updated = jsonStore.update("providerAds", ad.id, {
+    clicks: (ad.clicks || 0) + 1,
+    amountSpent: (ad.amountSpent || 0) + cpcRate,
+    status: remaining < cpcRate ? "paused_low_balance" : "active",
+  });
+  return { charged: true, ad: updated };
 }
 
 // ---- KYC documents and job photos (jsonStore-backed — a provider's document
@@ -2200,6 +2307,10 @@ module.exports = {
   saveCustomerAddress,
   getProviderCoverage,
   updateProviderCoverage,
+  listProviderAdsWithStats,
+  createAd,
+  setAdStatus,
+  registerAdClick,
   getEarnings,
   listActivities,
   logActivity,

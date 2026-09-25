@@ -14,6 +14,8 @@ export default function SettingsPage() {
   const [friendDiscountInput, setFriendDiscountInput] = useState("");
   const [rewardInput, setRewardInput] = useState("");
   const [savingReferral, setSavingReferral] = useState(false);
+  const [cpcRateInput, setCpcRateInput] = useState("");
+  const [savingCpcRate, setSavingCpcRate] = useState(false);
   const [confirmingCleanup, setConfirmingCleanup] = useState(false);
   const [cleaningUp, setCleaningUp] = useState(false);
 
@@ -25,6 +27,7 @@ export default function SettingsPage() {
         setFeeInput(String(s.platformFeePct));
         setFriendDiscountInput(String(s.referralFriendDiscount));
         setRewardInput(String(s.referralReward));
+        setCpcRateInput(String(s.cpcRate));
       })
       .catch((e) => showToast(e.message || "Failed to load settings"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -74,6 +77,24 @@ export default function SettingsPage() {
       showToast(e.message || "Failed to update settings");
     } finally {
       setSavingReferral(false);
+    }
+  };
+
+  const numericCpcRate = Number(cpcRateInput);
+  const cpcRateValid = cpcRateInput.trim() !== "" && Number.isFinite(numericCpcRate) && numericCpcRate >= 0;
+  const cpcRateDirty = settings && numericCpcRate !== settings.cpcRate;
+
+  const handleSaveCpcRate = async () => {
+    if (!cpcRateValid || savingCpcRate) return;
+    setSavingCpcRate(true);
+    try {
+      const updated = await api.updateSettings({ cpcRate: numericCpcRate });
+      setSettings(updated);
+      showToast("CPC rate updated");
+    } catch (e) {
+      showToast(e.message || "Failed to update settings");
+    } finally {
+      setSavingCpcRate(false);
     }
   };
 
@@ -179,6 +200,40 @@ export default function SettingsPage() {
               className="w-full rounded-xl bg-brand py-2.5 text-[13px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50 sm:w-auto sm:px-6"
             >
               {savingReferral ? "Saving…" : "Save"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="max-w-md rounded-2xl bg-white p-4 shadow-card sm:p-5">
+        <h2 className="text-[14px] font-bold text-gray-900">CPC Advertising</h2>
+        <p className="mt-1 text-[12px] text-gray-400">
+          The amount deducted from a provider's wallet every time a customer opens one of their advertised
+          services. An ad automatically pauses if the wallet can't cover the next click.
+        </p>
+
+        {settings === null ? (
+          <p className="mt-4 text-[12.5px] text-gray-400">Loading…</p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            <div>
+              <label className={labelCls}>Cost per click (₹)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                value={cpcRateInput}
+                onChange={(e) => setCpcRateInput(e.target.value)}
+                className={inputCls}
+              />
+              {!cpcRateValid && <p className="mt-1 text-[11px] text-red-500">Enter a non-negative amount.</p>}
+            </div>
+            <button
+              onClick={handleSaveCpcRate}
+              disabled={!cpcRateValid || !cpcRateDirty || savingCpcRate}
+              className="w-full rounded-xl bg-brand py-2.5 text-[13px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50 sm:w-auto sm:px-6"
+            >
+              {savingCpcRate ? "Saving…" : "Save"}
             </button>
           </div>
         )}

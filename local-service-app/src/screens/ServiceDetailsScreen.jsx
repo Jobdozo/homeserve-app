@@ -1,7 +1,9 @@
+import { useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ScreenHeader from "../components/ScreenHeader";
 import { StarIcon, CheckIcon } from "../components/icons";
 import { useApp } from "../context/AppContext";
+import { api } from "../api";
 import { formatCount, discountPct } from "../utils/format";
 import CategoryPhoto from "../components/CategoryPhoto";
 
@@ -13,6 +15,15 @@ export default function ServiceDetailsScreen() {
   const provider = service ? getProvider(service.providerId) : null;
   const pct = service ? discountPct(service.price, service.originalPrice) : 0;
   const inCart = service ? cart.some((item) => item.serviceId === service.id) : false;
+
+  // A sponsored service's provider is billed the CPC rate for this view —
+  // fire once per visit, not on every re-render.
+  const clickedFor = useRef(null);
+  useEffect(() => {
+    if (!service?.isAd || clickedFor.current === service.id) return;
+    clickedFor.current = service.id;
+    api.registerAdClick(service.id).catch(() => {});
+  }, [service?.id, service?.isAd]);
 
   if (!service) {
     return (
@@ -35,6 +46,11 @@ export default function ServiceDetailsScreen() {
         </div>
 
         <div className="flex-1 px-4 pb-24 pt-4 lg:px-0 lg:pb-0 lg:pt-0">
+          {service.isAd && (
+            <span className="mb-1.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+              Sponsored
+            </span>
+          )}
           <h1 className="text-xl font-bold text-gray-900 lg:text-3xl">{service.name}</h1>
           {service.reviewCount > 0 ? (
             <div className="mt-1 flex items-center gap-1 text-sm text-gray-500">
