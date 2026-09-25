@@ -216,3 +216,11 @@ export const LogoutIcon = (p) => (
     <path d="M21 12H9" />
   </svg>
 );
+
+export const DownloadIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 4v10" />
+    <path d="M8 10.5 12 14.5l4-4" />
+    <path d="M5 19h14" />
+  </svg>
+);

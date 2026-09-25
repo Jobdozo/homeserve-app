@@ -345,6 +345,7 @@ async function createCustomer({ phone, name }) {
     `mutation($name: String!, $phone: String!) { customer_insert(data: { name: $name, phone: $phone, avatar: "🧑" }) }`,
     { name: name || "New Customer", phone }
   );
+  cacheClear("customers");
   return getCustomerById(customer_insert.id);
 }
 

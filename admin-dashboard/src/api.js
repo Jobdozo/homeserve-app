@@ -22,7 +22,21 @@ async function request(path, options) {
   return res.json();
 }
 
+// CSV goes up as text/csv (not JSON) so a large file isn't subject to the
+// JSON body limit; validation errors come back as structured JSON.
+async function importCsv(moduleName, csvText, dryRun) {
+  const res = await fetch(`${API_BASE}/admin/import/${moduleName}${dryRun ? "?dryRun=1" : ""}`, {
+    method: "POST",
+    headers: { "Content-Type": "text/csv", ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+    body: csvText,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Import failed: ${res.status}`);
+  return body;
+}
+
 export const api = {
+  importCsv,
   requestOtp: (phone, role) => request("/auth/otp/request", { method: "POST", body: JSON.stringify({ phone, role }) }),
   verifyOtp: (phone, code, role) =>
     request("/auth/otp/verify", { method: "POST", body: JSON.stringify({ phone, code, role }) }),

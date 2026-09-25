@@ -6,6 +6,7 @@ const compression = require("compression");
 const http = require("http");
 const { Server } = require("socket.io");
 const store = require("./store");
+const csvImport = require("./csvImport");
 const auth = require("./auth");
 const { sendOtpViaWhatsApp } = require("./whatsapp");
 const liveLocation = require("./liveLocation");
@@ -252,6 +253,25 @@ app.patch("/api/admin/providers/:id/coverage", auth.requireAuth("admin"), ah(asy
   });
   res.json(coverage);
 }));
+
+// ---- CSV import (validates every row and reports errors by line number;
+// ?dryRun=1 validates without saving) ----
+app.post(
+  "/api/admin/import/:module",
+  auth.requireAuth("admin"),
+  express.text({ type: "text/csv", limit: "3mb" }),
+  ah(async (req, res) => {
+    const csv = typeof req.body === "string" ? req.body : "";
+    if (!csv.trim()) return res.status(400).json({ error: "No CSV data received." });
+    const result = await csvImport.run(req.params.module, csv, req.query.dryRun === "1");
+    if (result.fatal) return res.status(400).json({ error: result.fatal });
+    if (!result.dryRun && result.imported > 0) {
+      await store.logActivity("import", `Admin imported ${result.imported} ${result.module} from CSV`);
+      io.emit("activity:created", (await store.listActivities(1))[0]);
+    }
+    res.json(result);
+  })
+);
 
 // ---- open-request capacity & visibility (Provider Verification module) ----
 app.get("/api/admin/provider-capacity", auth.requireAuth("admin"), ah(async (req, res) => {
