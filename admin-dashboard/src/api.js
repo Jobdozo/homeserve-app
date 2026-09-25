@@ -52,6 +52,11 @@ export const api = {
   deleteProvider: (id) => request(`/admin/providers/${id}`, { method: "DELETE" }),
   updateProviderCoverage: (id, patch) =>
     request(`/admin/providers/${id}/coverage`, { method: "PATCH", body: JSON.stringify(patch) }),
+  reviewService: (id, decision, note) =>
+    request(`/admin/services/${id}/review`, { method: "POST", body: JSON.stringify({ decision, note }) }),
+  updateService: (id, patch) =>
+    request(`/admin/services/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deleteService: (id) => request(`/admin/services/${id}`, { method: "DELETE" }),
   setServiceStatus: (id, status) =>
     request(`/services/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
   getTransactions: () => request("/admin/transactions"),

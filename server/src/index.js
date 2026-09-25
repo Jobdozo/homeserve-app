@@ -517,6 +517,29 @@ app.patch("/api/services/:id", auth.requireAuth("admin"), ah(async (req, res) =>
   res.json(service);
 }));
 
+// ---- service approval workflow (admin) ----
+app.post("/api/admin/services/:id/review", auth.requireAuth("admin"), ah(async (req, res) => {
+  const service = await store.reviewService(req.params.id, req.body?.decision, req.body?.note);
+  if (!service) return res.status(404).json({ error: "Service not found" });
+  io.emit("service:updated", service);
+  io.emit("activity:created", (await store.listActivities(1))[0]);
+  res.json(service);
+}));
+
+app.patch("/api/admin/services/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const service = await store.adminUpdateService(req.params.id, req.body || {});
+  if (!service) return res.status(404).json({ error: "Service not found" });
+  io.emit("service:updated", service);
+  res.json(service);
+}));
+
+app.delete("/api/admin/services/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const deleted = await store.adminDeleteService(req.params.id);
+  if (!deleted) return res.status(404).json({ error: "Service not found" });
+  io.emit("activity:created", (await store.listActivities(1))[0]);
+  res.json({ deleted: true });
+}));
+
 // ---- bookings ----
 app.get("/api/bookings", auth.requireAuth(), ah(async (req, res) => {
   if (req.user.role === "admin") return res.json(await store.listBookings({}));

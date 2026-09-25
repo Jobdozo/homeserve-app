@@ -455,6 +455,18 @@ export function AppProvider({ children }) {
     setServices((prev) => upsertById(prev, service));
   }, [provider, services]);
 
+  // Editing a rejected service sends it back to the admin for another review.
+  const resubmitService = useCallback(
+    async (id, patch) => {
+      if (!provider) return;
+      const service = await api.updateProviderService(provider.id, id, patch);
+      setServices((prev) => upsertById(prev, service));
+      showToast("Resubmitted for approval");
+      return service;
+    },
+    [provider, showToast]
+  );
+
   const addService = useCallback(
     async ({ name, categorySlug, description, price, originalPrice, extraCharges, serviceArea }) => {
       if (!provider) return;
@@ -469,7 +481,7 @@ export function AppProvider({ children }) {
         serviceArea: serviceArea || "",
       });
       setServices((prev) => upsertById(prev, service));
-      showToast("Service added");
+      showToast("Service submitted for admin approval");
       return service;
     },
     [provider, showToast]
@@ -549,6 +561,7 @@ export function AppProvider({ children }) {
       sendMessage,
       toggleServiceStatus,
       addService,
+      resubmitService,
       updateProfile,
       updateCoverage,
       setAcceptingRequests,
@@ -585,6 +598,7 @@ export function AppProvider({ children }) {
       sendMessage,
       toggleServiceStatus,
       addService,
+      resubmitService,
       updateProfile,
       updateCoverage,
       setAcceptingRequests,

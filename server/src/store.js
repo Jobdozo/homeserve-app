@@ -192,6 +192,7 @@ function mapService(s) {
     highlights: (s.serviceHighlights_on_service || []).map((h) => ({ icon: h.icon, label: h.label })),
     includes: (s.serviceIncludes_on_service || []).map((i) => i.text),
     isAd: isServiceCurrentlyAdvertised(s.id),
+    ...(s.status === "rejected" ? { approvalNote: getServiceReview(s.id)?.note || null } : {}),
   };
 }
 
@@ -564,7 +565,7 @@ async function addProviderService(providerId, data) {
     `mutation($providerId: UUID!, $categoryId: UUID, $name: String!, $price: Int!, $originalPrice: Int, $icon: String, $distanceLabel: String) {
       service_insert(data: {
         providerId: $providerId, categoryId: $categoryId, name: $name, price: $price,
-        originalPrice: $originalPrice, icon: $icon, distanceLabel: $distanceLabel, status: "active"
+        originalPrice: $originalPrice, icon: $icon, distanceLabel: $distanceLabel, status: "pending_approval"
       })
     }`,
     {
@@ -593,7 +594,7 @@ async function addProviderService(providerId, data) {
     );
   }
   const provider = await getProvider(providerId);
-  await logActivity("service", `${provider?.name || "A provider"} added a new service: ${data.name}`);
+  await logActivity("service", `${provider?.name || "A provider"} submitted a new service for approval: ${data.name}`);
   return getService(serviceId);
 }
 
@@ -616,13 +617,35 @@ async function adminCreateService(providerId, { categorySlug, name, price, origi
   return getService(service_insert.id);
 }
 
+const PROVIDER_EDITABLE_SERVICE_KEYS = ["name", "tagline", "price", "originalPrice", "status", "distanceLabel"];
+const ADMIN_EDITABLE_SERVICE_KEYS = ["name", "tagline", "price", "originalPrice", "distanceLabel"];
+
 async function updateProviderService(providerId, serviceId, patch) {
   const existing = await getService(serviceId);
   if (!existing || existing.providerId !== providerId) return undefined;
+  const awaitingReview = existing.status === "pending_approval" || existing.status === "rejected";
+  if (patch.status !== undefined) {
+    if (awaitingReview) {
+      throw Object.assign(new Error("This service can only go live once an admin approves it"), { status: 409 });
+    }
+    if (!["active", "inactive"].includes(patch.status)) {
+      throw Object.assign(new Error("status must be active or inactive"), { status: 400 });
+    }
+  }
+  // Editing a rejected service resubmits it for another review.
+  if (existing.status === "rejected" && Object.keys(patch).some((k) => k !== "status")) {
+    patch = { ...patch, status: "pending_approval" };
+    jsonStore.remove("serviceReviews", serviceId);
+    await logActivity("service", `Service "${existing.name}" was edited and resubmitted for approval`);
+  }
+  return applyServiceFieldUpdate(serviceId, patch, PROVIDER_EDITABLE_SERVICE_KEYS);
+}
+
+async function applyServiceFieldUpdate(serviceId, patch, allowedKeys) {
   const fields = {};
   const vars = { id: serviceId };
   const varDefs = [];
-  for (const key of ["name", "tagline", "price", "originalPrice", "status", "distanceLabel"]) {
+  for (const key of allowedKeys) {
     if (patch[key] !== undefined) {
       fields[key] = patch[key];
       vars[key] = patch[key];
@@ -652,6 +675,80 @@ async function updateServiceStatus(serviceId, status) {
   if (!service) return undefined;
   await logActivity("service", `Service "${service.name}" set to ${status} by admin`);
   return service;
+}
+
+// ---- service approval workflow: a provider-created service starts as
+// "pending_approval" and is invisible to customers (the public catalog only
+// lists status "active"). An admin approves it, rejects it with a note the
+// provider can read, or edits/deletes it. ----
+
+function getServiceReview(serviceId) {
+  return jsonStore.readAll("serviceReviews").find((r) => r.id === serviceId) || null;
+}
+
+async function reviewService(serviceId, decision, note) {
+  if (!["approved", "rejected"].includes(decision)) {
+    throw Object.assign(new Error("decision must be approved or rejected"), { status: 400 });
+  }
+  const existing = await getService(serviceId);
+  if (!existing) return undefined;
+  const status = decision === "approved" ? "active" : "rejected";
+  await mutate(`mutation($id: UUID!, $status: String!) { service_update(id: $id, data: { status: $status }) }`, {
+    id: serviceId,
+    status,
+  });
+  jsonStore.remove("serviceReviews", serviceId);
+  if (decision === "rejected") {
+    jsonStore.insert("serviceReviews", { id: serviceId, note: note || null, at: new Date().toISOString() });
+  }
+  cacheClear("service");
+  await logActivity("service", `Service "${existing.name}" ${decision} by admin`);
+  try {
+    await addNotification({
+      recipientType: "provider",
+      recipientId: existing.providerId,
+      type: "service",
+      title: decision === "approved" ? "Service approved" : "Service rejected",
+      message:
+        decision === "approved"
+          ? `Your service "${existing.name}" was approved and is now visible to customers.`
+          : `Your service "${existing.name}" was rejected.${note ? ` Reason: ${note}` : ""} Edit it to resubmit.`,
+    });
+  } catch (e) {
+    console.error("Service review notification failed:", e);
+  }
+  return getService(serviceId);
+}
+
+async function adminUpdateService(serviceId, patch) {
+  const existing = await getService(serviceId);
+  if (!existing) return undefined;
+  return applyServiceFieldUpdate(serviceId, patch, ADMIN_EDITABLE_SERVICE_KEYS);
+}
+
+// Refuses if any booking references the service — deleting those would wipe
+// customers' and providers' order history; deactivate the service instead.
+async function adminDeleteService(serviceId) {
+  const existing = await getService(serviceId);
+  if (!existing) return false;
+  const { bookings } = await query(
+    `query($id: UUID!) { bookings(where: { serviceId: { eq: $id } }) { id } }`,
+    { id: serviceId }
+  );
+  if (bookings.length > 0) {
+    throw Object.assign(
+      new Error("This service has bookings and can't be deleted — set it to inactive instead"),
+      { status: 409 }
+    );
+  }
+  await mutate(`mutation($id: UUID!) { serviceHighlight_deleteMany(where: { serviceId: { eq: $id } }) }`, { id: serviceId });
+  await mutate(`mutation($id: UUID!) { serviceInclude_deleteMany(where: { serviceId: { eq: $id } }) }`, { id: serviceId });
+  await mutate(`mutation($id: UUID!) { service_delete(id: $id) }`, { id: serviceId });
+  jsonStore.readAll("providerAds").filter((a) => a.serviceId === serviceId).forEach((a) => jsonStore.remove("providerAds", a.id));
+  jsonStore.remove("serviceReviews", serviceId);
+  cacheClear("service");
+  await logActivity("service", `Service "${existing.name}" deleted by admin`);
+  return true;
 }
 
 // ---- bookings ----
@@ -748,6 +845,9 @@ async function getMessages(bookingId) {
 async function createBooking({ serviceId, date, time, address, issue, customerId, orderId, offerCode, flatDiscount = 0 }) {
   const service = await getService(serviceId);
   if (!service) throw new Error("Unknown service");
+  if (service.status === "pending_approval" || service.status === "rejected") {
+    throw Object.assign(new Error("This service isn't available yet"), { status: 409 });
+  }
   if (!isProviderAcceptingRequests(service.providerId)) {
     throw Object.assign(new Error("This provider isn't currently accepting new bookings"), { status: 409 });
   }
@@ -1974,6 +2074,9 @@ async function createAd(providerId, serviceId) {
   if (!service || service.providerId !== providerId) {
     throw Object.assign(new Error("Service not found"), { status: 404 });
   }
+  if (service.status !== "active") {
+    throw Object.assign(new Error("Only approved, active services can be advertised"), { status: 400 });
+  }
   const existing = listProviderAds(providerId).find((a) => a.serviceId === serviceId && a.status !== "stopped");
   if (existing) {
     throw Object.assign(new Error("This service is already being advertised"), { status: 400 });
@@ -2322,6 +2425,9 @@ module.exports = {
   adminCreateService,
   updateProviderService,
   updateServiceStatus,
+  reviewService,
+  adminUpdateService,
+  adminDeleteService,
   setProviderVerification,
   deleteProvider,
   updateProviderProfile,

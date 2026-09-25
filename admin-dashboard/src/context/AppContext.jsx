@@ -223,6 +223,37 @@ export function AppProvider({ children }) {
     [showToast]
   );
 
+  const reviewService = useCallback(
+    async (id, decision, note) => {
+      const service = await api.reviewService(id, decision, note);
+      setServices((prev) => upsertById(prev, service));
+      showToast(decision === "approved" ? "Service approved" : "Service rejected");
+      scheduleRefresh();
+      return service;
+    },
+    [showToast, scheduleRefresh]
+  );
+
+  const updateService = useCallback(
+    async (id, patch) => {
+      const service = await api.updateService(id, patch);
+      setServices((prev) => upsertById(prev, service));
+      showToast("Service updated");
+      return service;
+    },
+    [showToast]
+  );
+
+  const deleteService = useCallback(
+    async (id) => {
+      await api.deleteService(id);
+      setServices((prev) => prev.filter((s) => s.id !== id));
+      showToast("Service deleted");
+      scheduleRefresh();
+    },
+    [showToast, scheduleRefresh]
+  );
+
   const toggleServiceStatus = useCallback(
     async (id, currentStatus) => {
       const nextStatus = currentStatus === "active" ? "inactive" : "active";
@@ -296,6 +327,9 @@ export function AppProvider({ children }) {
       deleteProvider,
       updateProviderCoverage,
       toggleServiceStatus,
+      reviewService,
+      updateService,
+      deleteService,
       addCategory,
       addProvider,
       addService,
@@ -321,6 +355,9 @@ export function AppProvider({ children }) {
       deleteProvider,
       updateProviderCoverage,
       toggleServiceStatus,
+      reviewService,
+      updateService,
+      deleteService,
       addCategory,
       addProvider,
       addService,
