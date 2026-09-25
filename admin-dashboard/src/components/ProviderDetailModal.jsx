@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, SERVER_URL } from "../api";
 import { useApp } from "../context/AppContext";
 import { StarIcon, CheckIcon, XIcon, WalletIcon, FileIcon, MapPinIcon } from "./icons";
+import VisibilityPanel from "./VisibilityPanel";
 
 const verificationStyles = {
   pending: "bg-amber-100 text-amber-700",
@@ -315,6 +316,10 @@ export default function ProviderDetailModal({ providerId, onClose }) {
               </button>
             </div>
             <p className="text-[11px] text-gray-400">Empty PIN codes means visible to customers everywhere.</p>
+          </Section>
+
+          <Section title="Customer Visibility">
+            <VisibilityPanel providerId={providerId} />
           </Section>
 
           <Section title="Open Requests & Visibility">

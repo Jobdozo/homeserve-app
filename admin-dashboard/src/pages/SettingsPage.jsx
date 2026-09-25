@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
 import CommunicationFeeCard from "../components/CommunicationFeeCard";
+import VisibilityCard from "../components/VisibilityCard";
 
 const inputCls =
   "w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-[13px] text-gray-800 outline-none focus:border-brand";
@@ -136,6 +137,8 @@ export default function SettingsPage() {
   return (
     <div className="space-y-4">
       <CommunicationFeeCard />
+
+      <VisibilityCard />
 
       <div className="max-w-md rounded-2xl bg-white p-4 shadow-card sm:p-5">
         <h2 className="text-[14px] font-bold text-gray-900">Referral Program</h2>

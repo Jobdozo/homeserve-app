@@ -301,6 +301,9 @@ export default function MonitoringPage() {
                       <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${STATUS_BADGE[p.status]}`}>{STATUS_TEXT[p.status]}</span>
                     </span>
                     {p.unavailableReason && <p className="mt-1 text-[11px] text-orange-600">{p.unavailableReason}</p>}
+                    <p className={`mt-1 text-[11px] ${p.visible ? "text-emerald-600" : "text-red-500"}`} title={p.hiddenReasons.join(" · ")}>
+                      {p.visible ? "Shown to customers" : `Hidden: ${p.hiddenReasons[0] || "see profile"}`}
+                    </p>
                   </td>
                   <td className="px-4 py-3 text-gray-600">
                     <p>{p.serviceArea || "—"}</p>

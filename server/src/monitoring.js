@@ -11,25 +11,8 @@ const jsonStore = require("./jsonStore");
 // persisted (throttled) so it survives a server restart; Online itself is
 // in-memory only, so after a restart everyone is Offline until they next call.
 const ONLINE_WINDOW_MS = 90 * 1000;
-const PERSIST_EVERY_MS = 60 * 1000;
-const lastSeen = new Map();
-const lastPersisted = new Map();
-
-function touchProvider(id) {
-  if (!id) return;
-  const now = Date.now();
-  lastSeen.set(id, now);
-  if (now - (lastPersisted.get(id) || 0) < PERSIST_EVERY_MS) return;
-  lastPersisted.set(id, now);
-  try {
-    const at = new Date(now).toISOString();
-    if (!jsonStore.update("providerPresence", id, { lastSeenAt: at })) {
-      jsonStore.insert("providerPresence", { id, lastSeenAt: at });
-    }
-  } catch (e) {
-    console.error("presence persist failed", e);
-  }
-}
+const presenceStore = require("./presence");
+const { touchProvider } = presenceStore;
 
 // ---- helpers --------------------------------------------------------------
 const IST_MS = 5.5 * 60 * 60 * 1000;
@@ -76,6 +59,7 @@ async function loadContext() {
     capacities,
     presence,
     feeCtx: { overrides: store.listFeeOverrides(), ledger: store.getFeeLedger() },
+    visibility: await store.buildVisibilityContext(),
     settings: store.getSettings(),
     catName: Object.fromEntries(categories.map((c) => [c.id, c.name])),
     provById: new Map(providers.map((p) => [p.id, p])),
@@ -189,7 +173,7 @@ async function build(query) {
     if (f.categoryId && !svcs.some((s) => s.categoryId === f.categoryId) && lc(p.category) !== lc(f.categoryId) && mine.length + live.length === 0) continue;
     if (f.orderId && mine.length + live.length === 0) continue;
 
-    const seenMs = lastSeen.get(p.id);
+    const seenMs = presenceStore.memorySeenMs(p.id);
     const online = Boolean(seenMs && now - seenMs < ONLINE_WINDOW_MS);
     const lastSeenAt = seenMs ? new Date(seenMs).toISOString() : ctx.presence.get(p.id) || null;
 
@@ -204,6 +188,7 @@ async function build(query) {
     const newOrders = live.filter((o) => OPEN_PENDING.includes(o.status)).length;
     const inProgress = live.filter((o) => OPEN_ACTIVE.includes(o.status)).length;
     const busy = Boolean(unavailableReason);
+    const hiddenIssues = store.providerVisibilityIssues(p.id, ctx.visibility);
     const status = newOrders > 0 ? "new_order" : inProgress > 0 ? "in_progress" : busy ? "busy" : online ? "waiting" : "offline";
 
     const completed = count("Completed");
@@ -222,6 +207,8 @@ async function build(query) {
       lastSeenAt,
       status,
       unavailableReason,
+      visible: hiddenIssues.length === 0,
+      hiddenReasons: hiddenIssues.map((i) => i.label),
       busy,
       newOrders,
       inProgress,

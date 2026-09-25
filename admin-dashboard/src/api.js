@@ -146,6 +146,8 @@ export const api = {
   createRole: (data) => request("/admin/roles", { method: "POST", body: JSON.stringify(data) }),
   updateRole: (id, patch) => request(`/admin/roles/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteRole: (id) => request(`/admin/roles/${id}`, { method: "DELETE" }),
+  getProviderVisibility: (id, pincode) => request(`/admin/providers/${id}/visibility${pincode ? `?pincode=${encodeURIComponent(pincode)}` : ""}`),
+  setVisibilityOverride: (id, data) => request(`/admin/providers/${id}/visibility-override`, { method: "PUT", body: JSON.stringify(data) }),
   getBookingSwaps: (id) => request(`/admin/bookings/${id}/swaps`),
   getMonitoring: (params) => request(`/admin/monitoring?${new URLSearchParams(params)}`),
   getMonitoringReport: (type, params) => request(`/admin/monitoring/report?${new URLSearchParams({ ...params, type })}`),

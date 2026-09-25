@@ -2,6 +2,7 @@ const { query, mutate } = require("./dataconnect");
 const jsonStore = require("./jsonStore");
 const push = require("./push");
 const fcm = require("./fcm");
+const presence = require("./presence");
 const whatsapp = require("./whatsapp");
 
 // Short-lived in-memory cache for the catalog reads that hit almost every
@@ -701,20 +702,14 @@ async function listServices({ activeOnly = false, pincode } = {}) {
   // Suspended providers' services stay off the public/bookable catalog, but
   // remain visible to admin (activeOnly: false) so they aren't hidden there.
   if (!activeOnly) return all;
-  const active = listActiveWalletProviderIds();
-  const restrictedIds = await getCapacityRestrictedProviderIds();
-  const inactiveCategories = inactiveCategorySlugs();
-  let result = all.filter(
-    (s) =>
-      active.has(s.providerId) &&
-      isProviderAcceptingRequests(s.providerId) &&
-      !restrictedIds.has(s.providerId) &&
-      !inactiveCategories.has(s.categoryId)
-  );
-  if (pincode) {
-    result = result.filter((s) => isProviderVisibleForPincode(s.providerId, pincode));
-  }
-  return result;
+  // The one visibility rule set (see "overall service visibility" below).
+  const ctx = await buildVisibilityContext();
+  const perProvider = new Map();
+  const providerOk = (id) => {
+    if (!perProvider.has(id)) perProvider.set(id, providerVisibilityIssues(id, ctx, { pincode }).length === 0);
+    return perProvider.get(id);
+  };
+  return all.filter((s) => providerOk(s.providerId) && serviceVisibilityIssues(s, ctx).length === 0);
 }
 
 async function getService(id) {
@@ -1305,13 +1300,9 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
   if (!isCategoryActive(service.categoryId)) {
     throw Object.assign(new Error("This service isn't available right now"), { status: 409 });
   }
-  if (!isProviderAcceptingRequests(service.providerId)) {
-    throw Object.assign(new Error("This provider isn't currently accepting new bookings"), { status: 409 });
-  }
-  if ((await getProviderCapacity(service.providerId)).restricted) {
-    throw Object.assign(new Error("This provider isn't currently accepting new bookings"), { status: 409 });
-  }
-  if (isProviderSuspended(service.providerId)) {
+  // Same rules as the catalogue (approval, verification, wallet, requests
+  // switch, limits, online if required, Super Admin override).
+  if (!(await isProviderEligible(service.providerId))) {
     throw Object.assign(new Error("This provider isn't currently accepting new bookings"), { status: 409 });
   }
   const customer = await getCustomerById(customerId);
@@ -1523,8 +1514,156 @@ async function updateBookingStatus(id, status) {
 // explicit reject), hand the booking to another active provider in the same
 // category rather than leaving the customer stuck ----
 
+// ---- overall service visibility. One place decides whether a provider's
+// services are shown to customers (and can be booked), from these conditions:
+//   hard (a Super Admin "always show" override can NOT bypass these)
+//     - provider approved, provider verified, account not paused (wallet),
+//       Receive Requests switch on, service approved/active, category active
+//   soft (an "always show" override bypasses these)
+//     - customer PIN inside the provider's area, open-request limit,
+//       requests open too long, online/availability (when required in Settings)
+//   and a Super Admin "always hide" override beats everything. ----
+
+const VIS_OVERRIDES = "providerVisibilityOverrides";
+
+function getVisibilityOverride(providerId) {
+  const o = jsonStore.readAll(VIS_OVERRIDES).find((x) => x.id === providerId);
+  if (!o) return null;
+  if (o.until && new Date(o.until).getTime() <= Date.now()) return null; // expired
+  return o;
+}
+
+// mode: "show" | "hide" | null (remove). hours: a positive number, or
+// "indefinite" / undefined for no expiry.
+async function setVisibilityOverride(providerId, { mode, hours, note } = {}, actor) {
+  const provider = await getProvider(providerId);
+  if (!provider) return null;
+  const before = getVisibilityOverride(providerId);
+  if (!mode) {
+    jsonStore.remove(VIS_OVERRIDES, providerId);
+  } else {
+    if (!["show", "hide"].includes(mode)) throw Object.assign(new Error("mode must be show, hide or empty"), { status: 400 });
+    let until = null;
+    if (hours !== undefined && hours !== null && hours !== "indefinite") {
+      const h = Number(hours);
+      if (!Number.isFinite(h) || h <= 0) throw Object.assign(new Error("Duration must be a positive number of hours"), { status: 400 });
+      until = new Date(Date.now() + h * 3600 * 1000).toISOString();
+    }
+    const record = { id: providerId, mode, until, note: String(note || "").trim().slice(0, 200), at: new Date().toISOString(), by: actor || "admin" };
+    if (jsonStore.readAll(VIS_OVERRIDES).some((x) => x.id === providerId)) jsonStore.update(VIS_OVERRIDES, providerId, record);
+    else jsonStore.insert(VIS_OVERRIDES, record);
+  }
+  const after = getVisibilityOverride(providerId);
+  recordAdminChange({
+    actor,
+    action: "visibility.override",
+    entityType: "provider",
+    entityId: providerId,
+    entityName: provider.name,
+    changes: diffValues({ visibility: before?.mode || "default" }, { visibility: after?.mode || "default" }, ["visibility"]),
+  });
+  await logActivity("provider", `Visibility override for ${provider.name}: ${after ? `always ${after.mode}` : "removed"}`);
+  return after;
+}
+
+async function buildVisibilityContext() {
+  const [providers, capacities] = await Promise.all([listProviders(), getAllProviderCapacities()]);
+  return {
+    settings: getSettings(),
+    providers: new Map(providers.map((p) => [p.id, p])),
+    capacities,
+    activeWallets: listActiveWalletProviderIds(),
+    inactiveCategories: inactiveCategorySlugs(),
+    overrides: new Map(jsonStore.readAll(VIS_OVERRIDES).filter((o) => !o.until || new Date(o.until).getTime() > Date.now()).map((o) => [o.id, o])),
+    seen: presence.snapshot(),
+  };
+}
+
+// Every provider-level check with its outcome — the full checklist.
+// status: pass | fail | na (not applicable / not checked).
+function providerVisibilityChecks(providerId, ctx, { pincode } = {}) {
+  const provider = ctx.providers.get(providerId);
+  const coverage = getProviderCoverage(providerId);
+  const cap = ctx.capacities[providerId];
+  const checks = [];
+  const add = (key, label, ok, detail, soft = false, na = false) => checks.push({ key, label, status: na ? "na" : ok ? "pass" : "fail", detail, soft });
+
+  const pin = String(pincode || "").trim();
+  const area = coverage.serveAllAreas ? "serves all areas" : coverage.pincodes?.length ? `serves PIN ${coverage.pincodes.join(", ")}` : "no PIN restriction";
+  add("pincode", "Customer PIN is inside the provider's service area", !pin || isProviderVisibleForPincode(providerId, pin), pin ? `Customer ${pin} — provider ${area}` : `No customer PIN given — provider ${area}`, true, !pin);
+  add("wallet", "Provider account is active (wallet funded)", ctx.activeWallets.has(providerId), ctx.activeWallets.has(providerId) ? "Wallet balance is positive" : "Wallet balance is empty — account is paused");
+  add("approval", "Provider is approved", provider?.verificationStatus === "approved", `Approval status: ${provider?.verificationStatus || "unknown"}`);
+  add("verification", "Provider is verified", provider?.verified !== false && Boolean(provider), provider?.verified === false ? "Verification not completed" : "Verified");
+  add("requests_switch", "Receive Requests switch is on", coverage.acceptingRequests, coverage.acceptingRequests ? "Accepting new requests" : "Provider switched requests off");
+  const overridden = Boolean(cap?.override); // the older "allow despite open requests" override
+  const overLimit = Boolean(cap && cap.openCount >= cap.maxOpen) && !overridden;
+  add("open_limit", "Under the maximum open request limit", !overLimit, cap ? `${cap.openCount} open of ${cap.maxOpen} allowed${overridden ? " (limit overridden)" : ""}` : "No open requests", true);
+  const stale = overridden ? 0 : cap?.staleCount || 0;
+  add("stale", `No requests open longer than ${ctx.settings.staleRequestDays} days`, stale === 0, stale ? `${stale} request${stale > 1 ? "s" : ""} open too long (oldest ${cap.oldestOpenDays} days)` : "None", true);
+  const required = Boolean(ctx.settings.visibilityRequireOnline);
+  const graceMs = (Number(ctx.settings.visibilityOnlineGraceMinutes) || 30) * 60 * 1000;
+  const seen = ctx.seen.get(providerId);
+  const online = Boolean(seen && Date.now() - seen < graceMs);
+  add("online", "Provider is online / available", !required || online, required ? (online ? "Seen recently" : `Not seen in the last ${Math.round(graceMs / 60000)} minutes`) : "Not required (Settings)", true, !required);
+  return checks;
+}
+
+// Effective blocking issues (what actually hides the provider), after the
+// Super Admin override: "hide" blocks everything, "show" clears the soft ones.
+function providerVisibilityIssues(providerId, ctx, opts = {}) {
+  const ov = ctx.overrides.get(providerId);
+  if (ov?.mode === "hide") return [{ code: "admin_hidden", label: `Hidden by Super Admin${ov.note ? ` — ${ov.note}` : ""}`, soft: false }];
+  if (!ctx.providers.get(providerId)) return [{ code: "no_account", label: "Provider account not found", soft: false }];
+  const failed = providerVisibilityChecks(providerId, ctx, opts).filter((c) => c.status === "fail");
+  const kept = ov?.mode === "show" ? failed.filter((c) => !c.soft) : failed;
+  return kept.map((c) => ({ code: c.key, label: c.detail, soft: c.soft }));
+}
+
+function serviceVisibilityIssues(service, ctx) {
+  const issues = [];
+  if (service.status !== "active") issues.push({ code: "service_status", label: `Service is ${String(service.status).replace(/_/g, " ")}`, soft: false });
+  if (ctx.inactiveCategories.has(service.categoryId)) issues.push({ code: "category_inactive", label: "Category is inactive", soft: false });
+  return issues;
+}
+
+// Would this provider be bookable right now (optionally for a customer PIN)?
+async function isProviderEligible(providerId, { pincode, ctx } = {}) {
+  const c = ctx || (await buildVisibilityContext());
+  return providerVisibilityIssues(providerId, c, { pincode }).length === 0;
+}
+
+// Admin "why is / isn't this provider shown?" view.
+async function explainProviderVisibility(providerId, pincode) {
+  const provider = await getProvider(providerId);
+  if (!provider) return null;
+  const ctx = await buildVisibilityContext();
+  const ov = ctx.overrides.get(providerId) || null;
+  const checks = providerVisibilityChecks(providerId, ctx, { pincode });
+  const services = (await listProviderServices(providerId)).map((s) => {
+    const issues = serviceVisibilityIssues(s, ctx);
+    return { id: s.id, name: s.name, status: s.status, categoryId: s.categoryId, issues: issues.map((i) => i.label) };
+  });
+  const svcOk = services.filter((s) => s.issues.length === 0).length;
+  const catOk = services.filter((s) => !ctx.inactiveCategories.has(s.categoryId)).length;
+  const svcActive = services.filter((s) => s.status === "active").length;
+  checks.push({ key: "service_approval", label: "Services are approved and active", status: svcActive > 0 ? "pass" : "fail", detail: `${svcActive} of ${services.length} service${services.length === 1 ? "" : "s"} active`, soft: false });
+  checks.push({ key: "category", label: "Service categories are active", status: services.length === 0 || catOk > 0 ? "pass" : "fail", detail: `${catOk} of ${services.length} in an active category`, soft: false });
+  checks.push({ key: "override", label: "Super Admin visibility override", status: ov ? (ov.mode === "show" ? "pass" : "fail") : "na", detail: ov ? `Always ${ov.mode}${ov.until ? ` until ${new Date(ov.until).toLocaleString("en-IN")}` : " (no end)"}${ov.note ? ` — ${ov.note}` : ""}` : "No override — default rules apply", soft: false });
+  const issues = providerVisibilityIssues(providerId, ctx, { pincode });
+  return {
+    provider: { id: provider.id, name: provider.name },
+    visible: issues.length === 0 && svcOk > 0,
+    providerIssues: issues.map((i) => i.label),
+    override: ov ? { mode: ov.mode, until: ov.until, note: ov.note, by: ov.by, at: ov.at } : null,
+    bypassed: ov?.mode === "show" ? checks.filter((c) => c.status === "fail" && c.soft).map((c) => c.detail) : [],
+    checks,
+    services,
+    settings: { requireOnline: Boolean(ctx.settings.visibilityRequireOnline), graceMinutes: Number(ctx.settings.visibilityOnlineGraceMinutes) || 30 },
+  };
+}
+
 async function findAlternativeProviderService(categorySlug, excludeProviderIds) {
-  const restrictedIds = await getCapacityRestrictedProviderIds();
+  const vctx = await buildVisibilityContext();
   const categoryUuid = await getCategoryUuidBySlug(categorySlug);
   if (!categoryUuid) return null;
   const { services } = await query(
@@ -1539,9 +1678,7 @@ async function findAlternativeProviderService(categorySlug, excludeProviderIds) 
     (s) =>
       s.provider &&
       !excludeProviderIds.includes(s.provider.id) &&
-      !isProviderSuspended(s.provider.id) &&
-      isProviderAcceptingRequests(s.provider.id) &&
-      !restrictedIds.has(s.provider.id)
+      providerVisibilityIssues(s.provider.id, vctx).length === 0
   );
   if (!candidate) return null;
   return { serviceId: candidate.id, providerId: candidate.provider.id, amount: candidate.price };
@@ -1657,7 +1794,7 @@ async function findSwapCandidate(booking, excludeIds) {
   const categorySlug = booking.service?.categoryId;
   const categoryUuid = categorySlug ? await getCategoryUuidBySlug(categorySlug) : null;
   if (!categoryUuid) return null;
-  const restricted = await getCapacityRestrictedProviderIds();
+  const vctx = await buildVisibilityContext();
   const { services } = await query(
     `query($categoryId: UUID!) {
       services(where: { category: { id: { eq: $categoryId } }, status: { eq: "active" } }) {
@@ -1672,10 +1809,7 @@ async function findSwapCandidate(booking, excludeIds) {
     (s) =>
       s.provider &&
       !excludeIds.includes(s.provider.id) &&
-      !isProviderSuspended(s.provider.id) &&
-      isProviderAcceptingRequests(s.provider.id) &&
-      !restricted.has(s.provider.id) &&
-      (!pin || isProviderVisibleForPincode(s.provider.id, pin))
+      providerVisibilityIssues(s.provider.id, vctx, { pincode: pin }).length === 0
   );
   // Same service first, then real (live) providers, then best rated.
   eligible.sort(
@@ -2581,6 +2715,8 @@ const DEFAULT_SETTINGS = {
   cpcRate: 2,
   defaultMaxOpenRequests: 5,
   staleRequestDays: 5,
+  visibilityRequireOnline: false, // hide providers who haven't been seen recently
+  visibilityOnlineGraceMinutes: 30,
 };
 
 function getSettings() {
@@ -2734,6 +2870,12 @@ function updateSettings(patch) {
   if (patch.communicationFeeEnabled !== undefined) patch = { ...patch, communicationFeeEnabled: Boolean(patch.communicationFeeEnabled) };
   if (patch.communicationFeeBasis !== undefined && !["order", "service"].includes(patch.communicationFeeBasis)) {
     throw Object.assign(new Error("Applicable amount must be the order amount or the service price"), { status: 400 });
+  }
+  if (patch.visibilityRequireOnline !== undefined) patch = { ...patch, visibilityRequireOnline: Boolean(patch.visibilityRequireOnline) };
+  if (patch.visibilityOnlineGraceMinutes !== undefined) {
+    const m = Number(patch.visibilityOnlineGraceMinutes);
+    if (!Number.isFinite(m) || m < 1 || m > 1440) throw Object.assign(new Error("Online window must be between 1 and 1440 minutes"), { status: 400 });
+    patch = { ...patch, visibilityOnlineGraceMinutes: Math.round(m) };
   }
   for (const key of ["communicationFeeMax", "communicationFeeMin", "communicationFeeApplyFrom"]) {
     if (patch[key] !== undefined) {
@@ -3674,6 +3816,13 @@ module.exports = {
   listBanners,
   listActiveBanners,
   calcCommunicationFee,
+  buildVisibilityContext,
+  providerVisibilityIssues,
+  serviceVisibilityIssues,
+  isProviderEligible,
+  explainProviderVisibility,
+  setVisibilityOverride,
+  getVisibilityOverride,
   recordAdminChange,
   diffValues,
   SWAP_REASONS,

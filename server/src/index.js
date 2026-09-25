@@ -365,6 +365,29 @@ app.post(
 );
 
 // ---- open-request capacity & visibility (Provider Verification module) ----
+// Why is (or isn't) this provider shown to customers? Full checklist of the
+// visibility rules, optionally against a customer PIN code.
+app.get("/api/admin/providers/:id/visibility", auth.requireAuth("admin"), ah(async (req, res) => {
+  const pin = typeof req.query.pincode === "string" ? req.query.pincode.trim() : "";
+  const result = await store.explainProviderVisibility(req.params.id, pin);
+  if (!result) return res.status(404).json({ error: "Provider not found" });
+  res.json(result);
+}));
+
+// Super Admin override: always show / always hide (optionally for N hours), or clear it.
+app.put("/api/admin/providers/:id/visibility-override", auth.requireAuth("admin"), ah(async (req, res) => {
+  try {
+    const { mode, hours, note } = req.body || {};
+    await store.setVisibilityOverride(req.params.id, { mode: mode || null, hours, note }, actorOf(req));
+    const explained = await store.explainProviderVisibility(req.params.id, "");
+    if (!explained) return res.status(404).json({ error: "Provider not found" });
+    res.json(explained);
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ error: e.message });
+    throw e;
+  }
+}));
+
 app.get("/api/admin/provider-capacity", auth.requireAuth("admin"), ah(async (req, res) => {
   res.json(await store.getAllProviderCapacities());
 }));
