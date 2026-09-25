@@ -19,7 +19,10 @@ const STATUS_LABELS = {
   Completed: "Job completed",
   Rejected: "Rejected",
   Cancelled: "Cancelled",
+  Swapped: SWAP_STATUS_LABEL,
 };
+
+const SWAP_STATUS_LABEL = "Swapped to another provider";
 
 const CHECKPOINT_LABELS = {
   reached_location: "Reached the location",
@@ -35,12 +38,18 @@ export default function BookingDetailModal({ bookingId, onClose }) {
   const [photos, setPhotos] = useState(null);
   const [checkpoints, setCheckpoints] = useState(null);
   const [messages, setMessages] = useState(null);
+  const [swaps, setSwaps] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
     setPhotos(null);
     setCheckpoints(null);
     setMessages(null);
+    setSwaps([]);
+    api
+      .getBookingSwaps(bookingId)
+      .then((s) => !cancelled && setSwaps(s))
+      .catch(() => {});
     api
       .getBookingMessages(bookingId)
       .then((m) => !cancelled && setMessages(m))
@@ -149,6 +158,30 @@ export default function BookingDetailModal({ bookingId, onClose }) {
               </div>
             )}
           </Section>
+
+          {swaps.length > 0 && (
+            <Section title="Order swaps">
+              <div className="space-y-2">
+                {swaps.map((s) => (
+                  <div key={s.id} className="rounded-xl border border-violet-100 bg-violet-50/50 p-3 text-[12.5px]">
+                    <p className="font-semibold text-gray-800">
+                      {s.fromProviderName} → {s.toProviderName}
+                    </p>
+                    <p className="text-gray-600">
+                      Reason: {s.reasonText}
+                      {s.note ? ` — ${s.note}` : ""}
+                    </p>
+                    <p className="text-[11px] text-gray-400">
+                      {new Date(s.at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10.5px] text-gray-400">
+                Earlier check-ins and photos from the previous provider are kept here and shown below; the new provider starts clean.
+              </p>
+            </Section>
+          )}
 
           <Section title="Conversation (admin only)">
             {messages === null && <p className="text-[12px] text-gray-400">Loading…</p>}

@@ -13,7 +13,7 @@ const TAB_STATUSES = {
   Open: ["Accepted"],
   "In Progress": ["In Progress"],
   Completed: ["Completed"],
-  Rejected: ["Rejected", "Cancelled"],
+  Rejected: ["Rejected", "Cancelled", "Swapped"],
 };
 const TABS = Object.keys(TAB_STATUSES);
 
@@ -122,6 +122,7 @@ function StatusPill({ status }) {
     Completed: "bg-gray-200 text-gray-600",
     Rejected: "bg-red-100 text-red-600",
     Cancelled: "bg-red-100 text-red-600",
+    Swapped: "bg-violet-100 text-violet-700",
   };
   return <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${styles[status]}`}>{status}</span>;
 }

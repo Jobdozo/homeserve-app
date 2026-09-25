@@ -1563,6 +1563,202 @@ async function reassignBooking(bookingId, excludeProviderIds) {
   return { reassigned: false, booking: updated };
 }
 
+// ---- order swap: a provider who accepted an order but can't do it hands it
+// back. The order is re-routed (same booking record, like reassignBooking) to
+// another eligible provider as a fresh Pending request, going through the
+// normal notification/ring flow. Every swap is logged in "orderSwaps" with a
+// snapshot, so the original provider keeps a "Swapped" entry in their history
+// and admins can see the full chain. ----
+
+const SWAP_REASONS = {
+  unavailable: "I'm no longer available at that time",
+  emergency: "Personal emergency",
+  location: "I can't reach the customer's location",
+  tools: "I don't have the required tools or parts",
+  other: "Other",
+};
+const MAX_SWAPS_PER_ORDER = 3;
+
+function listOrderSwaps({ bookingId, fromProviderId } = {}) {
+  return jsonStore
+    .readAll("orderSwaps")
+    .filter((s) => (!bookingId || s.bookingId === bookingId) && (!fromProviderId || s.fromProviderId === fromProviderId))
+    .sort((a, b) => new Date(a.at) - new Date(b.at));
+}
+
+// bookingId -> time of its latest swap. Conversation and job records from
+// before it belong to the previous provider and aren't shown to the new one.
+function swapCutoffs() {
+  const map = new Map();
+  for (const s of jsonStore.readAll("orderSwaps")) {
+    if (!map.get(s.bookingId) || s.at > map.get(s.bookingId)) map.set(s.bookingId, s.at);
+  }
+  return map;
+}
+
+// The provider's own history entries for orders they handed back (customer
+// phone/email are never included).
+function listSwappedOutBookings(providerId) {
+  const latest = new Map();
+  for (const s of listOrderSwaps({ fromProviderId: providerId })) latest.set(s.bookingId, s);
+  return [...latest.values()].map((s) => s.snapshot).sort((a, b) => new Date(b.statusHistory?.Swapped || 0) - new Date(a.statusHistory?.Swapped || 0));
+}
+
+async function findSwapCandidate(booking, excludeIds) {
+  const categorySlug = booking.service?.categoryId;
+  const categoryUuid = categorySlug ? await getCategoryUuidBySlug(categorySlug) : null;
+  if (!categoryUuid) return null;
+  const restricted = await getCapacityRestrictedProviderIds();
+  const { services } = await query(
+    `query($categoryId: UUID!) {
+      services(where: { category: { id: { eq: $categoryId } }, status: { eq: "active" } }) {
+        id name price rating provider { id live }
+      }
+    }`,
+    { categoryId: categoryUuid }
+  );
+  const pin = (String(booking.address?.line || "").match(/\b\d{6}\b/) || [])[0];
+  const wantedName = String(booking.service?.name || "").trim().toLowerCase();
+  const eligible = services.filter(
+    (s) =>
+      s.provider &&
+      !excludeIds.includes(s.provider.id) &&
+      !isProviderSuspended(s.provider.id) &&
+      isProviderAcceptingRequests(s.provider.id) &&
+      !restricted.has(s.provider.id) &&
+      (!pin || isProviderVisibleForPincode(s.provider.id, pin))
+  );
+  // Same service first, then real (live) providers, then best rated.
+  eligible.sort(
+    (a, b) =>
+      Number(String(b.name || "").trim().toLowerCase() === wantedName) - Number(String(a.name || "").trim().toLowerCase() === wantedName) ||
+      Number(Boolean(b.provider.live)) - Number(Boolean(a.provider.live)) ||
+      (b.rating || 0) - (a.rating || 0)
+  );
+  const best = eligible[0];
+  return best ? { serviceId: best.id, providerId: best.provider.id, serviceName: best.name } : null;
+}
+
+// Returns { booking, swappedOut, excluded } — `booking` is the re-routed
+// Pending order (for the new provider), `swappedOut` the previous provider's
+// history entry, `excluded` every provider that already had this order.
+async function swapBooking(bookingId, providerId, { reason, note } = {}) {
+  const fail = (status, message) => Object.assign(new Error(message), { status });
+  const booking = await fetchBookingWithRelations(bookingId);
+  if (!booking) throw fail(404, "Booking not found");
+  if (booking.providerId !== providerId) throw fail(403, "Not your booking");
+  if (booking.status !== "Accepted") {
+    throw fail(409, "Only an accepted order that hasn't started yet can be swapped");
+  }
+  if (!SWAP_REASONS[reason]) throw fail(400, "Please choose a reason for the swap");
+  const cleanNote = String(note || "").trim().slice(0, 200);
+  if (reason === "other" && !cleanNote) throw fail(400, "Please tell us the reason");
+
+  const history = listOrderSwaps({ bookingId });
+  if (history.length >= MAX_SWAPS_PER_ORDER) {
+    throw fail(409, "This order has already been swapped several times — please contact Tikdum support");
+  }
+  const excluded = [...new Set([booking.providerId, ...history.flatMap((s) => [s.fromProviderId, s.toProviderId])])];
+  const candidate = await findSwapCandidate(booking, excluded);
+  if (!candidate) throw fail(409, "No other provider is available for this order right now, so it can't be swapped");
+
+  const fromProvider = await getProvider(providerId);
+  const now = new Date().toISOString();
+  // Amount stays as the customer agreed it; only the provider/service change,
+  // and the order goes back to Pending for the new provider to accept.
+  await mutate(
+    `mutation($id: UUID!, $serviceId: UUID!, $providerId: UUID!, $status: String!) {
+      booking_update(id: $id, data: { serviceId: $serviceId, providerId: $providerId, status: $status })
+    }`,
+    { id: bookingId, serviceId: candidate.serviceId, providerId: candidate.providerId, status: "Pending" }
+  );
+  await mutate(
+    `mutation($bookingId: UUID!, $status: String!, $at: Timestamp!) {
+      bookingStatusEvent_insert(data: { bookingId: $bookingId, status: $status, at: $at })
+    }`,
+    { bookingId, status: "Swapped", at: now }
+  );
+  cacheClear("openBookings");
+
+  const swappedOut = {
+    id: booking.id,
+    ...(booking.orderId ? { orderId: booking.orderId } : {}),
+    serviceId: booking.serviceId,
+    providerId,
+    customerId: booking.customerId,
+    status: "Swapped",
+    date: booking.date,
+    time: booking.time,
+    address: booking.address,
+    issue: booking.issue,
+    amount: booking.amount,
+    createdAt: booking.createdAt,
+    statusHistory: { ...booking.statusHistory, Swapped: now },
+    reviewed: false,
+    customer: { name: booking.customer?.name, avatar: booking.customer?.avatar },
+    service: booking.service,
+    swapReason: SWAP_REASONS[reason],
+  };
+  jsonStore.insert("orderSwaps", {
+    bookingId,
+    fromProviderId: providerId,
+    toProviderId: candidate.providerId,
+    fromServiceId: booking.serviceId,
+    toServiceId: candidate.serviceId,
+    reason,
+    reasonText: SWAP_REASONS[reason],
+    note: cleanNote,
+    at: now,
+    snapshot: swappedOut,
+  });
+
+  // The new provider starts clean: fresh start/completion codes, and the
+  // previous provider's check-ins and photos no longer count for this order
+  // (kept on record for admins).
+  jsonStore.readAll("bookingOtps").filter((o) => o.bookingId === bookingId).forEach((o) => jsonStore.remove("bookingOtps", o.id));
+  for (const name of ["jobCheckpoints", "jobPhotos"]) {
+    jsonStore
+      .readAll(name)
+      .filter((r) => r.bookingId === bookingId && !r.superseded)
+      .forEach((r) => jsonStore.update(name, r.id, { superseded: true }));
+  }
+
+  await logActivity("booking", `Booking #${bookingId} swapped from ${fromProvider?.name || "a provider"} to another provider (${SWAP_REASONS[reason]})`);
+  const updated = await fetchBookingWithRelations(bookingId);
+  const bookingMessage = `${updated.customer?.name || "A customer"} requested ${updated.service?.name || "a service"} for ${updated.date}`;
+  await addNotification({
+    recipientType: "provider",
+    recipientId: candidate.providerId,
+    type: "booking",
+    title: "New booking request",
+    message: bookingMessage,
+    bookingId,
+    skipPush: true, // the caller in index.js calls dispatchBooking, which sends this one's push
+  });
+  notifyProviderOfBookingByWhatsApp(
+    candidate.providerId,
+    `New Tikdum booking request!\n${bookingMessage}\nOpen the Tikdum Pro app to accept or decline.`
+  ).catch((e) => console.error("WhatsApp booking alert failed", e));
+  await addNotification({
+    recipientType: "provider",
+    recipientId: providerId,
+    type: "booking",
+    title: "Order swapped",
+    message: `${updated.service?.name || "The order"} has been released to another provider.`,
+    bookingId,
+    skipPush: true,
+  });
+  await addNotification({
+    recipientType: "customer",
+    recipientId: booking.customerId,
+    type: "booking",
+    title: "Your provider has changed",
+    message: `${fromProvider?.name || "Your provider"} couldn't take your ${updated.service?.name || "booking"}. We've sent it to another provider and will confirm as soon as they accept.`,
+    bookingId,
+  });
+  return { booking: updated, swappedOut, excluded: [...excluded, candidate.providerId] };
+}
+
 async function addMessage(bookingId, from, text) {
   const now = new Date().toISOString();
   await mutate(
@@ -3136,8 +3332,8 @@ function deleteKycDocument(providerId, docId) {
   return jsonStore.remove("kycDocuments", docId);
 }
 
-function listJobPhotos(bookingId) {
-  return jsonStore.readAll("jobPhotos").filter((p) => p.bookingId === bookingId);
+function listJobPhotos(bookingId, { includeSuperseded = false } = {}) {
+  return jsonStore.readAll("jobPhotos").filter((p) => p.bookingId === bookingId && (includeSuperseded || !p.superseded));
 }
 
 function addJobPhoto(bookingId, { photoType, url }) {
@@ -3150,8 +3346,10 @@ function addJobPhoto(bookingId, { photoType, url }) {
 // replacing it, so nothing else keyed off booking.status has to change.
 const JOB_CHECKPOINT_TYPES = ["reached_location", "started_job", "left_location"];
 
-function listJobCheckpoints(bookingId) {
-  return jsonStore.readAll("jobCheckpoints").filter((c) => c.bookingId === bookingId);
+// Records left by a provider the order was later swapped away from are
+// "superseded": hidden from everyone but admins.
+function listJobCheckpoints(bookingId, { includeSuperseded = false } = {}) {
+  return jsonStore.readAll("jobCheckpoints").filter((c) => c.bookingId === bookingId && (includeSuperseded || !c.superseded));
 }
 
 function addJobCheckpoint(bookingId, type) {
@@ -3425,6 +3623,11 @@ module.exports = {
   listBanners,
   listActiveBanners,
   calcCommunicationFee,
+  SWAP_REASONS,
+  listOrderSwaps,
+  swapCutoffs,
+  listSwappedOutBookings,
+  swapBooking,
   getFeeLedger: feeLedger,
   resolveFeeConfig,
   bookingCommunicationFee,

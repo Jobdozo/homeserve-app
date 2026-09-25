@@ -308,8 +308,9 @@ export function AppProvider({ children }) {
     };
     const onBookingUpdated = (booking) => {
       if (booking.providerId !== providerId) {
-        // Reassigned away to another provider — stop showing/ringing it here.
-        setRequests((prev) => prev.filter((r) => r.id !== booking.id));
+        // Reassigned away to another provider — stop showing/ringing it here
+        // (unless it's this provider's own "Swapped" history entry).
+        setRequests((prev) => prev.filter((r) => r.id !== booking.id || r.status === "Swapped"));
         setRingingRequest((prev) => (prev?.id === booking.id ? null : prev));
         return;
       }
@@ -425,6 +426,23 @@ export function AppProvider({ children }) {
       setRequests((prev) => prev.filter((r) => r.id !== id));
       setRingingRequest((prev) => (prev?.id === id ? null : prev));
       showToast("Request declined");
+    },
+    [showToast]
+  );
+
+  // Hand an accepted order back: the server re-routes it to another provider
+  // and returns this provider's "Swapped" history entry. Throws (with the
+  // server's message) if the order can't be swapped.
+  const swapRequest = useCallback(
+    async (id, { reason, note }) => {
+      const { booking } = await api.swapBooking(id, { reason, note });
+      setRequests((prev) => upsertById(prev, booking));
+      setMessages((prev) => {
+        const { [id]: _released, ...rest } = prev;
+        return rest;
+      });
+      showToast("Order released to another provider");
+      return booking;
     },
     [showToast]
   );
@@ -578,6 +596,7 @@ export function AppProvider({ children }) {
       getRequest,
       acceptRequest,
       rejectRequest,
+      swapRequest,
       verifyJobOtp,
       loadMessages,
       sendMessage,

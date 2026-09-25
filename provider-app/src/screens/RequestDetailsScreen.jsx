@@ -12,8 +12,9 @@ const LOCATION_TRACKED_STATUSES = ["Pending", "Accepted", "In Progress"];
 export default function RequestDetailsScreen() {
   const { requestId } = useParams();
   const navigate = useNavigate();
-  const { getRequest, acceptRequest, rejectRequest, showToast } = useApp();
+  const { getRequest, acceptRequest, rejectRequest, swapRequest, showToast } = useApp();
   const [liveLocation, setLiveLocation] = useState(null);
+  const [swapOpen, setSwapOpen] = useState(false);
 
   const request = getRequest(requestId);
 
@@ -154,7 +155,7 @@ export default function RequestDetailsScreen() {
 
         {["Accepted", "In Progress", "Completed"].includes(request.status) && <JobPhotos bookingId={request.id} />}
 
-        {!["Pending", "Rejected", "Cancelled"].includes(request.status) && (
+        {!["Pending", "Rejected", "Cancelled", "Swapped"].includes(request.status) && (
           <div>
             <StatusPill status={request.status} />
             {request.status !== "Completed" && (
@@ -169,6 +170,12 @@ export default function RequestDetailsScreen() {
           </p>
         )}
 
+        {request.status === "Swapped" && (
+          <p className="rounded-xl bg-violet-50 px-4 py-3 text-center text-[12px] text-violet-700">
+            You released this order to another provider{request.swapReason ? ` (${request.swapReason})` : ""}. It's kept here for your records.
+          </p>
+        )}
+
         {["Accepted", "In Progress"].includes(request.status) && (
           <button
             onClick={() => navigate(`/chat/${request.id}`)}
@@ -177,7 +184,28 @@ export default function RequestDetailsScreen() {
             Message {customer?.name}
           </button>
         )}
+
+        {request.status === "Accepted" && (
+          <button
+            onClick={() => setSwapOpen(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 py-3 text-sm font-semibold text-amber-800 active:scale-[0.98]"
+          >
+            Swap Order
+          </button>
+        )}
       </div>
+
+      {swapOpen && (
+        <SwapOrderModal
+          serviceName={request.service?.name}
+          onClose={() => setSwapOpen(false)}
+          onConfirm={async (data) => {
+            await swapRequest(request.id, data);
+            setSwapOpen(false);
+            navigate("/requests");
+          }}
+        />
+      )}
 
       {request.status === "Pending" && (
         <div className="flex flex-shrink-0 gap-3 border-t border-gray-100 bg-white px-4 py-3 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:py-4">
@@ -198,6 +226,72 @@ export default function RequestDetailsScreen() {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+const SWAP_REASONS = [
+  ["unavailable", "I'm no longer available at that time"],
+  ["emergency", "Personal emergency"],
+  ["location", "I can't reach the customer's location"],
+  ["tools", "I don't have the required tools or parts"],
+  ["other", "Other"],
+];
+
+// Confirmation + reason before an accepted order is released to another provider.
+function SwapOrderModal({ serviceName, onClose, onConfirm }) {
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const ready = reason && (reason !== "other" || note.trim());
+
+  const submit = async () => {
+    if (!ready || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await onConfirm({ reason, note: note.trim() });
+    } catch (e) {
+      setError(e.message || "Couldn't swap this order");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={(e) => e.target === e.currentTarget && !busy && onClose()}>
+      <div className="w-full max-w-md rounded-t-3xl bg-white p-5 sm:rounded-3xl">
+        <h2 className="text-[16px] font-bold text-gray-900">Swap this order?</h2>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-gray-500">
+          {serviceName ? `${serviceName} will be released and sent to another provider as a new order. ` : ""}
+          You won't be able to get it back, and the customer will be told their provider has changed. Only do this if you truly can't complete it.
+        </p>
+        <div className="mt-4 space-y-2">
+          {SWAP_REASONS.map(([value, label]) => (
+            <label key={value} className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-[13px] ${reason === value ? "border-brand bg-brand-light" : "border-gray-200"}`}>
+              <input type="radio" name="swap-reason" checked={reason === value} onChange={() => setReason(value)} />
+              {label}
+            </label>
+          ))}
+        </div>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          maxLength={200}
+          rows={2}
+          placeholder={reason === "other" ? "Tell us the reason (required)" : "Add a note (optional)"}
+          className="mt-3 w-full rounded-xl border border-gray-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+        />
+        {error && <p className="mt-2 text-[12px] text-red-600">{error}</p>}
+        <div className="mt-4 flex gap-3">
+          <button onClick={onClose} disabled={busy} className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-600">
+            Keep order
+          </button>
+          <button onClick={submit} disabled={!ready || busy} className="flex-1 rounded-xl bg-amber-500 py-3 text-sm font-semibold text-white disabled:opacity-50">
+            {busy ? "Swapping…" : "Confirm swap"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

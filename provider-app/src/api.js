@@ -65,6 +65,8 @@ export const api = {
   listBookings: () => request("/bookings"),
   updateBookingStatus: (id, status) =>
     request(`/bookings/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  swapBooking: (id, { reason, note }) =>
+    request(`/bookings/${id}/swap`, { method: "POST", body: JSON.stringify({ reason, note }) }),
   getMessages: (bookingId) => request(`/messages/${bookingId}`),
   sendMessage: (bookingId, text) => request(`/messages/${bookingId}`, { method: "POST", body: JSON.stringify({ text }) }),
   listProviderServices: (providerId) => request(`/providers/${providerId}/services`),

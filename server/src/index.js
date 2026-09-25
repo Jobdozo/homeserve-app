@@ -164,6 +164,15 @@ function hideCompletedChat(booking) {
   return rest;
 }
 
+// After an order swap, the previous provider's conversation isn't carried
+// over: drop the list preview if it predates the latest swap.
+function dropStaleLastMessage(booking, cutoffs) {
+  const cutoff = cutoffs.get(booking.id);
+  if (!cutoff || !booking.lastMessage || new Date(booking.lastMessage.time) >= new Date(cutoff)) return booking;
+  const { lastMessage, ...rest } = booking;
+  return rest;
+}
+
 // A provider's phone/email are never part of the public catalog: customers
 // get a provider's number only through their own booking (see
 // /api/bookings/:id/provider-contact), and only while the order is live —
@@ -735,9 +744,13 @@ app.delete("/api/admin/services/:id", auth.requireAuth("admin"), ah(async (req, 
 app.get("/api/bookings", auth.requireAuth(), ah(async (req, res) => {
   if (req.user.role === "admin") return res.json(await store.listBookings({}));
   if (req.user.role === "customer") {
-    return res.json((await store.listBookings({ customerId: req.user.id })).map(hideCompletedChat));
+    const cutoffs = store.swapCutoffs();
+    return res.json((await store.listBookings({ customerId: req.user.id })).map((b) => dropStaleLastMessage(hideCompletedChat(b), cutoffs)));
   }
-  res.json((await store.listBookings({ providerId: req.user.id })).map(maskCompleted));
+  const cutoffs = store.swapCutoffs();
+  const own = (await store.listBookings({ providerId: req.user.id })).map((b) => dropStaleLastMessage(maskCompleted(b), cutoffs));
+  // Orders this provider handed back stay in their history as "Swapped".
+  res.json([...own, ...store.listSwappedOutBookings(req.user.id)]);
 }));
 
 app.get("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
@@ -749,8 +762,42 @@ app.get("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
   if (req.user.role === "provider" && booking.providerId !== req.user.id) {
     return res.status(403).json({ error: "Not your booking" });
   }
+  const cutoffs = store.swapCutoffs();
   res.json(
-    req.user.role === "provider" ? maskCompleted(booking) : req.user.role === "customer" ? hideCompletedChat(booking) : booking
+    req.user.role === "provider"
+      ? dropStaleLastMessage(maskCompleted(booking), cutoffs)
+      : req.user.role === "customer"
+        ? dropStaleLastMessage(hideCompletedChat(booking), cutoffs)
+        : booking
+  );
+}));
+
+// Provider hands an accepted order back; it goes to another eligible provider
+// as a new request through the normal ring/notification flow.
+app.post("/api/bookings/:id/swap", auth.requireAuth("provider"), ah(async (req, res) => {
+  let result;
+  try {
+    result = await store.swapBooking(req.params.id, req.user.id, req.body || {});
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ error: e.message });
+    throw e;
+  }
+  io.emit("booking:updated", maskCompleted(result.booking));
+  io.emit("booking:created", result.booking);
+  io.emit("activity:created", (await store.listActivities(1))[0]);
+  dispatchBooking(result.booking, result.excluded);
+  res.json({ booking: result.swappedOut });
+}));
+
+app.get("/api/admin/bookings/:id/swaps", auth.requireAuth("admin"), ah(async (req, res) => {
+  const providers = await store.listProviders();
+  const name = (id) => providers.find((p) => p.id === id)?.name || "—";
+  res.json(
+    store.listOrderSwaps({ bookingId: req.params.id }).map(({ snapshot, ...s }) => ({
+      ...s,
+      fromProviderName: name(s.fromProviderId),
+      toProviderName: name(s.toProviderId),
+    }))
   );
 }));
 
@@ -974,7 +1021,7 @@ app.get("/api/admin/providers/:id/kyc-documents", auth.requireAuth("admin"), ah(
 
 // ---- job before/after photos (attached to a specific booking, provider must own it) ----
 app.get("/api/bookings/:id/photos", auth.requireAuth("provider", "customer", "admin"), ah(async (req, res) => {
-  res.json(store.listJobPhotos(req.params.id));
+  res.json(store.listJobPhotos(req.params.id, { includeSuperseded: req.user.role === "admin" }));
 }));
 
 app.post(
@@ -994,7 +1041,7 @@ app.post(
 
 // ---- on-the-job checkpoints (reached location / started job / left location) ----
 app.get("/api/bookings/:id/checkpoints", auth.requireAuth("provider", "customer", "admin"), ah(async (req, res) => {
-  res.json(store.listJobCheckpoints(req.params.id));
+  res.json(store.listJobCheckpoints(req.params.id, { includeSuperseded: req.user.role === "admin" }));
 }));
 
 app.post("/api/bookings/:id/checkpoints", auth.requireAuth("provider"), ah(async (req, res) => {
@@ -1070,7 +1117,10 @@ app.get("/api/messages/:bookingId", auth.requireAuth(), ah(async (req, res) => {
   if (booking.status === "Completed" && req.user.role !== "admin") {
     return res.status(403).json({ error: "This conversation is no longer available" });
   }
-  res.json(await store.getMessages(req.params.bookingId));
+  const messages = await store.getMessages(req.params.bookingId);
+  // Nothing from before an order swap is shown to the customer or new provider.
+  const cutoff = req.user.role === "admin" ? null : store.swapCutoffs().get(req.params.bookingId);
+  res.json(cutoff ? messages.filter((m) => new Date(m.time) >= new Date(cutoff)) : messages);
 }));
 
 app.post("/api/messages/:bookingId", auth.requireAuth("customer", "provider"), ah(async (req, res) => {
