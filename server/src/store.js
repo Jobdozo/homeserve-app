@@ -779,7 +779,168 @@ async function updateProviderService(providerId, serviceId, patch) {
     jsonStore.remove("serviceReviews", serviceId);
     await logActivity("service", `Service "${existing.name}" was edited and resubmitted for approval`);
   }
-  return applyServiceFieldUpdate(serviceId, patch, PROVIDER_EDITABLE_SERVICE_KEYS);
+  // A live service (active or inactive) is never edited directly by its
+  // provider: content changes become a change request for an admin to
+  // approve, and the service keeps its current details until then. Turning it
+  // on/off (status) is availability, not content, and stays direct.
+  const contentPatch = {};
+  for (const key of SERVICE_CHANGE_KEYS) if (patch[key] !== undefined) contentPatch[key] = patch[key];
+  const isLive = existing.status === "active" || existing.status === "inactive";
+  if (isLive && Object.keys(contentPatch).length > 0) {
+    const changeRequest = await submitServiceChange(providerId, existing, contentPatch);
+    const service =
+      patch.status !== undefined
+        ? await applyServiceFieldUpdate(serviceId, { status: patch.status }, PROVIDER_EDITABLE_SERVICE_KEYS)
+        : existing;
+    return { service, changeRequest };
+  }
+  return { service: await applyServiceFieldUpdate(serviceId, patch, PROVIDER_EDITABLE_SERVICE_KEYS), changeRequest: null };
+}
+
+// ---- service modification approval: proposed changes to a live service wait
+// here (jsonStore "serviceChangeRequests") until an admin approves, rejects
+// or edits them. One pending request per service — a newer submission
+// replaces the older pending one. ----
+
+const SERVICE_CHANGE_KEYS = ["name", "tagline", "price", "originalPrice", "distanceLabel"];
+
+function listServiceChanges({ providerId, status, serviceId } = {}) {
+  return jsonStore
+    .readAll("serviceChangeRequests")
+    .filter(
+      (r) =>
+        (!providerId || r.providerId === providerId) &&
+        (!status || r.status === status) &&
+        (!serviceId || r.serviceId === serviceId)
+    )
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function cleanServiceChange(patch) {
+  const out = {};
+  if (patch.name !== undefined) {
+    const name = String(patch.name).trim();
+    if (!name) throw Object.assign(new Error("Service name can't be empty"), { status: 400 });
+    if (name.length > 120) throw Object.assign(new Error("Service name is too long"), { status: 400 });
+    out.name = name;
+  }
+  if (patch.tagline !== undefined) {
+    const tagline = String(patch.tagline || "").trim();
+    if (tagline.length > 160) throw Object.assign(new Error("Tagline is too long"), { status: 400 });
+    out.tagline = tagline;
+  }
+  for (const key of ["price", "originalPrice"]) {
+    if (patch[key] === undefined) continue;
+    if (patch[key] === null || patch[key] === "") {
+      if (key === "price") throw Object.assign(new Error("Price is required"), { status: 400 });
+      out[key] = null;
+      continue;
+    }
+    const n = Number(patch[key]);
+    if (!Number.isInteger(n) || n < 0) {
+      throw Object.assign(new Error(`${key === "price" ? "Price" : "Original price"} must be a whole number of rupees`), { status: 400 });
+    }
+    out[key] = n;
+  }
+  if (patch.distanceLabel !== undefined) out.distanceLabel = String(patch.distanceLabel || "").trim() || null;
+  return out;
+}
+
+async function submitServiceChange(providerId, service, rawPatch) {
+  const proposed = cleanServiceChange(rawPatch);
+  const changes = {};
+  for (const [key, to] of Object.entries(proposed)) {
+    const from = service[key] ?? null;
+    if (JSON.stringify(from) !== JSON.stringify(to ?? null)) changes[key] = { from, to };
+  }
+  if (Object.keys(changes).length === 0) {
+    throw Object.assign(new Error("Nothing was changed"), { status: 400 });
+  }
+  for (const old of listServiceChanges({ serviceId: service.id, status: "pending" })) {
+    jsonStore.remove("serviceChangeRequests", old.id);
+  }
+  const request = jsonStore.insert("serviceChangeRequests", {
+    serviceId: service.id,
+    providerId,
+    serviceName: service.name,
+    changes,
+    status: "pending",
+    note: null,
+    createdAt: new Date().toISOString(),
+    resolvedAt: null,
+  });
+  const provider = await getProvider(providerId);
+  await logActivity("service", `${provider?.name || "A provider"} requested changes to "${service.name}" (awaiting approval)`);
+  return request;
+}
+
+// decision: "approved" | "rejected". On approval the admin may override any of
+// the proposed values (`edits`) — what's applied is recorded in the change log.
+async function reviewServiceChange(requestId, decision, { note, edits } = {}, actor) {
+  if (!["approved", "rejected"].includes(decision)) {
+    throw Object.assign(new Error("decision must be approved or rejected"), { status: 400 });
+  }
+  const request = jsonStore.readAll("serviceChangeRequests").find((r) => r.id === requestId);
+  if (!request) return undefined;
+  if (request.status !== "pending") {
+    throw Object.assign(new Error("This request has already been reviewed"), { status: 409 });
+  }
+  const service = await getService(request.serviceId);
+  if (!service) {
+    jsonStore.remove("serviceChangeRequests", requestId);
+    throw Object.assign(new Error("The service no longer exists"), { status: 404 });
+  }
+
+  let applied = null;
+  if (decision === "approved") {
+    const proposed = {};
+    for (const [key, change] of Object.entries(request.changes)) proposed[key] = change.to;
+    const merged = { ...proposed, ...cleanServiceChange(Object.fromEntries(Object.entries(edits || {}).filter(([k]) => SERVICE_CHANGE_KEYS.includes(k)))) };
+    const updated = await applyServiceFieldUpdate(request.serviceId, merged, ADMIN_EDITABLE_SERVICE_KEYS);
+    applied = diffValues(service, updated, SERVICE_CHANGE_KEYS);
+    recordAdminChange({
+      actor,
+      action: "service.change_approved",
+      entityType: "service",
+      entityId: request.serviceId,
+      entityName: updated.name,
+      changes: applied,
+    });
+  } else {
+    recordAdminChange({
+      actor,
+      action: "service.change_rejected",
+      entityType: "service",
+      entityId: request.serviceId,
+      entityName: service.name,
+      changes: [
+        ...Object.entries(request.changes).map(([field, c]) => ({ field, from: c.from, to: c.to })),
+        ...(note ? [{ field: "reason", from: null, to: note }] : []),
+      ],
+    });
+  }
+  const resolved = jsonStore.update("serviceChangeRequests", requestId, {
+    status: decision,
+    note: note || null,
+    resolvedAt: new Date().toISOString(),
+    ...(applied ? { applied } : {}),
+  });
+  await logActivity("service", `Change request for "${service.name}" ${decision} by admin`);
+  try {
+    await addNotification({
+      recipientType: "provider",
+      recipientId: request.providerId,
+      type: "service",
+      title: decision === "approved" ? "Service changes approved" : "Service changes rejected",
+      message:
+        decision === "approved"
+          ? `Your changes to "${service.name}" were approved and are now live.`
+          : `Your requested changes to "${service.name}" were rejected.${note ? ` Reason: ${note}` : ""} The service keeps its current details.`,
+    });
+  } catch (e) {
+    console.error("Service change notification failed:", e);
+  }
+  return resolved;
 }
 
 async function applyServiceFieldUpdate(serviceId, patch, allowedKeys) {
@@ -2815,6 +2976,8 @@ module.exports = {
   updateProviderService,
   updateServiceStatus,
   reviewService,
+  listServiceChanges,
+  reviewServiceChange,
   listAdminChanges,
   adminUpdateService,
   adminDeleteService,

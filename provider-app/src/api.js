@@ -101,6 +101,7 @@ export const api = {
   saveFcmToken: (token) => request("/provider/fcm-token", { method: "POST", body: JSON.stringify({ token }) }),
   acceptAgreement: () => request("/provider/agreement/accept", { method: "POST" }),
   getWallet: () => request("/provider/wallet"),
+  listServiceChanges: () => request("/provider/service-changes"),
   getCapacity: () => request("/provider/capacity"),
   listAds: () => request("/provider/ads"),
   createAd: (serviceId) => request("/provider/ads", { method: "POST", body: JSON.stringify({ serviceId }) }),

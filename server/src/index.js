@@ -439,10 +439,11 @@ app.post("/api/services/:id/ad-click", auth.requireAuth("customer"), ah(async (r
 
 app.patch("/api/providers/:id/services/:serviceId", auth.requireAuth("provider"), ah(async (req, res) => {
   if (req.user.id !== req.params.id) return res.status(403).json({ error: "Not your provider account" });
-  const service = await store.updateProviderService(req.params.id, req.params.serviceId, req.body || {});
-  if (!service) return res.status(404).json({ error: "Service not found" });
-  io.emit("service:updated", service);
-  res.json(service);
+  const result = await store.updateProviderService(req.params.id, req.params.serviceId, req.body || {});
+  if (!result) return res.status(404).json({ error: "Service not found" });
+  io.emit("service:updated", result.service);
+  if (result.changeRequest) io.emit("activity:created", (await store.listActivities(1))[0]);
+  res.json({ ...result.service, changeRequest: result.changeRequest });
 }));
 
 app.get("/api/providers/:id/earnings", auth.requireAuth("provider", "admin"), ah(async (req, res) => {
@@ -626,6 +627,24 @@ app.patch("/api/services/:id", auth.requireAuth("admin"), ah(async (req, res) =>
   io.emit("service:updated", service);
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.json(service);
+}));
+
+// ---- service modification approval ----
+app.get("/api/provider/service-changes", auth.requireAuth("provider"), ah(async (req, res) => {
+  res.json(store.listServiceChanges({ providerId: req.user.id }));
+}));
+
+app.get("/api/admin/service-changes", auth.requireAuth("admin"), ah(async (req, res) => {
+  res.json(store.listServiceChanges({ status: req.query.status }));
+}));
+
+app.post("/api/admin/service-changes/:id/review", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { decision, note, edits } = req.body || {};
+  const result = await store.reviewServiceChange(req.params.id, decision, { note, edits }, actorOf(req));
+  if (!result) return res.status(404).json({ error: "Change request not found" });
+  if (decision === "approved") io.emit("service:updated", await store.getService(result.serviceId));
+  io.emit("activity:created", (await store.listActivities(1))[0]);
+  res.json(result);
 }));
 
 // ---- service approval workflow (admin) ----

@@ -10,6 +10,8 @@ const ACTION_LABELS = {
   "service.activate": "Service activated",
   "service.deactivate": "Service deactivated",
   "service.delete": "Service deleted",
+  "service.change_approved": "Provider's change request approved",
+  "service.change_rejected": "Provider's change request rejected",
   "category.create": "Category created",
   "category.update": "Category edited",
   "category.activate": "Category activated",

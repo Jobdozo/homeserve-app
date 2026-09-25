@@ -476,6 +476,19 @@ export function AppProvider({ children }) {
     [provider, showToast]
   );
 
+  // A live service can't be edited directly: this files a change request and
+  // the service keeps its current details until an admin approves it.
+  const requestServiceChange = useCallback(
+    async (id, patch) => {
+      if (!provider) return;
+      const { changeRequest, ...service } = await api.updateProviderService(provider.id, id, patch);
+      setServices((prev) => upsertById(prev, service));
+      showToast("Changes sent for admin approval");
+      return changeRequest;
+    },
+    [provider, showToast]
+  );
+
   const addService = useCallback(
     async ({ name, categorySlug, description, price, originalPrice, extraCharges, serviceArea }) => {
       if (!provider) return;
@@ -571,6 +584,7 @@ export function AppProvider({ children }) {
       toggleServiceStatus,
       addService,
       resubmitService,
+      requestServiceChange,
       updateProfile,
       updateCoverage,
       setAcceptingRequests,
@@ -608,6 +622,7 @@ export function AppProvider({ children }) {
       toggleServiceStatus,
       addService,
       resubmitService,
+      requestServiceChange,
       updateProfile,
       updateCoverage,
       setAcceptingRequests,

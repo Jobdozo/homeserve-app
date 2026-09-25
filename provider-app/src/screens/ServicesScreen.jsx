@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { PlusIcon, StarIcon } from "../components/icons";
 import { formatCount, discountPct } from "../utils/format";
 import CategoryIcon from "../components/CategoryIcon";
+import { api } from "../api";
 
 const TABS = ["Active", "Pending", "Rejected", "Inactive", "Draft"];
 const TAB_STATUS = { Active: "active", Pending: "pending_approval", Rejected: "rejected", Inactive: "inactive", Draft: "draft" };
@@ -12,6 +13,11 @@ export default function ServicesScreen() {
   const navigate = useNavigate();
   const { services, toggleServiceStatus, resubmitService, showToast } = useApp();
   const [tab, setTab] = useState("Active");
+  const [changes, setChanges] = useState([]);
+  const loadChanges = () => api.listServiceChanges().then(setChanges).catch(() => {});
+  useEffect(() => {
+    loadChanges();
+  }, []);
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState({ name: "", price: "" });
   const [resubmitting, setResubmitting] = useState(false);
@@ -182,10 +188,104 @@ export default function ServicesScreen() {
               )}
             </div>
           )}
+          {(s.status === "active" || s.status === "inactive") && (
+            <ChangePanel service={s} latest={changes.find((c) => c.serviceId === s.id)} onSubmitted={loadChanges} />
+          )}
           </div>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+const FIELD_LABELS = { name: "Name", tagline: "Tagline", price: "Price", originalPrice: "Original price", distanceLabel: "Distance" };
+const showValue = (field, v) => (v === null || v === "" ? "—" : field === "price" || field === "originalPrice" ? `₹${v}` : String(v));
+
+// Live services are changed by request only: the current details stay live
+// until an admin approves what's proposed here.
+function ChangePanel({ service, latest, onSubmitted }) {
+  const { requestServiceChange, showToast } = useApp();
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ name: "", tagline: "", price: "", originalPrice: "" });
+
+  const start = () => {
+    setForm({
+      name: service.name,
+      tagline: service.tagline || "",
+      price: String(service.price),
+      originalPrice: service.originalPrice ? String(service.originalPrice) : "",
+    });
+    setOpen(true);
+  };
+
+  const submit = async () => {
+    const price = Number(form.price);
+    if (!form.name.trim() || !Number.isInteger(price) || price < 0) {
+      showToast("Enter a name and a valid price");
+      return;
+    }
+    setSaving(true);
+    try {
+      await requestServiceChange(service.id, {
+        name: form.name.trim(),
+        tagline: form.tagline.trim(),
+        price,
+        originalPrice: form.originalPrice.trim() ? Number(form.originalPrice) : null,
+      });
+      setOpen(false);
+      onSubmitted();
+    } catch (e) {
+      showToast(e.message || "Couldn't send the request");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const input = "w-full rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] outline-none focus:border-brand";
+  return (
+    <div className="mt-2">
+      {latest?.status === "pending" && (
+        <div className="rounded-lg bg-blue-50 px-3 py-2 text-[11.5px] text-blue-700">
+          <p className="font-semibold">Changes awaiting admin approval</p>
+          <ul className="mt-0.5">
+            {Object.entries(latest.changes).map(([field, c]) => (
+              <li key={field}>
+                {FIELD_LABELS[field] || field}: {showValue(field, c.from)} → {showValue(field, c.to)}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 text-blue-500">Your service stays live with its current details until then.</p>
+        </div>
+      )}
+      {latest?.status === "rejected" && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-[11.5px] text-red-600">
+          Your last change request was rejected{latest.note ? `: ${latest.note}` : "."} The service kept its current details.
+        </p>
+      )}
+      {open ? (
+        <div className="mt-2 space-y-2">
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Service name" className={input} />
+          <input value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} placeholder="Tagline" className={input} />
+          <div className="grid grid-cols-2 gap-2">
+            <input type="number" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="Price (₹)" className={input} />
+            <input type="number" min="0" value={form.originalPrice} onChange={(e) => setForm({ ...form, originalPrice: e.target.value })} placeholder="Original price (₹)" className={input} />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setOpen(false)} className="flex-1 rounded-lg border border-gray-200 py-2 text-[12px] font-semibold text-gray-500">
+              Cancel
+            </button>
+            <button onClick={submit} disabled={saving} className="flex-1 rounded-lg bg-brand py-2 text-[12px] font-semibold text-white disabled:opacity-50">
+              {saving ? "Sending…" : "Send for approval"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={start} className="mt-2 rounded-lg bg-brand-light px-3 py-1.5 text-[11.5px] font-semibold text-brand-dark">
+          {latest?.status === "pending" ? "Replace pending request" : "Request changes"}
+        </button>
+      )}
     </div>
   );
 }

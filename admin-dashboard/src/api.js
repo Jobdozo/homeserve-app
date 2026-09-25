@@ -89,6 +89,9 @@ export const api = {
     if (entityId) q.set("entityId", entityId);
     return request(`/admin/change-log?${q.toString()}`);
   },
+  listServiceChanges: (status) => request(`/admin/service-changes${status ? `?status=${status}` : ""}`),
+  reviewServiceChange: (id, decision, note, edits) =>
+    request(`/admin/service-changes/${id}/review`, { method: "POST", body: JSON.stringify({ decision, note, edits }) }),
   updateCategory: (id, patch) =>
     request(`/admin/categories/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteCategory: (id) => request(`/admin/categories/${id}`, { method: "DELETE" }),

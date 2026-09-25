@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { api } from "../api";
 import { useApp } from "../context/AppContext";
 import { StarIcon, CheckIcon, XIcon } from "../components/icons";
 import { formatCount, discountPct } from "../utils/format";
@@ -27,8 +28,13 @@ const statusLabels = { pending_approval: "pending approval" };
 // One module for both: the tiles at the top are the six headline numbers and
 // jump straight to the matching list below.
 export default function ServicesPage() {
-  const { categories, services } = useApp();
+  const { categories, services, refreshData } = useApp();
   const [view, setView] = useState("services");
+  const [pendingChanges, setPendingChanges] = useState([]);
+  const loadChanges = () => api.listServiceChanges("pending").then(setPendingChanges).catch(() => {});
+  useEffect(() => {
+    loadChanges();
+  }, []);
   const [tab, setTab] = useState("All");
   const [catFilter, setCatFilter] = useState("all");
 
@@ -61,6 +67,7 @@ export default function ServicesPage() {
         {[
           ["services", "Services"],
           ["categories", "Categories"],
+          ["changes", `Change requests${pendingChanges.length ? ` (${pendingChanges.length})` : ""}`],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -74,6 +81,14 @@ export default function ServicesPage() {
 
       {view === "categories" ? (
         <CategoriesPanel filter={catFilter} setFilter={setCatFilter} />
+      ) : view === "changes" ? (
+        <ChangeRequestsPanel
+          requests={pendingChanges}
+          onReviewed={() => {
+            loadChanges();
+            refreshData();
+          }}
+        />
       ) : (
         <ServicesPanel tab={tab} setTab={setTab} />
       )}
@@ -650,6 +665,147 @@ function CategoriesPanel({ filter, setFilter }) {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+const CHANGE_LABELS = { name: "Name", tagline: "Tagline", price: "Price (₹)", originalPrice: "Original price (₹)", distanceLabel: "Distance label" };
+const showChange = (v) => (v === null || v === undefined || v === "" ? "—" : String(v));
+
+// Provider-submitted modifications to a live service: the service keeps its
+// current details until one of these is approved (as proposed, or after the
+// admin edits the proposed values), or rejected.
+function ChangeRequestsPanel({ requests, onReviewed }) {
+  const { providers, showToast } = useApp();
+  const [editing, setEditing] = useState({});
+  const [rejecting, setRejecting] = useState({});
+  const [busyId, setBusyId] = useState(null);
+
+  const review = async (r, decision, note, edits) => {
+    setBusyId(r.id);
+    try {
+      await api.reviewServiceChange(r.id, decision, note, edits);
+      showToast(decision === "approved" ? "Changes approved and applied" : "Changes rejected");
+      onReviewed();
+    } catch (err) {
+      showToast(err.message || "Action failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (requests.length === 0) {
+    return (
+      <p className="rounded-2xl bg-white py-14 text-center text-sm text-gray-400 shadow-card">
+        No provider change requests waiting for review.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {requests.map((r) => {
+        const provider = providers.find((p) => p.id === r.providerId)?.name || "Provider";
+        const edits = editing[r.id];
+        const input = "w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-[12px] outline-none focus:border-brand";
+        return (
+          <div key={r.id} className="rounded-2xl bg-white p-4 shadow-card">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[13.5px] font-semibold text-gray-900">{r.serviceName}</p>
+                <p className="text-[11.5px] text-gray-400">
+                  {provider} · requested{" "}
+                  {new Date(r.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                </p>
+              </div>
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10.5px] font-semibold text-blue-700">pending</span>
+            </div>
+
+            <div className="mt-3 space-y-1.5">
+              {Object.entries(r.changes).map(([field, c]) => (
+                <div key={field} className="grid grid-cols-[110px_1fr] items-center gap-2 text-[12px]">
+                  <span className="font-medium text-gray-500">{CHANGE_LABELS[field] || field}</span>
+                  {edits ? (
+                    <input
+                      value={edits[field] ?? ""}
+                      onChange={(e) => setEditing({ ...editing, [r.id]: { ...edits, [field]: e.target.value } })}
+                      className={input}
+                    />
+                  ) : (
+                    <span>
+                      <span className="text-red-500 line-through decoration-red-300">{showChange(c.from)}</span>
+                      {" → "}
+                      <span className="font-semibold text-emerald-600">{showChange(c.to)}</span>
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {rejecting[r.id] !== undefined ? (
+              <div className="mt-3 space-y-2">
+                <input
+                  value={rejecting[r.id]}
+                  onChange={(e) => setRejecting({ ...rejecting, [r.id]: e.target.value })}
+                  placeholder="Reason for the provider (optional)"
+                  className={input}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setRejecting((p) => { const n = { ...p }; delete n[r.id]; return n; })}
+                    className="flex-1 rounded-lg border border-gray-200 py-2 text-[12px] font-semibold text-gray-500"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={busyId === r.id}
+                    onClick={() => review(r, "rejected", rejecting[r.id].trim())}
+                    className="flex-1 rounded-lg bg-red-600 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
+                  >
+                    Reject changes
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  disabled={busyId === r.id}
+                  onClick={() => {
+                    const values = edits
+                      ? Object.fromEntries(Object.entries(edits).map(([k, v]) => [k, v === "" ? null : v]))
+                      : undefined;
+                    review(r, "approved", undefined, values);
+                  }}
+                  className="rounded-lg bg-brand px-3.5 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
+                >
+                  {edits ? "Approve with my edits" : "Approve"}
+                </button>
+                <button
+                  onClick={() =>
+                    setEditing((p) => {
+                      if (p[r.id]) {
+                        const n = { ...p };
+                        delete n[r.id];
+                        return n;
+                      }
+                      return { ...p, [r.id]: Object.fromEntries(Object.entries(r.changes).map(([k, c]) => [k, c.to ?? ""])) };
+                    })
+                  }
+                  className="rounded-lg border border-gray-200 px-3.5 py-2 text-[12px] font-semibold text-gray-600"
+                >
+                  {edits ? "Cancel edits" : "Edit"}
+                </button>
+                <button
+                  onClick={() => setRejecting({ ...rejecting, [r.id]: "" })}
+                  className="rounded-lg border border-red-200 px-3.5 py-2 text-[12px] font-semibold text-red-600"
+                >
+                  Reject
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
