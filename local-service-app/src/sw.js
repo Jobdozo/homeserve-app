@@ -12,7 +12,9 @@ clientsClaim();
 // precache list at build time.
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
-registerRoute(new NavigationRoute(createHandlerBoundToURL("index.html")));
+// Static pages (privacy policy, account-deletion page) must open as themselves,
+// not fall back to the app shell.
+registerRoute(new NavigationRoute(createHandlerBoundToURL("index.html"), { denylist: [/^\/privacy\.html$/, /^\/delete-account\.html$/] }));
 
 registerRoute(
   ({ url, request }) =>
