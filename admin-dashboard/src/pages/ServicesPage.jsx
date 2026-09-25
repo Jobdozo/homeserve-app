@@ -3,6 +3,7 @@ import { useApp } from "../context/AppContext";
 import { StarIcon, CheckIcon, XIcon } from "../components/icons";
 import { formatCount, discountPct } from "../utils/format";
 import CategoryIcon from "../components/CategoryIcon";
+import { ChangeHistoryModal } from "../components/ChangeHistory";
 
 const TABS = [
   { label: "All", status: null },
@@ -86,6 +87,7 @@ function ServicesPanel({ tab, setTab }) {
   const [rejecting, setRejecting] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [historyFor, setHistoryFor] = useState(null);
 
   const providerName = (id) => providers.find((p) => p.id === id)?.name || "—";
   const activeTab = TABS.find((t) => t.label === tab);
@@ -232,11 +234,21 @@ function ServicesPanel({ tab, setTab }) {
                               tagline: s.tagline || "",
                               price: String(s.price),
                               originalPrice: s.originalPrice ? String(s.originalPrice) : "",
+                              categoryId: s.categoryId || "",
+                              icon: s.icon || "",
+                              distanceLabel: s.distanceLabel || "",
+                              includesText: (s.includes || []).join("\n"),
                             })
                           }
                           className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11.5px] font-semibold text-gray-600"
                         >
                           Edit
+                        </button>
+                        <button
+                          onClick={() => setHistoryFor({ type: "service", id: s.id, title: s.name })}
+                          className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11.5px] font-semibold text-gray-500"
+                        >
+                          History
                         </button>
                         <button
                           disabled={busy}
@@ -290,12 +302,20 @@ function ServicesPanel({ tab, setTab }) {
       )}
 
       {editing && <EditServiceModal editing={editing} onClose={() => setEditing(null)} />}
+      {historyFor && (
+        <ChangeHistoryModal
+          entityType={historyFor.type}
+          entityId={historyFor.id}
+          title={historyFor.title}
+          onClose={() => setHistoryFor(null)}
+        />
+      )}
     </div>
   );
 }
 
 function EditServiceModal({ editing, onClose }) {
-  const { updateService, showToast } = useApp();
+  const { updateService, categories, showToast } = useApp();
   const [form, setForm] = useState(editing);
   const [saving, setSaving] = useState(false);
 
@@ -312,6 +332,13 @@ function EditServiceModal({ editing, onClose }) {
         tagline: form.tagline.trim(),
         price,
         originalPrice: form.originalPrice.trim() ? Number(form.originalPrice) : null,
+        categorySlug: form.categoryId,
+        icon: form.icon.trim() || null,
+        distanceLabel: form.distanceLabel.trim() || null,
+        includes: form.includesText
+          .split("\n")
+          .map((t) => t.trim())
+          .filter(Boolean),
       });
       onClose();
     } catch (err) {
@@ -331,6 +358,45 @@ function EditServiceModal({ editing, onClose }) {
         <div>
           <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Tagline</label>
           <input value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} className={input} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Category</label>
+            <select
+              value={form.categoryId}
+              onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+              className={input}
+            >
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.active === false ? " (inactive)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Icon</label>
+            <input value={form.icon} maxLength={8} onChange={(e) => setForm({ ...form, icon: e.target.value })} className={input} />
+          </div>
+        </div>
+        <div>
+          <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Distance label</label>
+          <input
+            value={form.distanceLabel}
+            onChange={(e) => setForm({ ...form, distanceLabel: e.target.value })}
+            placeholder="e.g. 3.2 km away"
+            className={input}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">What's included (one per line)</label>
+          <textarea
+            value={form.includesText}
+            onChange={(e) => setForm({ ...form, includesText: e.target.value })}
+            rows={4}
+            className={input + " resize-none"}
+          />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -391,6 +457,7 @@ function CategoriesPanel({ filter, setFilter }) {
   const [editingCat, setEditingCat] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [historyFor, setHistoryFor] = useState(null);
 
   const visible = categories.filter(
     (c) => filter === "all" || (filter === "active" ? c.active !== false : c.active === false)
@@ -506,6 +573,12 @@ function CategoriesPanel({ filter, setFilter }) {
                           Edit
                         </button>
                         <button
+                          onClick={() => setHistoryFor({ type: "category", id: c.id, title: c.name })}
+                          className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11.5px] font-semibold text-gray-500"
+                        >
+                          History
+                        </button>
+                        <button
                           disabled={busy}
                           onClick={() => {
                             if (confirmDeleteId !== c.id) return setConfirmDeleteId(c.id);
@@ -538,6 +611,15 @@ function CategoriesPanel({ filter, setFilter }) {
         An inactive category and all of its services are hidden from customers, and providers can't add services to
         it. A category can only be deleted once it has no services.
       </p>
+
+      {historyFor && (
+        <ChangeHistoryModal
+          entityType={historyFor.type}
+          entityId={historyFor.id}
+          title={historyFor.title}
+          onClose={() => setHistoryFor(null)}
+        />
+      )}
 
       {editingCat && (
         <Modal title="Edit category" onClose={() => setEditingCat(null)}>

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { ChangeList } from "../components/ChangeHistory";
 
-const TABS = ["All", "booking", "provider", "service", "review"];
-const TAB_LABEL = { All: "All", booking: "Bookings", provider: "Providers", service: "Services", review: "Reviews" };
+const TABS = ["All", "booking", "provider", "service", "review", "changes"];
+const TAB_LABEL = { All: "All", booking: "Bookings", provider: "Providers", service: "Services", review: "Reviews", changes: "Admin changes" };
 const TYPE_STYLES = {
   booking: "bg-blue-100 text-blue-700",
   provider: "bg-violet-100 text-violet-700",
@@ -13,12 +14,18 @@ const TYPE_STYLES = {
 export default function AuditLogsPage() {
   const [activities, setActivities] = useState([]);
   const [tab, setTab] = useState("All");
+  const [changes, setChanges] = useState(null);
 
   // Fetched per-tab from the server (not filtered client-side out of one
   // capped list) — a low-volume type like "review" can otherwise have every
   // one of its entries pushed out of the most-recent-N window by noisier
   // types (bookings, services) long before it ever shows up.
   useEffect(() => {
+    if (tab === "changes") {
+      setChanges(null);
+      api.listAdminChanges().then(setChanges).catch(() => setChanges([]));
+      return;
+    }
     api.listActivities(100, tab === "All" ? undefined : tab).then(setActivities);
   }, [tab]);
 
@@ -40,6 +47,14 @@ export default function AuditLogsPage() {
         ))}
       </div>
 
+      {tab === "changes" ? (
+        <div className="rounded-2xl bg-white p-2 shadow-card">
+          <p className="px-3 pt-2 text-[11.5px] text-gray-400">
+            Every admin edit, activation and deletion of services and categories, with who made it and the before/after values.
+          </p>
+          <ChangeList entries={changes} showEntity />
+        </div>
+      ) : (
       <div className="rounded-2xl bg-white p-2 shadow-card">
         {filtered.length === 0 && <p className="py-10 text-center text-sm text-gray-400">No activity yet.</p>}
         <div className="divide-y divide-gray-50">
@@ -58,6 +73,7 @@ export default function AuditLogsPage() {
           ))}
         </div>
       </div>
+      )}
     </div>
   );
 }

@@ -171,6 +171,9 @@ function optionalUser(req) {
   return (token && auth.verifyToken(token)) || null;
 }
 
+// Admin ids look like "admin:<phone>"; that's what the change log records.
+const actorOf = (req) => String(req.user?.id || "admin").replace(/^admin:/, "");
+
 function ah(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 }
@@ -286,6 +289,11 @@ app.patch("/api/admin/providers/:id/coverage", auth.requireAuth("admin"), ah(asy
     acceptingRequests: req.body?.acceptingRequests,
   });
   res.json(coverage);
+}));
+
+app.get("/api/admin/change-log", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { entityType, entityId } = req.query;
+  res.json(store.listAdminChanges({ entityType, entityId, limit: Number(req.query.limit) || 200 }));
 }));
 
 // ---- CSV import (validates every row and reports errors by line number;
@@ -458,14 +466,14 @@ app.get("/api/categories", ah(async (req, res) => {
 
 app.patch("/api/admin/categories/:id", auth.requireAuth("admin"), ah(async (req, res) => {
   const { name, icon, active } = req.body || {};
-  const category = await store.updateCategory(req.params.id, { name, icon, active });
+  const category = await store.updateCategory(req.params.id, { name, icon, active }, actorOf(req));
   if (!category) return res.status(404).json({ error: "Category not found" });
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.json(category);
 }));
 
 app.delete("/api/admin/categories/:id", auth.requireAuth("admin"), ah(async (req, res) => {
-  const deleted = await store.deleteCategory(req.params.id);
+  const deleted = await store.deleteCategory(req.params.id, actorOf(req));
   if (!deleted) return res.status(404).json({ error: "Category not found" });
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.json({ deleted: true });
@@ -478,7 +486,7 @@ app.post("/api/admin/categories", auth.requireAuth("admin"), ah(async (req, res)
   if (existing.some((c) => c.name.toLowerCase() === name.trim().toLowerCase())) {
     return res.status(409).json({ error: "A category with this name already exists" });
   }
-  const category = await store.createCategory({ name: name.trim(), icon });
+  const category = await store.createCategory({ name: name.trim(), icon }, actorOf(req));
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.status(201).json(category);
 }));
@@ -504,7 +512,7 @@ app.post("/api/admin/services", auth.requireAuth("admin"), ah(async (req, res) =
   }
   const provider = await store.getProvider(providerId);
   if (!provider) return res.status(404).json({ error: "Provider not found" });
-  const service = await store.adminCreateService(providerId, { categorySlug, name, price, originalPrice });
+  const service = await store.adminCreateService(providerId, { categorySlug, name, price, originalPrice }, actorOf(req));
   io.emit("service:created", service);
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.status(201).json(service);
@@ -613,7 +621,7 @@ app.patch("/api/services/:id", auth.requireAuth("admin"), ah(async (req, res) =>
   if (!["active", "inactive"].includes(status)) {
     return res.status(400).json({ error: "status must be one of active, inactive" });
   }
-  const service = await store.updateServiceStatus(req.params.id, status);
+  const service = await store.updateServiceStatus(req.params.id, status, actorOf(req));
   if (!service) return res.status(404).json({ error: "Service not found" });
   io.emit("service:updated", service);
   io.emit("activity:created", (await store.listActivities(1))[0]);
@@ -622,7 +630,7 @@ app.patch("/api/services/:id", auth.requireAuth("admin"), ah(async (req, res) =>
 
 // ---- service approval workflow (admin) ----
 app.post("/api/admin/services/:id/review", auth.requireAuth("admin"), ah(async (req, res) => {
-  const service = await store.reviewService(req.params.id, req.body?.decision, req.body?.note);
+  const service = await store.reviewService(req.params.id, req.body?.decision, req.body?.note, actorOf(req));
   if (!service) return res.status(404).json({ error: "Service not found" });
   io.emit("service:updated", service);
   io.emit("activity:created", (await store.listActivities(1))[0]);
@@ -630,14 +638,14 @@ app.post("/api/admin/services/:id/review", auth.requireAuth("admin"), ah(async (
 }));
 
 app.patch("/api/admin/services/:id", auth.requireAuth("admin"), ah(async (req, res) => {
-  const service = await store.adminUpdateService(req.params.id, req.body || {});
+  const service = await store.adminUpdateService(req.params.id, req.body || {}, actorOf(req));
   if (!service) return res.status(404).json({ error: "Service not found" });
   io.emit("service:updated", service);
   res.json(service);
 }));
 
 app.delete("/api/admin/services/:id", auth.requireAuth("admin"), ah(async (req, res) => {
-  const deleted = await store.adminDeleteService(req.params.id);
+  const deleted = await store.adminDeleteService(req.params.id, actorOf(req));
   if (!deleted) return res.status(404).json({ error: "Service not found" });
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.json({ deleted: true });

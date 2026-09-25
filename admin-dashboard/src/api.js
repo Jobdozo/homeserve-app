@@ -83,6 +83,12 @@ export const api = {
   getTransactions: () => request("/admin/transactions"),
   getReports: () => request("/admin/reports"),
 
+  listAdminChanges: ({ entityType, entityId } = {}) => {
+    const q = new URLSearchParams();
+    if (entityType) q.set("entityType", entityType);
+    if (entityId) q.set("entityId", entityId);
+    return request(`/admin/change-log?${q.toString()}`);
+  },
   updateCategory: (id, patch) =>
     request(`/admin/categories/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteCategory: (id) => request(`/admin/categories/${id}`, { method: "DELETE" }),

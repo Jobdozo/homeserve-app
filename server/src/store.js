@@ -287,7 +287,8 @@ async function listCategories() {
 // Admin edit: rename / re-icon (the slug, which other records reference, never
 // changes) and switch active on or off. An inactive category and all of its
 // services disappear from the customer catalog.
-async function updateCategory(slug, patch) {
+async function updateCategory(slug, patch, actor) {
+  const beforeCategory = (await listCategories()).find((c) => c.id === slug);
   const categoryId = await getCategoryUuidBySlug(slug);
   if (!categoryId) return undefined;
   const fields = {};
@@ -318,11 +319,25 @@ async function updateCategory(slug, patch) {
   cacheClear("service");
   const updated = (await listCategories()).find((c) => c.id === slug);
   await logActivity("category", `Category "${updated?.name || slug}" updated by admin`);
+  if (beforeCategory && updated) {
+    const changes = diffValues(beforeCategory, updated, ["name", "icon", "active"]);
+    if (changes.length > 0) {
+      const onlyActive = changes.length === 1 && changes[0].field === "active";
+      recordAdminChange({
+        actor,
+        action: onlyActive ? (updated.active ? "category.activate" : "category.deactivate") : "category.update",
+        entityType: "category",
+        entityId: slug,
+        entityName: updated.name,
+        changes,
+      });
+    }
+  }
   return updated;
 }
 
 // Refuses while any service still uses the category — deactivate it instead.
-async function deleteCategory(slug) {
+async function deleteCategory(slug, actor) {
   const categoryId = await getCategoryUuidBySlug(slug);
   if (!categoryId) return false;
   const { services } = await query(
@@ -340,10 +355,18 @@ async function deleteCategory(slug) {
   jsonStore.remove("categoryStatus", slug);
   cacheClear("categories");
   await logActivity("category", `Category "${name}" deleted by admin`);
+  recordAdminChange({
+    actor,
+    action: "category.delete",
+    entityType: "category",
+    entityId: slug,
+    entityName: name,
+    changes: [{ field: "status", from: "existing", to: "deleted" }],
+  });
   return true;
 }
 
-async function createCategory({ name, icon }) {
+async function createCategory({ name, icon }, actor) {
   const slug = slugify(name);
   await mutate(
     `mutation($slug: String!, $name: String!, $icon: String) { category_insert(data: { slug: $slug, name: $name, icon: $icon }) }`,
@@ -354,6 +377,16 @@ async function createCategory({ name, icon }) {
   const { categories } = await query(`query($slug: String!) { categories(where: { slug: { eq: $slug } }) { slug name icon } }`, {
     slug,
   });
+  if (actor) {
+    recordAdminChange({
+      actor,
+      action: "category.create",
+      entityType: "category",
+      entityId: slug,
+      entityName: name,
+      changes: [{ field: "name", from: null, to: name }],
+    });
+  }
   return mapCategory(categories[0]);
 }
 
@@ -695,7 +728,7 @@ async function addProviderService(providerId, data) {
 
 // Admin adding a service on a provider's behalf — same categorySlug-based
 // resolution as addProviderService above, just with the admin's own picker.
-async function adminCreateService(providerId, { categorySlug, name, price, originalPrice }) {
+async function adminCreateService(providerId, { categorySlug, name, price, originalPrice }, actor) {
   const categoryId = (await getCategoryUuidBySlug(categorySlug)) || null;
   const { service_insert } = await mutate(
     `mutation($providerId: UUID!, $categoryId: UUID, $name: String!, $price: Int!, $originalPrice: Int) {
@@ -709,11 +742,24 @@ async function adminCreateService(providerId, { categorySlug, name, price, origi
   cacheClear("service");
   const provider = await getProvider(providerId);
   await logActivity("service", `Admin added a new service for ${provider?.name || "a provider"}: ${name}`);
+  if (actor) {
+    recordAdminChange({
+      actor,
+      action: "service.create",
+      entityType: "service",
+      entityId: service_insert.id,
+      entityName: name,
+      changes: [
+        { field: "provider", from: null, to: provider?.name || providerId },
+        { field: "price", from: null, to: Number(price) || 0 },
+      ],
+    });
+  }
   return getService(service_insert.id);
 }
 
 const PROVIDER_EDITABLE_SERVICE_KEYS = ["name", "tagline", "price", "originalPrice", "status", "distanceLabel"];
-const ADMIN_EDITABLE_SERVICE_KEYS = ["name", "tagline", "price", "originalPrice", "distanceLabel"];
+const ADMIN_EDITABLE_SERVICE_KEYS = ["name", "tagline", "price", "originalPrice", "distanceLabel", "icon"];
 
 async function updateProviderService(providerId, serviceId, patch) {
   const existing = await getService(serviceId);
@@ -760,7 +806,8 @@ async function applyServiceFieldUpdate(serviceId, patch, allowedKeys) {
   return getService(serviceId);
 }
 
-async function updateServiceStatus(serviceId, status) {
+async function updateServiceStatus(serviceId, status, actor) {
+  const before = await getService(serviceId);
   await mutate(`mutation($id: UUID!, $status: String!) { service_update(id: $id, data: { status: $status }) }`, {
     id: serviceId,
     status,
@@ -769,6 +816,14 @@ async function updateServiceStatus(serviceId, status) {
   const service = await getService(serviceId);
   if (!service) return undefined;
   await logActivity("service", `Service "${service.name}" set to ${status} by admin`);
+  recordAdminChange({
+    actor,
+    action: status === "active" ? "service.activate" : "service.deactivate",
+    entityType: "service",
+    entityId: serviceId,
+    entityName: service.name,
+    changes: [{ field: "status", from: before?.status ?? null, to: status }],
+  });
   return service;
 }
 
@@ -777,11 +832,41 @@ async function updateServiceStatus(serviceId, status) {
 // lists status "active"). An admin approves it, rejects it with a note the
 // provider can read, or edits/deletes it. ----
 
+// ---- admin change log: who changed what, with before/after values, for
+// every admin edit/activation/deletion of a service or category. Kept
+// separate from the activity feed (which is just readable one-liners). ----
+
+function recordAdminChange({ actor, action, entityType, entityId, entityName, changes }) {
+  jsonStore.insert("adminChangeLog", {
+    at: new Date().toISOString(),
+    actor: actor || "admin",
+    action,
+    entityType,
+    entityId,
+    entityName: entityName || null,
+    changes: changes || [],
+  });
+}
+
+function listAdminChanges({ entityType, entityId, limit = 200 } = {}) {
+  return jsonStore
+    .readAll("adminChangeLog")
+    .filter((c) => (!entityType || c.entityType === entityType) && (!entityId || c.entityId === entityId))
+    .sort((a, b) => new Date(b.at) - new Date(a.at))
+    .slice(0, limit);
+}
+
+function diffValues(before, after, keys) {
+  return keys
+    .filter((k) => JSON.stringify(before[k] ?? null) !== JSON.stringify(after[k] ?? null))
+    .map((k) => ({ field: k, from: before[k] ?? null, to: after[k] ?? null }));
+}
+
 function getServiceReview(serviceId) {
   return jsonStore.readAll("serviceReviews").find((r) => r.id === serviceId) || null;
 }
 
-async function reviewService(serviceId, decision, note) {
+async function reviewService(serviceId, decision, note, actor) {
   if (!["approved", "rejected"].includes(decision)) {
     throw Object.assign(new Error("decision must be approved or rejected"), { status: 400 });
   }
@@ -812,18 +897,71 @@ async function reviewService(serviceId, decision, note) {
   } catch (e) {
     console.error("Service review notification failed:", e);
   }
+  recordAdminChange({
+    actor,
+    action: decision === "approved" ? "service.approve" : "service.reject",
+    entityType: "service",
+    entityId: serviceId,
+    entityName: existing.name,
+    changes: [
+      { field: "status", from: existing.status, to: status },
+      ...(decision === "rejected" && note ? [{ field: "reason", from: null, to: note }] : []),
+    ],
+  });
   return getService(serviceId);
 }
 
-async function adminUpdateService(serviceId, patch) {
+// Beyond the basic fields, an admin can also move a service to another
+// category and rewrite its "what's included" list.
+async function adminUpdateService(serviceId, patch, actor) {
   const existing = await getService(serviceId);
   if (!existing) return undefined;
-  return applyServiceFieldUpdate(serviceId, patch, ADMIN_EDITABLE_SERVICE_KEYS);
+
+  if (patch.categorySlug !== undefined && patch.categorySlug !== existing.categoryId) {
+    const categoryUuid = await getCategoryUuidBySlug(patch.categorySlug);
+    if (!categoryUuid) throw Object.assign(new Error("Unknown category"), { status: 400 });
+    await mutate(`mutation($id: UUID!, $categoryId: UUID!) { service_update(id: $id, data: { categoryId: $categoryId }) }`, {
+      id: serviceId,
+      categoryId: categoryUuid,
+    });
+  }
+  if (patch.includes !== undefined) {
+    const includes = (Array.isArray(patch.includes) ? patch.includes : [])
+      .map((t) => String(t).trim())
+      .filter(Boolean)
+      .slice(0, 12);
+    if (includes.some((t) => t.length > 100)) {
+      throw Object.assign(new Error("Each included item must be 100 characters or fewer"), { status: 400 });
+    }
+    await mutate(`mutation($id: UUID!) { serviceInclude_deleteMany(where: { serviceId: { eq: $id } }) }`, { id: serviceId });
+    for (const text of includes) {
+      await mutate(`mutation($serviceId: UUID!, $text: String!) { serviceInclude_insert(data: { serviceId: $serviceId, text: $text }) }`, {
+        serviceId,
+        text,
+      });
+    }
+    cacheClear("service");
+  }
+  cacheClear("service");
+  const updated = await applyServiceFieldUpdate(serviceId, patch, ADMIN_EDITABLE_SERVICE_KEYS);
+  const trackedKeys = [...ADMIN_EDITABLE_SERVICE_KEYS, "categoryId", "includes"];
+  const changes = diffValues(existing, updated, trackedKeys);
+  if (changes.length > 0) {
+    recordAdminChange({
+      actor,
+      action: "service.update",
+      entityType: "service",
+      entityId: serviceId,
+      entityName: updated.name,
+      changes,
+    });
+  }
+  return updated;
 }
 
 // Refuses if any booking references the service — deleting those would wipe
 // customers' and providers' order history; deactivate the service instead.
-async function adminDeleteService(serviceId) {
+async function adminDeleteService(serviceId, actor) {
   const existing = await getService(serviceId);
   if (!existing) return false;
   const { bookings } = await query(
@@ -843,6 +981,17 @@ async function adminDeleteService(serviceId) {
   jsonStore.remove("serviceReviews", serviceId);
   cacheClear("service");
   await logActivity("service", `Service "${existing.name}" deleted by admin`);
+  recordAdminChange({
+    actor,
+    action: "service.delete",
+    entityType: "service",
+    entityId: serviceId,
+    entityName: existing.name,
+    changes: [
+      { field: "price", from: existing.price, to: null },
+      { field: "status", from: existing.status, to: "deleted" },
+    ],
+  });
   return true;
 }
 
@@ -2666,6 +2815,7 @@ module.exports = {
   updateProviderService,
   updateServiceStatus,
   reviewService,
+  listAdminChanges,
   adminUpdateService,
   adminDeleteService,
   setProviderVerification,
