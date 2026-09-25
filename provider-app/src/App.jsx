@@ -27,6 +27,8 @@ const ReferFriendScreen = lazy(() => import("./screens/ReferFriendScreen"));
 const AdsScreen = lazy(() => import("./screens/AdsScreen"));
 const ChatScreen = lazy(() => import("./screens/ChatScreen"));
 const NotificationsScreen = lazy(() => import("./screens/NotificationsScreen"));
+const StaffScreen = lazy(() => import("./screens/StaffScreen"));
+const StaffDetailScreen = lazy(() => import("./screens/StaffDetailScreen"));
 
 function ScreenFallback() {
   return (
@@ -37,7 +39,7 @@ function ScreenFallback() {
 }
 
 function AppRoutes() {
-  const { provider, authLoading } = useApp();
+  const { provider, authLoading, staff, logout } = useApp();
   const { pathname } = useLocation();
   useAndroidBackButton({
     rootPath: "/dashboard",
@@ -60,7 +62,25 @@ function AppRoutes() {
 
   if (!provider) return <LoginScreen />;
 
-  if (!provider.agreementAccepted) return <AgreementScreen />;
+  if (!provider.agreementAccepted) {
+    // Only the account owner can accept the provider agreement.
+    if (staff) {
+      return (
+        <div className="app-shell">
+          <div className="app-body">
+            <div className="phone-frame">
+              <div className="screen flex flex-col items-center justify-center gap-3 px-8 text-center">
+                <p className="text-[16px] font-bold text-gray-900">Waiting for the account owner</p>
+                <p className="text-[13px] text-gray-500">The owner of this company account needs to accept the provider agreement before staff can start work.</p>
+                <button onClick={logout} className="mt-2 rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-600">Sign out</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return <AgreementScreen />;
+  }
 
   return (
     <>
@@ -85,6 +105,8 @@ function AppRoutes() {
             <Route path="/profile/help" element={<HelpSupportScreen />} />
             <Route path="/profile/refer" element={<ReferFriendScreen />} />
             <Route path="/profile/ads" element={<AdsScreen />} />
+            <Route path="/profile/staff" element={<StaffScreen />} />
+            <Route path="/profile/staff/:staffId" element={<StaffDetailScreen />} />
             <Route path="/chat/:requestId" element={<ChatScreen />} />
             <Route path="/notifications" element={<NotificationsScreen />} />
           </Route>

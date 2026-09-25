@@ -12,9 +12,11 @@ const LOCATION_TRACKED_STATUSES = ["Pending", "Accepted", "In Progress"];
 export default function RequestDetailsScreen() {
   const { requestId } = useParams();
   const navigate = useNavigate();
-  const { getRequest, acceptRequest, rejectRequest, swapRequest, showToast } = useApp();
+  const { getRequest, acceptRequest, rejectRequest, swapRequest, showToast, can, staff, setRequestAssignee } = useApp();
   const [liveLocation, setLiveLocation] = useState(null);
   const [swapOpen, setSwapOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const canAct = can("orders.act");
 
   const request = getRequest(requestId);
 
@@ -72,6 +74,20 @@ export default function RequestDetailsScreen() {
           </div>
           <p className="text-lg font-extrabold text-brand">₹{request.amount}</p>
         </div>
+
+        {!["Rejected", "Cancelled", "Swapped"].includes(request.status) && (request.assignedStaff || can("orders.assign")) && (
+          <div className="flex items-center gap-3 rounded-2xl border border-gray-100 p-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Assigned to</p>
+              <p className="truncate text-[13.5px] font-semibold text-gray-900">{request.assignedStaff?.name || "Not assigned yet"}</p>
+            </div>
+            {can("orders.assign") && request.status !== "Completed" && (
+              <button onClick={() => setAssignOpen(true)} className="rounded-xl border border-gray-200 px-3.5 py-2 text-[12.5px] font-semibold text-gray-700">
+                {request.assignedStaff ? "Change" : "Assign"}
+              </button>
+            )}
+          </div>
+        )}
 
         <div>
           <h2 className="mb-2 text-[13px] font-bold text-gray-900">Customer Details</h2>
@@ -158,7 +174,7 @@ export default function RequestDetailsScreen() {
         {!["Pending", "Rejected", "Cancelled", "Swapped"].includes(request.status) && (
           <div>
             <StatusPill status={request.status} />
-            {request.status !== "Completed" && (
+            {request.status !== "Completed" && canAct && (
               <OtpVerifyCard bookingId={request.id} type={request.status === "Accepted" ? "start" : "complete"} />
             )}
           </div>
@@ -176,7 +192,7 @@ export default function RequestDetailsScreen() {
           </p>
         )}
 
-        {["Accepted", "In Progress"].includes(request.status) && (
+        {["Accepted", "In Progress"].includes(request.status) && can("messages.use") && (
           <button
             onClick={() => navigate(`/chat/${request.id}`)}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-light py-3 text-sm font-semibold text-brand-dark"
@@ -185,7 +201,7 @@ export default function RequestDetailsScreen() {
           </button>
         )}
 
-        {request.status === "Accepted" && (
+        {request.status === "Accepted" && canAct && (
           <button
             onClick={() => setSwapOpen(true)}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 py-3 text-sm font-semibold text-amber-800 active:scale-[0.98]"
@@ -207,7 +223,19 @@ export default function RequestDetailsScreen() {
         />
       )}
 
-      {request.status === "Pending" && (
+      {assignOpen && (
+        <AssignOrderModal
+          request={request}
+          onClose={() => setAssignOpen(false)}
+          onAssigned={(assignedStaff) => {
+            setRequestAssignee(request.id, assignedStaff);
+            setAssignOpen(false);
+            showToast(assignedStaff ? `Assigned to ${assignedStaff.name}` : "Assignment cleared");
+          }}
+        />
+      )}
+
+      {request.status === "Pending" && canAct && (
         <div className="flex flex-shrink-0 gap-3 border-t border-gray-100 bg-white px-4 py-3 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:py-4">
           <button
             onClick={() => {
@@ -226,6 +254,79 @@ export default function RequestDetailsScreen() {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+const pinOf = (text) => (String(text || "").match(/\b\d{6}\b/) || [])[0] || "";
+
+// Pick who handles this order. Staff whose services and areas fit are listed
+// first; others can still be chosen (with a note) since the company decides.
+function AssignOrderModal({ request, onClose, onAssigned }) {
+  const [list, setList] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.listAssignableStaff().then(setList).catch((e) => {
+      setList([]);
+      setError(e.message || "Couldn't load staff");
+    });
+  }, []);
+
+  const pin = pinOf(request.address?.line);
+  const fit = (s) => ({
+    service: !s.serviceIds?.length || s.serviceIds.includes(request.serviceId),
+    area: !s.pincodes?.length || !pin || s.pincodes.includes(pin),
+  });
+  const sorted = (list || [])
+    .map((s) => ({ ...s, fit: fit(s) }))
+    .sort((a, b) => Number(b.fit.service && b.fit.area) - Number(a.fit.service && a.fit.area) || a.pending - b.pending);
+
+  const choose = async (staffId) => {
+    setBusy(true);
+    setError("");
+    try {
+      const { assignedStaff } = await api.assignOrder(request.id, staffId);
+      onAssigned(assignedStaff);
+    } catch (e) {
+      setError(e.message || "Couldn't assign");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={(e) => e.target === e.currentTarget && !busy && onClose()}>
+      <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-5 sm:rounded-3xl">
+        <h2 className="text-[16px] font-bold text-gray-900">Assign this order</h2>
+        <p className="mt-1 text-[12px] text-gray-500">{request.service?.name}{pin ? ` · PIN ${pin}` : ""}</p>
+        <div className="mt-3 space-y-2">
+          {list === null && <p className="py-6 text-center text-[13px] text-gray-400">Loading…</p>}
+          {list?.length === 0 && !error && <p className="py-6 text-center text-[13px] text-gray-400">No active staff yet.</p>}
+          {sorted.map((s) => (
+            <button key={s.id} disabled={busy} onClick={() => choose(s.id)} className={`flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left ${request.assignedStaff?.id === s.id ? "border-brand bg-brand-light" : "border-gray-200"}`}>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13.5px] font-semibold text-gray-900">{s.name}</span>
+                <span className="block text-[11.5px] text-gray-500">{s.role} · {s.pending} open order{s.pending === 1 ? "" : "s"}</span>
+                {(!s.fit.service || !s.fit.area) && (
+                  <span className="block text-[11px] text-amber-600">{!s.fit.service ? "Doesn't usually handle this service" : "Outside their usual area"}</span>
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+        {error && <p className="mt-2 text-[12px] text-red-600">{error}</p>}
+        <div className="mt-4 flex gap-3">
+          <button onClick={onClose} disabled={busy} className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-600">
+            Cancel
+          </button>
+          {request.assignedStaff && (
+            <button onClick={() => choose(null)} disabled={busy} className="flex-1 rounded-xl border border-red-200 py-3 text-sm font-semibold text-red-600">
+              Unassign
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

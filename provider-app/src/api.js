@@ -53,6 +53,14 @@ export const api = {
   verifyOtp: (phone, code, role, name) =>
     request("/auth/otp/verify", { method: "POST", body: JSON.stringify({ phone, code, role, name }) }),
   me: () => request("/auth/me"),
+  getStaffCatalogue: () => request("/provider/staff/catalogue"),
+  listStaff: () => request("/provider/staff"),
+  getStaffActivity: () => request("/provider/staff/activity"),
+  getStaffMember: (id) => request(`/provider/staff/${id}`),
+  createStaff: (data) => request("/provider/staff", { method: "POST", body: JSON.stringify(data) }),
+  updateStaff: (id, patch) => request(`/provider/staff/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  listAssignableStaff: () => request("/provider/assignable-staff"),
+  assignOrder: (bookingId, staffId) => request(`/provider/orders/${bookingId}/assign`, { method: "POST", body: JSON.stringify({ staffId }) }),
 
   listCategories: () => request("/categories"),
   getProvider: (id) => request(`/providers/${id}`),

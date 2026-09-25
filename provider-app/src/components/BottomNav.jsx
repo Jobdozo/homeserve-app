@@ -4,20 +4,20 @@ import { useApp } from "../context/AppContext";
 
 const tabs = [
   { to: "/dashboard", label: "Home", Icon: HomeIcon },
-  { to: "/requests", label: "Requests", Icon: RequestsIcon, badgeKey: "newRequests" },
-  { to: "/services", label: "Services", Icon: GridIcon },
-  { to: "/earnings", label: "Earnings", Icon: WalletIcon },
+  { to: "/requests", label: "Requests", Icon: RequestsIcon, badgeKey: "newRequests", perm: ["orders.view_all", "orders.view_assigned"] },
+  { to: "/services", label: "Services", Icon: GridIcon, perm: ["services.view", "services.manage"] },
+  { to: "/earnings", label: "Earnings", Icon: WalletIcon, perm: "earnings.view" },
   { to: "/profile", label: "Profile", Icon: ProfileIcon },
 ];
 
 export default function BottomNav() {
-  const { requests } = useApp();
+  const { requests, can } = useApp();
   const newCount = requests.filter((r) => r.status === "Pending").length;
 
   return (
     <nav className="flex-shrink-0 border-t border-gray-100 bg-white px-2 pb-2 pt-1.5 lg:hidden">
       <div className="flex items-center justify-between">
-        {tabs.map(({ to, label, Icon, badgeKey }) => (
+        {tabs.filter((t) => !t.perm || can(t.perm)).map(({ to, label, Icon, badgeKey }) => (
           <NavLink
             key={to}
             to={to}

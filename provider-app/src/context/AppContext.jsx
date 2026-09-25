@@ -28,6 +28,11 @@ function upsertById(list, item) {
 export function AppProvider({ children }) {
   const initialAuth = loadAuth();
   const [provider, setProvider] = useState(initialAuth?.user || null);
+  // Set when a staff member (not the account owner) is signed in: their name,
+  // role and permissions. Null for the owner, who can do everything.
+  const [staffSession, setStaffSession] = useState(initialAuth?.staff || null);
+  const staffLimitedRef = useRef(false);
+  staffLimitedRef.current = Boolean(staffSession) && !staffSession.permissions?.includes("orders.view_all");
   const [authLoading, setAuthLoading] = useState(true);
   const [requests, setRequests] = useState([]);
   const [services, setServices] = useState([]);
@@ -87,16 +92,18 @@ export function AppProvider({ children }) {
     });
   }, []);
 
-  const login = useCallback((token, user) => {
+  const login = useCallback((token, user, staff = null) => {
     setAuthToken(token);
-    localStorage.setItem(AUTH_KEY, JSON.stringify({ token, user }));
+    localStorage.setItem(AUTH_KEY, JSON.stringify({ token, user, staff }));
     setProvider(user);
+    setStaffSession(staff);
   }, []);
 
   const logout = useCallback(() => {
     setAuthToken(null);
     localStorage.removeItem(AUTH_KEY);
     setProvider(null);
+    setStaffSession(null);
     setRequests([]);
     setServices([]);
     setMessages({});
@@ -126,9 +133,12 @@ export function AppProvider({ children }) {
       }
       setAuthToken(initialAuth.token);
       try {
-        const { user } = await api.me();
+        const { user, staff } = await api.me();
         if (cancelled) return;
         setProvider(user);
+        setStaffSession(staff || null);
+        // Keep the cached copy's permissions current for offline starts.
+        localStorage.setItem(AUTH_KEY, JSON.stringify({ token: initialAuth.token, user, staff: staff || null }));
       } catch (e) {
         if (cancelled) return;
         // A real 401/403 means the token itself is invalid — log out. A
@@ -303,10 +313,20 @@ export function AppProvider({ children }) {
     const providerId = provider?.id;
     const onBookingCreated = (booking) => {
       if (booking.providerId !== providerId) return;
+      // Staff who only see their assigned orders never take the broadcast at
+      // face value — re-read the list the server filtered for them.
+      if (staffLimitedRef.current) {
+        api.listBookings().then(setRequests).catch(() => {});
+        return;
+      }
       setRequests((prev) => upsertById(prev, booking));
       if (booking.status === "Pending") setRingingRequest(booking);
     };
     const onBookingUpdated = (booking) => {
+      if (staffLimitedRef.current && booking.providerId === providerId) {
+        api.listBookings().then(setRequests).catch(() => {});
+        return;
+      }
       if (booking.providerId !== providerId) {
         // Reassigned away to another provider — stop showing/ringing it here
         // (unless it's this provider's own "Swapped" history entry).
@@ -372,6 +392,22 @@ export function AppProvider({ children }) {
     const t = setTimeout(() => setToast(null), 2200);
     return () => clearTimeout(t);
   }, [toast]);
+
+  const setRequestAssignee = useCallback((id, assignedStaff) => {
+    setRequests((prev) => prev.map((r) => (r.id === id ? (assignedStaff ? { ...r, assignedStaff } : (({ assignedStaff: _gone, ...rest }) => rest)(r)) : r)));
+  }, []);
+
+  // Permission check: the owner can do everything; staff only what they were given.
+  const can = useCallback(
+    (needed) => {
+      if (!staffSession) return true;
+      const perms = staffSession.permissions || [];
+      return (Array.isArray(needed) ? needed : [needed]).some((n) => perms.includes(n) || (n === "orders.view_assigned" && perms.includes("orders.view_all")));
+    },
+    [staffSession]
+  );
+  // Only staff who can both see all orders and act on them get the ringing overlay.
+  const effectiveRinging = staffSession && !(can("orders.act") && staffSession.permissions.includes("orders.view_all")) ? null : ringingRequest;
 
   const hasActiveJob = useMemo(
     () => requests.some((r) => ["Pending", "Accepted", "In Progress"].includes(r.status)),
@@ -611,7 +647,10 @@ export function AppProvider({ children }) {
       notifications,
       notificationPrefs,
       updateNotificationPref,
-      ringingRequest,
+      ringingRequest: effectiveRinging,
+      staff: staffSession,
+      can,
+      setRequestAssignee,
       dismissRinging,
       markNotificationRead,
       markAllNotificationsRead,
@@ -649,7 +688,10 @@ export function AppProvider({ children }) {
       notifications,
       notificationPrefs,
       updateNotificationPref,
-      ringingRequest,
+      effectiveRinging,
+      staffSession,
+      can,
+      setRequestAssignee,
       dismissRinging,
       markNotificationRead,
       markAllNotificationsRead,

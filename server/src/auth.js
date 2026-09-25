@@ -72,6 +72,11 @@ let adminGuard = null;
 function setAdminGuard(fn) {
   adminGuard = fn;
 }
+// Same idea for provider staff sign-ins (tokens that carry a staffId).
+let providerGuard = null;
+function setProviderGuard(fn) {
+  providerGuard = fn;
+}
 
 function requireAuth(...allowedRoles) {
   return (req, res, next) => {
@@ -87,6 +92,10 @@ function requireAuth(...allowedRoles) {
       const denied = adminGuard(req, payload);
       if (denied) return res.status(denied.status).json({ error: denied.error });
     }
+    if (payload.role === "provider" && payload.staffId && providerGuard) {
+      const denied = providerGuard(req, payload);
+      if (denied) return res.status(denied.status).json({ error: denied.error });
+    }
     next();
   };
 }
@@ -96,6 +105,7 @@ module.exports = {
   isAdminPhone,
   adminPhones: () => [...ADMIN_PHONES],
   setAdminGuard,
+  setProviderGuard,
   requestOtp,
   verifyOtp,
   signToken,

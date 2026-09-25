@@ -9,7 +9,9 @@ const store = require("./store");
 const monitoring = require("./monitoring");
 const complaints = require("./complaints");
 const access = require("./access");
+const staff = require("./staff");
 auth.setAdminGuard(access.guard);
+auth.setProviderGuard(staff.guard);
 const csvImport = require("./csvImport");
 const auth = require("./auth");
 const { sendOtpViaWhatsApp } = require("./whatsapp");
@@ -245,7 +247,21 @@ app.post("/api/auth/otp/verify", ah(async (req, res) => {
     return res.json({ token, user: customer });
   }
 
-  const provider = (await store.getProviderByPhone(phone)) || (await store.createProviderSignup({ phone, name }));
+  // A number that isn't a provider account but is an active staff member of
+  // one signs in as that company, with the staff member's own permissions.
+  let provider = await store.getProviderByPhone(phone);
+  let staffMember = null;
+  if (!provider) {
+    staffMember = staff.activeStaffByPhone(phone);
+    if (staffMember) provider = await store.getProvider(staffMember.providerId);
+    if (staffMember && !provider) staffMember = null;
+  }
+  if (!provider) provider = await store.createProviderSignup({ phone, name });
+  if (staffMember) {
+    staff.recordLogin(staffMember);
+    const token = auth.signToken({ id: provider.id, role: "provider", phone, staffId: staffMember.id });
+    return res.json({ token, user: provider, staff: staff.loginProfile(staffMember) });
+  }
   const token = auth.signToken({ id: provider.id, role: "provider", phone });
   res.json({ token, user: provider });
 }));
@@ -277,7 +293,7 @@ app.get("/api/auth/me", auth.requireAuth(), ah(async (req, res) => {
   if (req.user.role === "provider") {
     const provider = await store.getProvider(req.user.id);
     if (!provider) return res.status(404).json({ error: "Not found" });
-    return res.json({ role: "provider", user: provider });
+    return res.json({ role: "provider", user: provider, ...(req.staff ? { staff: staff.loginProfile(req.staff) } : {}) });
   }
   res.json({ role: "admin", user: adminProfile(req.admin) });
 }));
@@ -445,6 +461,7 @@ app.post("/api/admin/providers/:id/wallet/recharge", auth.requireAuth("admin"), 
 }));
 
 app.get("/api/provider/wallet", auth.requireAuth("provider"), ah(async (req, res) => {
+  if (req.staff && !req.staff.permissions.includes("earnings.view")) return res.json({ balance: 0, suspended: false, restricted: true });
   const wallet = store.getWallet(req.user.id);
   res.json({ balance: wallet.balance, suspended: wallet.balance <= 0 });
 }));
@@ -482,6 +499,7 @@ app.get("/api/providers/:id/earnings", auth.requireAuth("provider", "admin"), ah
   if (req.user.role === "provider" && req.user.id !== req.params.id) {
     return res.status(403).json({ error: "Not your earnings" });
   }
+  if (req.staff && !req.staff.permissions.includes("earnings.view")) return res.json(staff.emptyEarnings());
   res.json(await store.getEarnings(req.params.id));
 }));
 
@@ -755,6 +773,8 @@ app.delete("/api/admin/services/:id", auth.requireAuth("admin"), ah(async (req, 
 }));
 
 // ---- bookings ----
+const staffList = (providerId) => require("./jsonStore").readAll("providerStaff").filter((s) => s.providerId === providerId);
+
 app.get("/api/bookings", auth.requireAuth(), ah(async (req, res) => {
   if (req.user.role === "admin") return res.json(await store.listBookings({}));
   if (req.user.role === "customer") {
@@ -762,9 +782,17 @@ app.get("/api/bookings", auth.requireAuth(), ah(async (req, res) => {
     return res.json((await store.listBookings({ customerId: req.user.id })).map((b) => dropStaleLastMessage(hideCompletedChat(b), cutoffs)));
   }
   const cutoffs = store.swapCutoffs();
-  const own = (await store.listBookings({ providerId: req.user.id })).map((b) => dropStaleLastMessage(maskCompleted(b), cutoffs));
+  let own = (await store.listBookings({ providerId: req.user.id })).map((b) => dropStaleLastMessage(maskCompleted(b), cutoffs));
+  const asg = staff.assignments();
+  // Staff only see what their permissions allow: everything, just the orders
+  // assigned to them, or nothing.
+  const scope = staff.ordersScope(req.staff);
+  if (scope === "none") return res.json([]);
+  if (scope === "assigned") own = own.filter((b) => asg.get(b.id)?.staffId === req.staff.id);
+  const names = new Map(staffList(req.user.id).map((s) => [s.id, s.name]));
+  own = own.map((b) => (asg.has(b.id) ? { ...b, assignedStaff: { id: asg.get(b.id).staffId, name: names.get(asg.get(b.id).staffId) || "Staff" } } : b));
   // Orders this provider handed back stay in their history as "Swapped".
-  res.json([...own, ...store.listSwappedOutBookings(req.user.id)]);
+  res.json([...own, ...(scope === "all" ? store.listSwappedOutBookings(req.user.id) : [])]);
 }));
 
 app.get("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
@@ -777,9 +805,13 @@ app.get("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
     return res.status(403).json({ error: "Not your booking" });
   }
   const cutoffs = store.swapCutoffs();
+  const assignee = req.user.role === "provider" ? staff.assignmentFor(booking.id) : null;
   res.json(
     req.user.role === "provider"
-      ? dropStaleLastMessage(maskCompleted(booking), cutoffs)
+      ? {
+          ...dropStaleLastMessage(maskCompleted(booking), cutoffs),
+          ...(assignee ? { assignedStaff: { id: assignee.staffId, name: staff.getStaff(assignee.staffId)?.name || "Staff" } } : {}),
+        }
       : req.user.role === "customer"
         ? dropStaleLastMessage(hideCompletedChat(booking), cutoffs)
         : booking
@@ -796,6 +828,7 @@ app.post("/api/bookings/:id/swap", auth.requireAuth("provider"), ah(async (req, 
     if (e.status) return res.status(e.status).json({ error: e.message });
     throw e;
   }
+  staff.clearAssignment(req.params.id);
   io.emit("booking:updated", maskCompleted(result.booking));
   io.emit("booking:created", result.booking);
   io.emit("activity:created", (await store.listActivities(1))[0]);
@@ -863,6 +896,10 @@ app.patch("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
   }
 
   const booking = await store.updateBookingStatus(req.params.id, status);
+  // A staff member who accepts an unassigned order takes it on.
+  if (req.staff && status === "Accepted" && !staff.assignmentFor(req.params.id)) {
+    await staff.assignOrder(req.user.id, booking, req.staff.id, { name: req.staff.name });
+  }
   io.emit("booking:updated", maskCompleted(booking));
   io.emit("activity:created", (await store.listActivities(1))[0]);
   res.json(booking);
@@ -1159,7 +1196,18 @@ app.post("/api/messages/:bookingId", auth.requireAuth("customer", "provider"), a
 
 // ---- notifications ----
 app.get("/api/notifications", auth.requireAuth("customer", "provider"), ah(async (req, res) => {
-  res.json(await store.listNotifications(req.user.role, req.user.id));
+  const list = await store.listNotifications(req.user.role, req.user.id);
+  if (!req.staff) return res.json(list);
+  // Staff only get alerts for what they're allowed to see.
+  const scope = staff.ordersScope(req.staff);
+  const mine = staff.assignedBookingIds(req.staff.id);
+  res.json(
+    list.filter((n) => {
+      if (n.type === "wallet") return req.staff.permissions.includes("earnings.view");
+      if (scope === "all") return true;
+      return scope === "assigned" && n.bookingId && mine.has(n.bookingId);
+    })
+  );
 }));
 
 app.patch("/api/notifications/:id/read", auth.requireAuth("customer", "provider"), ah(async (req, res) => {
@@ -1301,6 +1349,45 @@ app.delete("/api/admin/complaint-stages/:key", adminOnly, crm(async (req, res) =
 }));
 
 app.get("/api/admin/staff", adminOnly, crm(async (req, res) => res.json(await complaints.listStaff())));
+
+// ---- Service provider staff management (the company's own employees) ----
+const staffActor = (req) => (req.staff ? { staff: req.staff, name: req.staff.name } : { owner: true, name: "Owner" });
+const staffRoute = (fn) =>
+  ah(async (req, res) => {
+    try {
+      await fn(req, res);
+    } catch (e) {
+      if (e.status) return res.status(e.status).json({ error: e.message });
+      throw e;
+    }
+  });
+const providerOnly = auth.requireAuth("provider");
+
+app.get("/api/provider/staff/catalogue", providerOnly, staffRoute(async (req, res) => res.json(await staff.catalogue(req.user.id))));
+app.get("/api/provider/staff/activity", providerOnly, staffRoute(async (req, res) => res.json(staff.listActivity(req.user.id, { limit: 200 }))));
+app.get("/api/provider/staff", providerOnly, staffRoute(async (req, res) => res.json(await staff.listWithStats(req.user.id))));
+app.post("/api/provider/staff", providerOnly, staffRoute(async (req, res) => res.status(201).json(await staff.createStaff(req.user.id, req.body || {}, staffActor(req)))));
+app.get("/api/provider/staff/:id", providerOnly, staffRoute(async (req, res) => {
+  const d = await staff.detail(req.user.id, req.params.id);
+  if (!d) return res.status(404).json({ error: "Staff member not found" });
+  res.json(d);
+}));
+app.patch("/api/provider/staff/:id", providerOnly, staffRoute(async (req, res) => {
+  const s = await staff.updateStaff(req.user.id, req.params.id, req.body || {}, staffActor(req));
+  if (!s) return res.status(404).json({ error: "Staff member not found" });
+  res.json(s);
+}));
+// The people an order can be assigned to (for staff who can assign but not manage staff).
+app.get("/api/provider/assignable-staff", providerOnly, staffRoute(async (req, res) => {
+  const list = await staff.listWithStats(req.user.id);
+  res.json(list.filter((s) => s.active !== false).map((s) => ({ id: s.id, name: s.name, role: s.role, serviceIds: s.serviceIds, pincodes: s.pincodes, pending: s.pending })));
+}));
+app.post("/api/provider/orders/:id/assign", providerOnly, staffRoute(async (req, res) => {
+  const booking = await store.getBooking(req.params.id);
+  if (!booking || booking.providerId !== req.user.id) return res.status(404).json({ error: "Order not found" });
+  const assignedStaff = await staff.assignOrder(req.user.id, booking, req.body?.staffId || null, staffActor(req));
+  res.json({ assignedStaff });
+}));
 
 // ---- User management: internal staff accounts, roles, permissions ----
 const audit = (req, action, entityType, entityId, entityName, changes = []) =>

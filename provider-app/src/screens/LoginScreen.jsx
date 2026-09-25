@@ -41,8 +41,8 @@ export default function LoginScreen() {
     setError("");
     setBusy(true);
     try {
-      const { token, user } = await api.verifyOtp(fullPhone, code.trim(), "provider", name.trim());
-      login(token, user);
+      const { token, user, staff } = await api.verifyOtp(fullPhone, code.trim(), "provider", name.trim());
+      login(token, user, staff || null);
     } catch (err) {
       setError(err.message || "Incorrect code");
     } finally {
