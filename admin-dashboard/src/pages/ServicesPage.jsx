@@ -23,9 +23,65 @@ const statusStyles = {
 
 const statusLabels = { pending_approval: "pending approval" };
 
+// One module for both: the tiles at the top are the six headline numbers and
+// jump straight to the matching list below.
 export default function ServicesPage() {
-  const { services, providers, toggleServiceStatus, reviewService, deleteService, showToast } = useApp();
+  const { categories, services } = useApp();
+  const [view, setView] = useState("services");
   const [tab, setTab] = useState("All");
+  const [catFilter, setCatFilter] = useState("all");
+
+  const count = (status) => services.filter((s) => s.status === status).length;
+  const tiles = [
+    { label: "Active categories", value: categories.filter((c) => c.active !== false).length, go: () => { setView("categories"); setCatFilter("active"); } },
+    { label: "Inactive categories", value: categories.filter((c) => c.active === false).length, go: () => { setView("categories"); setCatFilter("inactive"); } },
+    { label: "Services", value: services.length, go: () => { setView("services"); setTab("All"); } },
+    { label: "Active services", value: count("active"), go: () => { setView("services"); setTab("Active"); } },
+    { label: "Pending services", value: count("pending_approval"), go: () => { setView("services"); setTab("Pending Approval"); }, tone: count("pending_approval") > 0 ? "text-blue-600" : undefined },
+    { label: "Rejected services", value: count("rejected"), go: () => { setView("services"); setTab("Rejected"); }, tone: count("rejected") > 0 ? "text-red-600" : undefined },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        {tiles.map((t) => (
+          <button
+            key={t.label}
+            onClick={t.go}
+            className="rounded-2xl bg-white p-3.5 text-left shadow-card transition-shadow hover:shadow-md"
+          >
+            <p className={`text-[22px] font-extrabold ${t.tone || "text-gray-900"}`}>{t.value}</p>
+            <p className="text-[11.5px] font-medium text-gray-400">{t.label}</p>
+          </button>
+        ))}
+      </div>
+
+      <div className="flex w-fit gap-1 rounded-xl bg-white p-1 shadow-card">
+        {[
+          ["services", "Services"],
+          ["categories", "Categories"],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setView(key)}
+            className={`rounded-lg px-4 py-1.5 text-[12.5px] font-semibold ${view === key ? "bg-brand text-white" : "text-gray-500"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === "categories" ? (
+        <CategoriesPanel filter={catFilter} setFilter={setCatFilter} />
+      ) : (
+        <ServicesPanel tab={tab} setTab={setTab} />
+      )}
+    </div>
+  );
+}
+
+function ServicesPanel({ tab, setTab }) {
+  const { services, providers, toggleServiceStatus, reviewService, deleteService, showToast } = useApp();
   const [editing, setEditing] = useState(null);
   const [rejecting, setRejecting] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
@@ -325,6 +381,193 @@ function Modal({ title, onClose, children }) {
         </div>
         {children}
       </div>
+    </div>
+  );
+}
+
+function CategoriesPanel({ filter, setFilter }) {
+  const { categories, services, addCategory, updateCategory, deleteCategory, showToast } = useApp();
+  const [adding, setAdding] = useState({ name: "", icon: "" });
+  const [editingCat, setEditingCat] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
+  const visible = categories.filter(
+    (c) => filter === "all" || (filter === "active" ? c.active !== false : c.active === false)
+  );
+  const serviceCount = (id) => services.filter((s) => s.categoryId === id).length;
+
+  const run = async (id, fn) => {
+    setBusyId(id);
+    try {
+      await fn();
+    } catch (err) {
+      showToast(err.message || "Action failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const submitAdd = async (e) => {
+    e.preventDefault();
+    if (!adding.name.trim()) return;
+    await run("new", async () => {
+      await addCategory({ name: adding.name.trim(), icon: adding.icon.trim() || undefined });
+      setAdding({ name: "", icon: "" });
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2 overflow-x-auto rounded-2xl bg-white p-1.5 shadow-card">
+        {["all", "active", "inactive"].map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`flex-shrink-0 rounded-xl px-4 py-2 text-[12.5px] font-semibold capitalize transition-colors ${
+              filter === f ? "bg-brand text-white" : "text-gray-500 hover:bg-gray-50"
+            }`}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
+
+      <form onSubmit={submitAdd} className="flex gap-2 rounded-2xl bg-white p-3 shadow-card">
+        <input
+          value={adding.icon}
+          onChange={(e) => setAdding({ ...adding, icon: e.target.value })}
+          placeholder="🌿"
+          maxLength={8}
+          className="w-16 rounded-lg border border-gray-200 px-2 py-2 text-center text-[14px] outline-none focus:border-brand"
+        />
+        <input
+          value={adding.name}
+          onChange={(e) => setAdding({ ...adding, name: e.target.value })}
+          placeholder="New category name"
+          className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] outline-none focus:border-brand"
+        />
+        <button
+          type="submit"
+          disabled={!adding.name.trim() || busyId === "new"}
+          className="flex-shrink-0 rounded-lg bg-brand px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
+        >
+          Add category
+        </button>
+      </form>
+
+      <div className="overflow-hidden rounded-2xl bg-white shadow-card">
+        <div className="no-scrollbar overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-[12.5px]">
+            <thead>
+              <tr className="border-b border-gray-100 text-gray-400">
+                <th className="px-4 py-3 font-medium">Category</th>
+                <th className="px-4 py-3 font-medium">Services</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Manage</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((c) => {
+                const active = c.active !== false;
+                const busy = busyId === c.id;
+                return (
+                  <tr key={c.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
+                    <td className="px-4 py-3 font-semibold text-gray-800">
+                      <span className="mr-2 text-lg">{c.icon}</span>
+                      {c.name}
+                      <span className="ml-2 text-[10.5px] font-normal text-gray-400">{c.id}</span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">{serviceCount(c.id)}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+                          active ? "bg-emerald-100 text-emerald-700" : "bg-gray-200 text-gray-600"
+                        }`}
+                      >
+                        {active ? "active" : "inactive"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          onClick={() => run(c.id, () => updateCategory(c.id, { active: !active }))}
+                          disabled={busy}
+                          className="switch"
+                          data-on={active}
+                          aria-label={`Toggle ${c.name}`}
+                        >
+                          <span className="switch-knob" />
+                        </button>
+                        <button
+                          onClick={() => setEditingCat({ id: c.id, name: c.name, icon: c.icon || "" })}
+                          className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11.5px] font-semibold text-gray-600"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={() => {
+                            if (confirmDeleteId !== c.id) return setConfirmDeleteId(c.id);
+                            setConfirmDeleteId(null);
+                            run(c.id, () => deleteCategory(c.id));
+                          }}
+                          className={`rounded-lg px-2.5 py-1 text-[11.5px] font-semibold disabled:opacity-50 ${
+                            confirmDeleteId === c.id ? "bg-red-600 text-white" : "border border-red-200 text-red-600"
+                          }`}
+                        >
+                          {confirmDeleteId === c.id ? "Confirm delete" : "Delete"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {visible.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-10 text-center text-gray-400">
+                    No {filter === "all" ? "" : filter} categories.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p className="px-1 text-[11.5px] text-gray-400">
+        An inactive category and all of its services are hidden from customers, and providers can't add services to
+        it. A category can only be deleted once it has no services.
+      </p>
+
+      {editingCat && (
+        <Modal title="Edit category" onClose={() => setEditingCat(null)}>
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <input
+                value={editingCat.icon}
+                onChange={(e) => setEditingCat({ ...editingCat, icon: e.target.value })}
+                maxLength={8}
+                className="w-16 rounded-lg border border-gray-200 px-2 py-2 text-center text-[14px] outline-none focus:border-brand"
+              />
+              <input
+                value={editingCat.name}
+                onChange={(e) => setEditingCat({ ...editingCat, name: e.target.value })}
+                className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] outline-none focus:border-brand"
+              />
+            </div>
+            <button
+              onClick={() => {
+                const { id, name, icon } = editingCat;
+                setEditingCat(null);
+                run(id, () => updateCategory(id, { name, icon }));
+              }}
+              className="w-full rounded-lg bg-brand py-2 text-[12.5px] font-semibold text-white"
+            >
+              Save changes
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

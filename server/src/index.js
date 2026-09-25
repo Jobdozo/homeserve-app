@@ -255,7 +255,7 @@ app.get("/api/bootstrap", ah(async (req, res) => {
     store.listCategories(),
     store.listServices({ activeOnly: true, pincode }),
   ]);
-  res.json({ providers: providers.map(publicProvider), categories, services });
+  res.json({ providers: providers.map(publicProvider), categories: categories.filter((c) => c.active), services });
 }));
 
 // ---- customer's registered address (drives PIN-code catalog visibility) ----
@@ -449,7 +449,27 @@ app.get("/api/providers/:id/reviews", ah(async (req, res) => {
 }));
 
 // ---- categories ----
-app.get("/api/categories", ah(async (req, res) => res.json(await store.listCategories())));
+// Customers and providers only ever see active categories; admins see all
+// (each carries an `active` flag).
+app.get("/api/categories", ah(async (req, res) => {
+  const categories = await store.listCategories();
+  res.json(optionalUser(req)?.role === "admin" ? categories : categories.filter((c) => c.active));
+}));
+
+app.patch("/api/admin/categories/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { name, icon, active } = req.body || {};
+  const category = await store.updateCategory(req.params.id, { name, icon, active });
+  if (!category) return res.status(404).json({ error: "Category not found" });
+  io.emit("activity:created", (await store.listActivities(1))[0]);
+  res.json(category);
+}));
+
+app.delete("/api/admin/categories/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const deleted = await store.deleteCategory(req.params.id);
+  if (!deleted) return res.status(404).json({ error: "Category not found" });
+  io.emit("activity:created", (await store.listActivities(1))[0]);
+  res.json({ deleted: true });
+}));
 
 app.post("/api/admin/categories", auth.requireAuth("admin"), ah(async (req, res) => {
   const { name, icon } = req.body || {};

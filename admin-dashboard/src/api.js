@@ -83,6 +83,9 @@ export const api = {
   getTransactions: () => request("/admin/transactions"),
   getReports: () => request("/admin/reports"),
 
+  updateCategory: (id, patch) =>
+    request(`/admin/categories/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deleteCategory: (id) => request(`/admin/categories/${id}`, { method: "DELETE" }),
   createCategory: (data) => request("/admin/categories", { method: "POST", body: JSON.stringify(data) }),
   createProvider: (data) => request("/admin/providers", { method: "POST", body: JSON.stringify(data) }),
   createService: (data) => request("/admin/services", { method: "POST", body: JSON.stringify(data) }),

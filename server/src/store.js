@@ -87,8 +87,18 @@ const BOOKING_FIELDS = `
 
 // ---- mappers: raw GraphQL rows -> the exact shapes the rest of the app expects ----
 
+// Categories have no status column (and the schema can't be migrated), so an
+// admin's "inactive" choice lives in a small side record; no record = active.
+function isCategoryActive(slug) {
+  return jsonStore.readAll("categoryStatus").find((r) => r.id === slug)?.active !== false;
+}
+
+function inactiveCategorySlugs() {
+  return new Set(jsonStore.readAll("categoryStatus").filter((r) => r.active === false).map((r) => r.id));
+}
+
 function mapCategory(c) {
-  return { id: c.slug, name: c.name, icon: c.icon };
+  return { id: c.slug, name: c.name, icon: c.icon, active: isCategoryActive(c.slug) };
 }
 
 // Bump this string whenever the Service Provider Agreement's terms actually
@@ -272,6 +282,65 @@ async function listCategories() {
   if (cached) return cached;
   const { categories } = await query(`query { categories { slug name icon } }`, {});
   return cacheSet("categories", categories.map(mapCategory));
+}
+
+// Admin edit: rename / re-icon (the slug, which other records reference, never
+// changes) and switch active on or off. An inactive category and all of its
+// services disappear from the customer catalog.
+async function updateCategory(slug, patch) {
+  const categoryId = await getCategoryUuidBySlug(slug);
+  if (!categoryId) return undefined;
+  const fields = {};
+  if (patch.name !== undefined) {
+    const name = String(patch.name).trim();
+    if (!name) throw Object.assign(new Error("Category name can't be empty"), { status: 400 });
+    if (name.length > 60) throw Object.assign(new Error("Category name is too long"), { status: 400 });
+    const others = (await listCategories()).filter((c) => c.id !== slug);
+    if (others.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
+      throw Object.assign(new Error("A category with this name already exists"), { status: 409 });
+    }
+    fields.name = name;
+  }
+  if (patch.icon !== undefined) fields.icon = String(patch.icon).trim() || null;
+  if (Object.keys(fields).length > 0) {
+    const defs = Object.keys(fields).map((k) => `${k}: String`).join(", ");
+    const data = Object.keys(fields).map((k) => `${k}: ${k}`).join(", ");
+    await mutate(`mutation($id: UUID!, ${defs}) { category_update(id: $id, data: { ${data} }) }`, {
+      id: categoryId,
+      ...fields,
+    });
+  }
+  if (patch.active !== undefined) {
+    jsonStore.remove("categoryStatus", slug);
+    if (!patch.active) jsonStore.insert("categoryStatus", { id: slug, active: false });
+  }
+  cacheClear("categories");
+  cacheClear("service");
+  const updated = (await listCategories()).find((c) => c.id === slug);
+  await logActivity("category", `Category "${updated?.name || slug}" updated by admin`);
+  return updated;
+}
+
+// Refuses while any service still uses the category — deactivate it instead.
+async function deleteCategory(slug) {
+  const categoryId = await getCategoryUuidBySlug(slug);
+  if (!categoryId) return false;
+  const { services } = await query(
+    `query($id: UUID!) { services(where: { categoryId: { eq: $id } }) { id } }`,
+    { id: categoryId }
+  );
+  if (services.length > 0) {
+    throw Object.assign(
+      new Error(`This category has ${services.length} service${services.length > 1 ? "s" : ""} — deactivate it instead, or move/delete the services first`),
+      { status: 409 }
+    );
+  }
+  const name = (await listCategories()).find((c) => c.id === slug)?.name || slug;
+  await mutate(`mutation($id: UUID!) { category_delete(id: $id) }`, { id: categoryId });
+  jsonStore.remove("categoryStatus", slug);
+  cacheClear("categories");
+  await logActivity("category", `Category "${name}" deleted by admin`);
+  return true;
 }
 
 async function createCategory({ name, icon }) {
@@ -552,8 +621,13 @@ async function listServices({ activeOnly = false, pincode } = {}) {
   if (!activeOnly) return all;
   const active = listActiveWalletProviderIds();
   const restrictedIds = await getCapacityRestrictedProviderIds();
+  const inactiveCategories = inactiveCategorySlugs();
   let result = all.filter(
-    (s) => active.has(s.providerId) && isProviderAcceptingRequests(s.providerId) && !restrictedIds.has(s.providerId)
+    (s) =>
+      active.has(s.providerId) &&
+      isProviderAcceptingRequests(s.providerId) &&
+      !restrictedIds.has(s.providerId) &&
+      !inactiveCategories.has(s.categoryId)
   );
   if (pincode) {
     result = result.filter((s) => isProviderVisibleForPincode(s.providerId, pincode));
@@ -578,6 +652,9 @@ async function listProviderServices(providerId) {
 }
 
 async function addProviderService(providerId, data) {
+  if (data.categorySlug && !isCategoryActive(data.categorySlug)) {
+    throw Object.assign(new Error("That category isn't available right now"), { status: 400 });
+  }
   const categoryId = (await getCategoryUuidBySlug(data.categorySlug || "ac-repair")) || null;
   const { service_insert } = await mutate(
     `mutation($providerId: UUID!, $categoryId: UUID, $name: String!, $price: Int!, $originalPrice: Int, $icon: String, $distanceLabel: String) {
@@ -865,6 +942,9 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
   if (!service) throw new Error("Unknown service");
   if (service.status === "pending_approval" || service.status === "rejected") {
     throw Object.assign(new Error("This service isn't available yet"), { status: 409 });
+  }
+  if (!isCategoryActive(service.categoryId)) {
+    throw Object.assign(new Error("This service isn't available right now"), { status: 409 });
   }
   if (!isProviderAcceptingRequests(service.providerId)) {
     throw Object.assign(new Error("This provider isn't currently accepting new bookings"), { status: 409 });
@@ -2567,6 +2647,8 @@ module.exports = {
   getProvider,
   listCategories,
   createCategory,
+  updateCategory,
+  deleteCategory,
   listServices,
   getService,
   listProviderServices,

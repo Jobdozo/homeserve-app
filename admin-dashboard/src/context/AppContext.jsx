@@ -270,6 +270,26 @@ export function AppProvider({ children }) {
     [showToast, scheduleRefresh]
   );
 
+  const updateCategory = useCallback(
+    async (id, patch) => {
+      const category = await api.updateCategory(id, patch);
+      setCategories((prev) => prev.map((c) => (c.id === id ? category : c)));
+      showToast("Category updated");
+      scheduleRefresh();
+      return category;
+    },
+    [showToast, scheduleRefresh]
+  );
+
+  const deleteCategory = useCallback(
+    async (id) => {
+      await api.deleteCategory(id);
+      setCategories((prev) => prev.filter((c) => c.id !== id));
+      showToast("Category deleted");
+    },
+    [showToast]
+  );
+
   const addCategory = useCallback(
     async (data) => {
       const category = await api.createCategory(data);
@@ -337,6 +357,8 @@ export function AppProvider({ children }) {
       deleteService,
       refreshData: scheduleRefresh,
       addCategory,
+      updateCategory,
+      deleteCategory,
       addProvider,
       addService,
       sendBroadcastNotification,
@@ -366,6 +388,8 @@ export function AppProvider({ children }) {
       deleteService,
       scheduleRefresh,
       addCategory,
+      updateCategory,
+      deleteCategory,
       addProvider,
       addService,
       sendBroadcastNotification,
