@@ -135,7 +135,7 @@ export default function DashboardScreen() {
       <div className="mx-4 mt-4 rounded-2xl bg-white p-4 shadow-card lg:mx-8 lg:mt-4 lg:max-w-lg lg:p-6">
         <h2 className="mb-3 text-[13.5px] font-bold text-gray-900 lg:text-[15px]">Today's Overview</h2>
         <OverviewRow color="bg-brand" label="New Requests" value={stats.newRequests} />
-        <OverviewRow color="bg-amber-400" label="Pending Jobs" value={stats.pending} />
+        <OverviewRow color="bg-amber-400" label="Open Jobs" value={stats.pending} />
         <OverviewRow color="bg-blue-500" label="Jobs in Progress" value={stats.inProgress} />
         <OverviewRow color="bg-emerald-500" label="Completed Today" value={stats.completed} last />
       </div>

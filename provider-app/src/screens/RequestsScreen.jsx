@@ -4,27 +4,32 @@ import { useApp } from "../context/AppContext";
 import { FilterIcon, MapPinIcon } from "../components/icons";
 import CategoryIcon from "../components/CategoryIcon";
 
-const TABS = ["New", "Accepted", "Rejected"];
+// Each tab is a pure function of the booking's status, so a request moves
+// between tabs by itself as the order workflow advances (Pending → Open once
+// accepted → In Progress once the start OTP is verified → Completed), or to
+// Rejected if declined/cancelled — no manual bookkeeping.
+const TAB_STATUSES = {
+  Pending: ["Pending"],
+  Open: ["Accepted"],
+  "In Progress": ["In Progress"],
+  Completed: ["Completed"],
+  Rejected: ["Rejected", "Cancelled"],
+};
+const TABS = Object.keys(TAB_STATUSES);
 
 export default function RequestsScreen() {
   const navigate = useNavigate();
   const { requests, acceptRequest, rejectRequest, showToast } = useApp();
-  const [tab, setTab] = useState("New");
+  const [tab, setTab] = useState("Pending");
 
   const counts = useMemo(
-    () => ({
-      New: requests.filter((r) => r.status === "Pending").length,
-      Accepted: requests.filter((r) => ["Accepted", "In Progress", "Completed"].includes(r.status)).length,
-      Rejected: requests.filter((r) => ["Rejected", "Cancelled"].includes(r.status)).length,
-    }),
+    () => Object.fromEntries(TABS.map((t) => [t, requests.filter((r) => TAB_STATUSES[t].includes(r.status)).length])),
     [requests]
   );
 
   const filtered = useMemo(() => {
     const sorted = [...requests].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    if (tab === "New") return sorted.filter((r) => r.status === "Pending");
-    if (tab === "Accepted") return sorted.filter((r) => ["Accepted", "In Progress", "Completed"].includes(r.status));
-    return sorted.filter((r) => ["Rejected", "Cancelled"].includes(r.status));
+    return sorted.filter((r) => TAB_STATUSES[tab].includes(r.status));
   }, [requests, tab]);
 
   return (
@@ -39,12 +44,12 @@ export default function RequestsScreen() {
         </button>
       </div>
 
-      <div className="mt-3 flex gap-4 border-b border-gray-100 px-4 lg:mt-5 lg:px-0">
+      <div className="no-scrollbar mt-3 flex gap-4 overflow-x-auto border-b border-gray-100 px-4 lg:mt-5 lg:px-0">
         {TABS.map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`relative pb-2.5 text-[13px] font-semibold lg:text-[14px] ${tab === t ? "text-brand" : "text-gray-400"}`}
+            className={`relative flex-shrink-0 whitespace-nowrap pb-2.5 text-[13px] font-semibold lg:text-[14px] ${tab === t ? "text-brand" : "text-gray-400"}`}
           >
             {t} ({counts[t]})
             {tab === t && <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-brand" />}
