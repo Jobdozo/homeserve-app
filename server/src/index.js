@@ -10,10 +10,11 @@ const monitoring = require("./monitoring");
 const complaints = require("./complaints");
 const access = require("./access");
 const staff = require("./staff");
-auth.setAdminGuard(access.guard);
-auth.setProviderGuard(staff.guard);
 const csvImport = require("./csvImport");
 const auth = require("./auth");
+// Per-request permission checks for staff sign-ins (admin roles, provider staff).
+auth.setAdminGuard(access.guard);
+auth.setProviderGuard(staff.guard);
 const { sendOtpViaWhatsApp } = require("./whatsapp");
 const liveLocation = require("./liveLocation");
 const push = require("./push");
