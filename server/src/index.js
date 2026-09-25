@@ -11,11 +11,13 @@ const complaints = require("./complaints");
 const access = require("./access");
 const staff = require("./staff");
 const rulesConfig = require("./rules");
+const accountDeletion = require("./accountDeletion");
 const csvImport = require("./csvImport");
 const auth = require("./auth");
 // Per-request permission checks for staff sign-ins (admin roles, provider staff).
 auth.setAdminGuard(access.guard);
 auth.setProviderGuard(staff.guard);
+auth.setRevocationCheck(accountDeletion.isDeleted);
 const { sendOtpViaWhatsApp } = require("./whatsapp");
 const liveLocation = require("./liveLocation");
 const push = require("./push");
@@ -1436,6 +1438,22 @@ app.delete("/api/admin/complaint-stages/:key", adminOnly, crm(async (req, res) =
 }));
 
 app.get("/api/admin/staff", adminOnly, crm(async (req, res) => res.json(await complaints.listStaff())));
+
+// ---- Delete my account (Play Store requirement). The person must confirm
+// by sending confirm: "DELETE"; open orders block it. ----
+const deleteAccountRoute = (fn) =>
+  ah(async (req, res) => {
+    if (req.body?.confirm !== "DELETE") return res.status(400).json({ error: 'Send confirm: "DELETE" to delete your account' });
+    try {
+      await fn(req.user.id);
+    } catch (e) {
+      if (e.status) return res.status(e.status).json({ error: e.message });
+      throw e;
+    }
+    res.status(204).end();
+  });
+app.delete("/api/customer/account", auth.requireAuth("customer"), deleteAccountRoute(accountDeletion.deleteCustomerAccount));
+app.delete("/api/provider/account", auth.requireAuth("provider"), deleteAccountRoute(accountDeletion.deleteProviderAccount));
 
 // ---- Service provider staff management (the company's own employees) ----
 const staffActor = (req) => (req.staff ? { staff: req.staff, name: req.staff.name } : { owner: true, name: "Owner" });

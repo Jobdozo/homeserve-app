@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import DeleteAccountModal from "../components/DeleteAccountModal";
 import { useApp } from "../context/AppContext";
 import { ChevronRightIcon, StarIcon, ShieldCheckIcon, EditIcon, LogoutIcon } from "../components/icons";
 
@@ -11,6 +13,7 @@ const verificationBadges = {
 export default function ProfileScreen() {
   const navigate = useNavigate();
   const { provider: providerProfile, wallet, showToast, logout, can, staff } = useApp();
+  const [deleting, setDeleting] = useState(false);
 
   const menuItems = [
     {
@@ -104,6 +107,12 @@ export default function ProfileScreen() {
       >
         <LogoutIcon width={16} height={16} /> Logout
       </button>
+      {!staff && (
+        <button onClick={() => setDeleting(true)} className="mx-4 mt-3 py-2 text-center text-[12.5px] font-medium text-gray-400 underline lg:mx-0">
+          Delete account
+        </button>
+      )}
+      {deleting && <DeleteAccountModal onClose={() => setDeleting(false)} />}
     </div>
   );
 }

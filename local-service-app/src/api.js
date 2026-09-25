@@ -53,6 +53,7 @@ export const api = {
   getProviderContact: (bookingId) => request(`/bookings/${bookingId}/provider-contact`),
   getBookingOtp: (bookingId) => request(`/bookings/${bookingId}/otp`),
   listBanners: () => request("/banners"),
+  deleteAccount: () => request("/customer/account", { method: "DELETE", body: JSON.stringify({ confirm: "DELETE" }) }),
   getHomeLayout: () => request("/home-layout"),
   trackBannerClick: (id) => request(`/banners/${id}/click`, { method: "POST" }).catch(() => null),
   getVapidPublicKey: () => request("/push/vapid-public-key"),

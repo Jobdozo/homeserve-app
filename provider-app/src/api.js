@@ -54,6 +54,7 @@ export const api = {
     request("/auth/otp/verify", { method: "POST", body: JSON.stringify({ phone, code, role, name }) }),
   me: () => request("/auth/me"),
   getSwapRules: () => request("/provider/swap-rules"),
+  deleteAccount: () => request("/provider/account", { method: "DELETE", body: JSON.stringify({ confirm: "DELETE" }) }),
   getStaffCatalogue: () => request("/provider/staff/catalogue"),
   listStaff: () => request("/provider/staff"),
   getStaffActivity: () => request("/provider/staff/activity"),

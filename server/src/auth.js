@@ -73,6 +73,11 @@ function setAdminGuard(fn) {
   adminGuard = fn;
 }
 // Same idea for provider staff sign-ins (tokens that carry a staffId).
+// Accounts that were deleted: their old tokens stop working at once.
+let revocationCheck = null;
+function setRevocationCheck(fn) {
+  revocationCheck = fn;
+}
 let providerGuard = null;
 function setProviderGuard(fn) {
   providerGuard = fn;
@@ -86,6 +91,9 @@ function requireAuth(...allowedRoles) {
     if (!payload) return res.status(401).json({ error: "Not authenticated" });
     if (allowedRoles.length && !allowedRoles.includes(payload.role)) {
       return res.status(403).json({ error: "Not authorized for this action" });
+    }
+    if (payload.role !== "admin" && revocationCheck && revocationCheck(payload.id)) {
+      return res.status(401).json({ error: "This account has been deleted" });
     }
     req.user = payload;
     if (payload.role === "admin" && adminGuard) {
@@ -105,6 +113,7 @@ module.exports = {
   isAdminPhone,
   adminPhones: () => [...ADMIN_PHONES],
   setAdminGuard,
+  setRevocationCheck,
   setProviderGuard,
   requestOtp,
   verifyOtp,

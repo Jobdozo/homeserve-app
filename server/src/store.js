@@ -3848,6 +3848,7 @@ module.exports = {
   listBanners,
   listActiveBanners,
   calcCommunicationFee,
+  clearCache: cacheClear,
   buildVisibilityContext,
   providerVisibilityIssues,
   serviceVisibilityIssues,

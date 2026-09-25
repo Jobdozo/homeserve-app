@@ -1,3 +1,5 @@
+import { useState } from "react";
+import DeleteAccountModal from "../components/DeleteAccountModal";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { ChevronRightIcon, StarIcon } from "../components/icons";
@@ -5,6 +7,7 @@ import { ChevronRightIcon, StarIcon } from "../components/icons";
 export default function ProfileScreen() {
   const navigate = useNavigate();
   const { customer, bookings, showToast, logout } = useApp();
+  const [deleting, setDeleting] = useState(false);
   const completed = bookings.filter((b) => b.status === "Completed").length;
 
   const menuItems = [
@@ -84,6 +87,10 @@ export default function ProfileScreen() {
       >
         Logout
       </button>
+      <button onClick={() => setDeleting(true)} className="mx-4 mt-3 py-2 text-center text-[12.5px] font-medium text-gray-400 underline lg:mx-0">
+        Delete account
+      </button>
+      {deleting && <DeleteAccountModal onClose={() => setDeleting(false)} />}
     </div>
   );
 }
