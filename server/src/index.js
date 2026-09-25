@@ -236,7 +236,11 @@ app.put("/api/customer/address", auth.requireAuth("customer"), ah(async (req, re
 // ---- provider service-area coverage (PIN codes; serveAllAreas is admin-only) ----
 app.patch("/api/providers/:id/coverage", auth.requireAuth("provider"), ah(async (req, res) => {
   if (req.params.id !== req.user.id) return res.status(403).json({ error: "Not your profile" });
-  const coverage = store.updateProviderCoverage(req.params.id, { pincodes: req.body?.pincodes }, { allowServeAllAreas: false });
+  const coverage = store.updateProviderCoverage(
+    req.params.id,
+    { pincodes: req.body?.pincodes, acceptingRequests: req.body?.acceptingRequests },
+    { allowServeAllAreas: false }
+  );
   res.json(coverage);
 }));
 
@@ -244,6 +248,7 @@ app.patch("/api/admin/providers/:id/coverage", auth.requireAuth("admin"), ah(asy
   const coverage = store.updateProviderCoverage(req.params.id, {
     pincodes: req.body?.pincodes,
     serveAllAreas: req.body?.serveAllAreas,
+    acceptingRequests: req.body?.acceptingRequests,
   });
   res.json(coverage);
 }));

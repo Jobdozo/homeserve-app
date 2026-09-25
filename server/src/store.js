@@ -125,7 +125,16 @@ function mapProvider(p) {
 
 function getProviderCoverage(providerId) {
   const existing = jsonStore.readAll("providerCoverage").find((c) => c.id === providerId);
-  return existing || { id: providerId, pincodes: [], serveAllAreas: false };
+  const base = existing || { id: providerId, pincodes: [], serveAllAreas: false };
+  // Records saved before this switch existed have no flag — they're accepting.
+  return { ...base, acceptingRequests: base.acceptingRequests !== false };
+}
+
+// Provider's own Enable/Disable Receiving Requests switch: off hides all of
+// their services from customers and blocks new bookings, while jobs already
+// in flight carry on untouched (nothing else keys off this flag).
+function isProviderAcceptingRequests(providerId) {
+  return getProviderCoverage(providerId).acceptingRequests;
 }
 
 // A provider with no coverage configured yet (the common case today, since
@@ -156,6 +165,9 @@ function updateProviderCoverage(providerId, patch, { allowServeAllAreas = true }
   }
   if (allowServeAllAreas && patch.serveAllAreas !== undefined) {
     next.serveAllAreas = !!patch.serveAllAreas;
+  }
+  if (patch.acceptingRequests !== undefined) {
+    next.acceptingRequests = !!patch.acceptingRequests;
   }
   const hasExisting = jsonStore.readAll("providerCoverage").some((c) => c.id === providerId);
   const saved = hasExisting ? jsonStore.update("providerCoverage", providerId, next) : jsonStore.insert("providerCoverage", next);
@@ -523,7 +535,7 @@ async function listServices({ activeOnly = false, pincode } = {}) {
   // remain visible to admin (activeOnly: false) so they aren't hidden there.
   if (!activeOnly) return all;
   const active = listActiveWalletProviderIds();
-  let result = all.filter((s) => active.has(s.providerId));
+  let result = all.filter((s) => active.has(s.providerId) && isProviderAcceptingRequests(s.providerId));
   if (pincode) {
     result = result.filter((s) => isProviderVisibleForPincode(s.providerId, pincode));
   }
@@ -736,6 +748,9 @@ async function getMessages(bookingId) {
 async function createBooking({ serviceId, date, time, address, issue, customerId, orderId, offerCode, flatDiscount = 0 }) {
   const service = await getService(serviceId);
   if (!service) throw new Error("Unknown service");
+  if (!isProviderAcceptingRequests(service.providerId)) {
+    throw Object.assign(new Error("This provider isn't currently accepting new bookings"), { status: 409 });
+  }
   if (isProviderSuspended(service.providerId)) {
     throw Object.assign(new Error("This provider isn't currently accepting new bookings"), { status: 409 });
   }
@@ -958,7 +973,11 @@ async function findAlternativeProviderService(categorySlug, excludeProviderIds) 
     { categoryId: categoryUuid }
   );
   const candidate = services.find(
-    (s) => s.provider && !excludeProviderIds.includes(s.provider.id) && !isProviderSuspended(s.provider.id)
+    (s) =>
+      s.provider &&
+      !excludeProviderIds.includes(s.provider.id) &&
+      !isProviderSuspended(s.provider.id) &&
+      isProviderAcceptingRequests(s.provider.id)
   );
   if (!candidate) return null;
   return { serviceId: candidate.id, providerId: candidate.provider.id, amount: candidate.price };
@@ -2011,6 +2030,9 @@ function isServiceCurrentlyAdvertised(serviceId) {
 async function registerAdClick(serviceId) {
   const ad = jsonStore.readAll("providerAds").find((a) => a.serviceId === serviceId && a.status === "active");
   if (!ad) return { charged: false, ad: null };
+  // Hidden services can't legitimately be clicked; never bill a provider
+  // who has switched requests off (e.g. a stale link).
+  if (!isProviderAcceptingRequests(ad.providerId)) return { charged: false, ad };
 
   const { cpcRate } = getSettings();
   const wallet = getWallet(ad.providerId);

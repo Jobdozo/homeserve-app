@@ -240,6 +240,19 @@ export default function ProviderDetailModal({ providerId, onClose }) {
                 className="h-4 w-4 accent-brand"
               />
             </div>
+            <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 text-[12.5px]">
+              <span className="text-gray-500">Accepting new requests (provider's own switch)</span>
+              <input
+                type="checkbox"
+                checked={provider.coverage?.acceptingRequests !== false}
+                onChange={() =>
+                  updateProviderCoverage(provider.id, {
+                    acceptingRequests: provider.coverage?.acceptingRequests === false,
+                  }).catch((err) => showToast(err.message || "Failed to update"))
+                }
+                className="h-4 w-4 accent-brand"
+              />
+            </div>
             <div className="flex gap-2">
               <input
                 value={pincodeInput}

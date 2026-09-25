@@ -1,11 +1,23 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { BellIcon, StarIcon, ShieldCheckIcon, TrendUpIcon, TrendDownIcon, AlertIcon } from "../components/icons";
 
 export default function DashboardScreen() {
   const navigate = useNavigate();
-  const { provider: providerProfile, requests, earnings, wallet, notifications } = useApp();
+  const { provider: providerProfile, requests, earnings, wallet, notifications, setAcceptingRequests, showToast } = useApp();
+  const accepting = providerProfile.coverage?.acceptingRequests !== false;
+  const [togglingRequests, setTogglingRequests] = useState(false);
+  const toggleAccepting = async () => {
+    setTogglingRequests(true);
+    try {
+      await setAcceptingRequests(!accepting);
+    } catch (e) {
+      showToast(e.message || "Couldn't update — please try again");
+    } finally {
+      setTogglingRequests(false);
+    }
+  };
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const stats = useMemo(() => {
@@ -48,8 +60,34 @@ export default function DashboardScreen() {
         </button>
       </div>
 
+      <div
+        className={`mx-4 flex items-center justify-between gap-3 rounded-2xl border p-4 shadow-card lg:mx-8 lg:mt-6 ${
+          accepting ? "-mt-4 border-gray-100 bg-white" : "mt-3 border-amber-200 bg-amber-50"
+        }`}
+      >
+        <div>
+          <p className="text-[13px] font-bold text-gray-900">
+            {accepting ? "Receiving new requests" : "Not receiving new requests"}
+          </p>
+          <p className="mt-0.5 text-[11px] leading-snug text-gray-500">
+            {accepting
+              ? "Customers in your area can see and book your services."
+              : "Your services are hidden from customers. Jobs already in progress continue as normal."}
+          </p>
+        </div>
+        <button
+          onClick={toggleAccepting}
+          disabled={togglingRequests}
+          className="switch flex-shrink-0 disabled:opacity-50"
+          data-on={accepting}
+          aria-label="Toggle receiving requests"
+        >
+          <span className="switch-knob" />
+        </button>
+      </div>
+
       {wallet.suspended && (
-        <div className="mx-4 -mt-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 shadow-card lg:mx-8 lg:mt-6 lg:p-6">
+        <div className="mx-4 mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 shadow-card lg:mx-8 lg:mt-6 lg:p-6">
           <AlertIcon width={20} height={20} className="mt-0.5 flex-shrink-0 text-red-500" />
           <div>
             <p className="text-[13px] font-bold text-red-700">Account paused — wallet balance ₹0</p>
@@ -61,11 +99,7 @@ export default function DashboardScreen() {
       )}
 
       {/* Earnings card */}
-      <div
-        className={`mx-4 flex items-center justify-between rounded-2xl bg-white p-4 shadow-card lg:mx-8 lg:mt-6 lg:p-6 ${
-          wallet.suspended ? "mt-3" : "-mt-4"
-        }`}
-      >
+      <div className="mx-4 mt-3 flex items-center justify-between rounded-2xl bg-white p-4 shadow-card lg:mx-8 lg:mt-6 lg:p-6">
         <div>
           <p className="text-[11px] text-gray-400">Earnings This Month</p>
           <p className="text-2xl font-extrabold text-gray-900 lg:text-3xl">₹{earnings.thisMonth.toLocaleString("en-IN")}</p>

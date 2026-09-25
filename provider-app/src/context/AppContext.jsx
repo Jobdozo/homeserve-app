@@ -492,6 +492,17 @@ export function AppProvider({ children }) {
     return updated;
   }, []);
 
+  const setAcceptingRequests = useCallback(
+    async (value) => {
+      if (!provider) return;
+      const coverage = await api.setAcceptingRequests(provider.id, value);
+      setProvider((prev) => (prev ? { ...prev, coverage } : prev));
+      showToast(value ? "You're now receiving requests" : "Requests paused — your services are hidden");
+      return coverage;
+    },
+    [provider, showToast]
+  );
+
   const updateCoverage = useCallback(
     async (pincodes) => {
       if (!provider) return;
@@ -540,6 +551,7 @@ export function AppProvider({ children }) {
       addService,
       updateProfile,
       updateCoverage,
+      setAcceptingRequests,
       acceptAgreement,
       notifications,
       notificationPrefs,
@@ -575,6 +587,7 @@ export function AppProvider({ children }) {
       addService,
       updateProfile,
       updateCoverage,
+      setAcceptingRequests,
       acceptAgreement,
       notifications,
       notificationPrefs,
