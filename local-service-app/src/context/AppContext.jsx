@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { api, setAuthToken } from "../api";
-import { socket } from "../socket";
+import { socket, setSocketToken } from "../socket";
 import { timeSlots } from "../data/mockData";
 import { detectCurrentLocation } from "../utils/geolocation";
 import { ensurePushSubscribed, onNativeNotificationTap } from "../utils/pushNotifications";
@@ -155,12 +155,14 @@ export function AppProvider({ children }) {
 
   const login = useCallback((token, user) => {
     setAuthToken(token);
+    setSocketToken(token);
     localStorage.setItem(AUTH_KEY, JSON.stringify({ token, user }));
     setCustomer(user);
   }, []);
 
   const logout = useCallback(() => {
     setAuthToken(null);
+    setSocketToken(null);
     localStorage.removeItem(AUTH_KEY);
     setCustomer(null);
     setBookings([]);
@@ -178,6 +180,7 @@ export function AppProvider({ children }) {
         return;
       }
       setAuthToken(initialAuth.token);
+      setSocketToken(initialAuth.token);
       try {
         const { user } = await api.me();
         if (cancelled) return;

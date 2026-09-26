@@ -12,6 +12,7 @@ const access = require("./access");
 const staff = require("./staff");
 const rulesConfig = require("./rules");
 const accountDeletion = require("./accountDeletion");
+const rt = require("./realtime");
 const csvImport = require("./csvImport");
 const auth = require("./auth");
 // Per-request permission checks for staff sign-ins (admin roles, provider staff).
@@ -54,12 +55,13 @@ app.use((req, res, next) => {
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: ALLOWED_ORIGINS } });
 
-io.on("connection", (socket) => {
-  socket.on("disconnect", () => {});
-});
+// Sockets are authenticated and put in rooms by who they are (see realtime.js),
+// so booking, chat and notification events reach only the people involved.
+// Each side sees the booking with its own privacy masking applied.
+rt.attach(io, { forProvider: (b) => maskCompleted(b), forCustomer: (b) => hideCompletedChat(b) });
 
 store.onNotification((notification) => {
-  io.emit("notification:created", notification);
+  rt.notification(notification);
 });
 
 const AUTO_ACCEPT_DELAY = 3500;
@@ -75,10 +77,10 @@ function simulateProviderIfNeeded(booking) {
 
       const updated = await store.updateBookingStatus(booking.id, "Accepted");
       if (!updated) return;
-      io.emit("booking:updated", maskCompleted(updated));
+      rt.booking("booking:updated", updated);
 
       const message = await store.addMessage(booking.id, "provider", CANNED_ACCEPT);
-      io.emit("message:created", { bookingId: booking.id, message });
+      await rt.message(booking.id, message);
     } catch (e) {
       console.error("simulateProviderIfNeeded failed:", e);
     }
@@ -125,10 +127,10 @@ async function dispatchBooking(booking, triedProviderIds = [booking.providerId])
       const current = await store.getBooking(booking.id);
       if (!current || current.status !== "Pending") return; // already accepted/rejected/cancelled
       const result = await store.reassignBooking(booking.id, triedProviderIds);
-      io.emit("booking:updated", maskCompleted(result.booking));
-      io.emit("activity:created", (await store.listActivities(1))[0]);
+      rt.booking("booking:updated", result.booking, { previous: triedProviderIds });
+      rt.activity((await store.listActivities(1))[0]);
       if (result.reassigned) {
-        io.emit("booking:created", result.booking);
+        rt.booking("booking:created", result.booking);
         await dispatchBooking(result.booking, [...triedProviderIds, result.booking.providerId]);
       }
     } catch (e) {
@@ -147,7 +149,7 @@ function simulateReplyIfNeeded(bookingId, from) {
       if (!provider || provider.live) return;
 
       const message = await store.addMessage(bookingId, "provider", CANNED_REPLY);
-      io.emit("message:created", { bookingId, message });
+      await rt.message(bookingId, message);
     } catch (e) {
       console.error("simulateReplyIfNeeded failed:", e);
     }
@@ -376,7 +378,7 @@ app.post(
     if (result.fatal) return res.status(400).json({ error: result.fatal });
     if (!result.dryRun && result.imported > 0) {
       await store.logActivity("import", `Admin imported ${result.imported} ${result.module} from CSV`);
-      io.emit("activity:created", (await store.listActivities(1))[0]);
+      rt.activity((await store.listActivities(1))[0]);
     }
     res.json(result);
   })
@@ -453,8 +455,8 @@ app.post("/api/providers/:id/services", auth.requireAuth("provider"), ah(async (
     return res.status(400).json({ error: "name and price are required" });
   }
   const service = await store.addProviderService(req.params.id, req.body);
-  io.emit("service:created", service);
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.service("service:created", service);
+  rt.activity((await store.listActivities(1))[0]);
   res.status(201).json(service);
 }));
 
@@ -479,7 +481,7 @@ app.patch("/api/providers/:id/verification", auth.requireAuth("admin"), ah(async
   const provider = await store.setProviderVerification(req.params.id, status);
   if (!provider) return res.status(404).json({ error: "Provider not found" });
   io.emit("provider:updated", publicProvider(provider));
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.activity((await store.listActivities(1))[0]);
   res.json(provider);
 }));
 
@@ -487,7 +489,7 @@ app.delete("/api/admin/providers/:id", auth.requireAuth("admin"), ah(async (req,
   const deleted = await store.deleteProvider(req.params.id);
   if (!deleted) return res.status(404).json({ error: "Provider not found" });
   io.emit("provider:deleted", req.params.id);
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.activity((await store.listActivities(1))[0]);
   res.json({ deleted: true });
 }));
 
@@ -498,7 +500,7 @@ app.get("/api/admin/providers/:id/wallet", auth.requireAuth("admin"), ah(async (
 app.post("/api/admin/providers/:id/wallet/recharge", auth.requireAuth("admin"), ah(async (req, res) => {
   const amount = Number(req.body?.amount);
   const wallet = await store.rechargeProviderWallet(req.params.id, amount, req.body?.note);
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.activity((await store.listActivities(1))[0]);
   res.json(wallet);
 }));
 
@@ -532,8 +534,8 @@ app.patch("/api/providers/:id/services/:serviceId", auth.requireAuth("provider")
   if (req.user.id !== req.params.id) return res.status(403).json({ error: "Not your provider account" });
   const result = await store.updateProviderService(req.params.id, req.params.serviceId, req.body || {});
   if (!result) return res.status(404).json({ error: "Service not found" });
-  io.emit("service:updated", result.service);
-  if (result.changeRequest) io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.service("service:updated", result.service);
+  if (result.changeRequest) rt.activity((await store.listActivities(1))[0]);
   res.json({ ...result.service, changeRequest: result.changeRequest });
 }));
 
@@ -561,7 +563,7 @@ app.patch("/api/admin/categories/:id", auth.requireAuth("admin"), ah(async (req,
   const { name, icon, active } = req.body || {};
   const category = await store.updateCategory(req.params.id, { name, icon, active }, actorOf(req));
   if (!category) return res.status(404).json({ error: "Category not found" });
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.activity((await store.listActivities(1))[0]);
   res.json(category);
 }));
 
@@ -569,7 +571,7 @@ app.delete("/api/admin/categories/:id", auth.requireAuth("admin"), ah(async (req
   const deleted = await store.deleteCategory(req.params.id, actorOf(req));
   if (deleted) store.dropFeeOverride("category", req.params.id);
   if (!deleted) return res.status(404).json({ error: "Category not found" });
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.activity((await store.listActivities(1))[0]);
   res.json({ deleted: true });
 }));
 
@@ -581,7 +583,7 @@ app.post("/api/admin/categories", auth.requireAuth("admin"), ah(async (req, res)
     return res.status(409).json({ error: "A category with this name already exists" });
   }
   const category = await store.createCategory({ name: name.trim(), icon }, actorOf(req));
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.activity((await store.listActivities(1))[0]);
   res.status(201).json(category);
 }));
 
@@ -594,7 +596,7 @@ app.post("/api/admin/providers", auth.requireAuth("admin"), ah(async (req, res) 
   const existing = await store.getProviderByPhone(phone);
   if (existing) return res.status(409).json({ error: "A provider with this phone number already exists" });
   const provider = await store.adminCreateProvider({ name: name.trim(), phone: phone.trim(), category });
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.activity((await store.listActivities(1))[0]);
   res.status(201).json(provider);
 }));
 
@@ -607,8 +609,8 @@ app.post("/api/admin/services", auth.requireAuth("admin"), ah(async (req, res) =
   const provider = await store.getProvider(providerId);
   if (!provider) return res.status(404).json({ error: "Provider not found" });
   const service = await store.adminCreateService(providerId, { categorySlug, name, price, originalPrice }, actorOf(req));
-  io.emit("service:created", service);
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.service("service:created", service);
+  rt.activity((await store.listActivities(1))[0]);
   res.status(201).json(service);
 }));
 
@@ -767,8 +769,8 @@ app.patch("/api/services/:id", auth.requireAuth("admin"), ah(async (req, res) =>
   }
   const service = await store.updateServiceStatus(req.params.id, status, actorOf(req));
   if (!service) return res.status(404).json({ error: "Service not found" });
-  io.emit("service:updated", service);
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.service("service:updated", service);
+  rt.activity((await store.listActivities(1))[0]);
   res.json(service);
 }));
 
@@ -785,8 +787,8 @@ app.post("/api/admin/service-changes/:id/review", auth.requireAuth("admin"), ah(
   const { decision, note, edits } = req.body || {};
   const result = await store.reviewServiceChange(req.params.id, decision, { note, edits }, actorOf(req));
   if (!result) return res.status(404).json({ error: "Change request not found" });
-  if (decision === "approved") io.emit("service:updated", await store.getService(result.serviceId));
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  if (decision === "approved") rt.service("service:updated", await store.getService(result.serviceId));
+  rt.activity((await store.listActivities(1))[0]);
   res.json(result);
 }));
 
@@ -794,15 +796,15 @@ app.post("/api/admin/service-changes/:id/review", auth.requireAuth("admin"), ah(
 app.post("/api/admin/services/:id/review", auth.requireAuth("admin"), ah(async (req, res) => {
   const service = await store.reviewService(req.params.id, req.body?.decision, req.body?.note, actorOf(req));
   if (!service) return res.status(404).json({ error: "Service not found" });
-  io.emit("service:updated", service);
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.service("service:updated", service);
+  rt.activity((await store.listActivities(1))[0]);
   res.json(service);
 }));
 
 app.patch("/api/admin/services/:id", auth.requireAuth("admin"), ah(async (req, res) => {
   const service = await store.adminUpdateService(req.params.id, req.body || {}, actorOf(req));
   if (!service) return res.status(404).json({ error: "Service not found" });
-  io.emit("service:updated", service);
+  rt.service("service:updated", service);
   res.json(service);
 }));
 
@@ -810,7 +812,7 @@ app.delete("/api/admin/services/:id", auth.requireAuth("admin"), ah(async (req, 
   const deleted = await store.adminDeleteService(req.params.id, actorOf(req));
   if (deleted) store.dropFeeOverride("service", req.params.id);
   if (!deleted) return res.status(404).json({ error: "Service not found" });
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.activity((await store.listActivities(1))[0]);
   res.json({ deleted: true });
 }));
 
@@ -871,9 +873,9 @@ app.post("/api/bookings/:id/swap", auth.requireAuth("provider"), ah(async (req, 
     throw e;
   }
   staff.clearAssignment(req.params.id);
-  io.emit("booking:updated", maskCompleted(result.booking));
-  io.emit("booking:created", result.booking);
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.booking("booking:updated", result.booking, { previous: [req.user.id] });
+  rt.booking("booking:created", result.booking);
+  rt.activity((await store.listActivities(1))[0]);
   dispatchBooking(result.booking, result.excluded);
   res.json({ booking: result.swappedOut });
 }));
@@ -892,8 +894,8 @@ app.get("/api/admin/bookings/:id/swaps", auth.requireAuth("admin"), ah(async (re
 
 app.post("/api/bookings", auth.requireAuth("customer"), ah(async (req, res) => {
   const booking = await store.createBooking({ ...req.body, customerId: req.user.id });
-  io.emit("booking:created", booking);
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.booking("booking:created", booking);
+  rt.activity((await store.listActivities(1))[0]);
   dispatchBooking(booking);
   res.status(201).json(booking);
 }));
@@ -902,10 +904,10 @@ app.post("/api/bookings", auth.requireAuth("customer"), ah(async (req, res) => {
 app.post("/api/orders", auth.requireAuth("customer"), ah(async (req, res) => {
   const bookings = await store.createOrder({ ...req.body, customerId: req.user.id });
   bookings.forEach((b) => {
-    io.emit("booking:created", b);
+    rt.booking("booking:created", b);
     dispatchBooking(b);
   });
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.activity((await store.listActivities(1))[0]);
   res.status(201).json(bookings);
 }));
 
@@ -928,10 +930,10 @@ app.patch("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
   // to another provider in the same category first, same as a ring timeout.
   if (req.user.role === "provider" && status === "Rejected" && existing.status === "Pending") {
     const result = await store.reassignBooking(req.params.id, [req.user.id]);
-    io.emit("booking:updated", maskCompleted(result.booking));
-    io.emit("activity:created", (await store.listActivities(1))[0]);
+    rt.booking("booking:updated", result.booking, { previous: [req.user.id] });
+    rt.activity((await store.listActivities(1))[0]);
     if (result.reassigned) {
-      io.emit("booking:created", result.booking);
+      rt.booking("booking:created", result.booking);
       dispatchBooking(result.booking, [req.user.id, result.booking.providerId]);
     }
     return res.json(result.booking);
@@ -942,8 +944,8 @@ app.patch("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
   if (req.staff && status === "Accepted" && !staff.assignmentFor(req.params.id)) {
     await staff.assignOrder(req.user.id, booking, req.staff.id, { name: req.staff.name });
   }
-  io.emit("booking:updated", maskCompleted(booking));
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.booking("booking:updated", booking);
+  rt.activity((await store.listActivities(1))[0]);
   res.json(booking);
 }));
 
@@ -970,10 +972,10 @@ app.post("/api/bookings/:id/review", auth.requireAuth("customer"), ah(async (req
   if (!existing) return res.status(404).json({ error: "Booking not found" });
   if (existing.customerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
   const result = await store.addReview(req.params.id, rating, text);
-  io.emit("booking:updated", maskCompleted(result.booking));
+  rt.booking("booking:updated", result.booking);
   if (result.provider) io.emit("provider:updated", publicProvider(result.provider));
-  if (result.service) io.emit("service:updated", result.service);
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  if (result.service) rt.service("service:updated", result.service);
+  rt.activity((await store.listActivities(1))[0]);
   res.json(result.booking);
 }));
 
@@ -1060,7 +1062,7 @@ app.post("/api/bookings/:id/refund-claim", auth.requireAuth("customer"), ah(asyn
   const reason = (req.body?.reason || "").trim();
   if (!reason) return res.status(400).json({ error: "reason is required" });
   const claim = await store.createRefundClaim(req.user.id, req.params.id, reason);
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.activity((await store.listActivities(1))[0]);
   res.status(201).json(claim);
 }));
 
@@ -1072,7 +1074,7 @@ app.patch("/api/admin/refund-claims/:id", auth.requireAuth("admin"), ah(async (r
   const { status, adminNote } = req.body || {};
   const claim = await store.resolveRefundClaim(req.params.id, status, adminNote);
   if (!claim) return res.status(404).json({ error: "Claim not found" });
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.activity((await store.listActivities(1))[0]);
   res.json(claim);
 }));
 
@@ -1142,7 +1144,7 @@ app.post("/api/bookings/:id/checkpoints", auth.requireAuth("provider"), ah(async
   if (!booking) return res.status(404).json({ error: "Booking not found" });
   if (booking.providerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
   const checkpoint = store.addJobCheckpoint(req.params.id, req.body?.type);
-  io.emit("booking:checkpoint", checkpoint);
+  rt.checkpoint(booking, checkpoint);
   res.status(201).json(checkpoint);
 }));
 
@@ -1160,8 +1162,8 @@ app.post("/api/bookings/:id/otp/verify", auth.requireAuth("provider"), ah(async 
   if (!booking) return res.status(404).json({ error: "Booking not found" });
   if (booking.providerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
   const updated = await store.verifyBookingOtp(req.params.id, req.body?.type, req.body?.code);
-  io.emit("booking:updated", maskCompleted(updated));
-  io.emit("activity:created", (await store.listActivities(1))[0]);
+  rt.booking("booking:updated", updated);
+  rt.activity((await store.listActivities(1))[0]);
   res.json(maskCompleted(updated));
 }));
 
@@ -1235,7 +1237,7 @@ app.post("/api/messages/:bookingId", auth.requireAuth("customer", "provider"), a
     });
   }
   const message = await store.addMessage(req.params.bookingId, from, text.trim());
-  io.emit("message:created", { bookingId: req.params.bookingId, message });
+  await rt.message(req.params.bookingId, message);
   simulateReplyIfNeeded(req.params.bookingId, from);
   res.status(201).json(message);
 }));
@@ -1452,8 +1454,8 @@ const deleteAccountRoute = (fn) =>
     }
     res.status(204).end();
   });
-app.delete("/api/customer/account", auth.requireAuth("customer"), deleteAccountRoute(accountDeletion.deleteCustomerAccount));
-app.delete("/api/provider/account", auth.requireAuth("provider"), deleteAccountRoute(accountDeletion.deleteProviderAccount));
+app.delete("/api/customer/account", auth.requireAuth("customer"), deleteAccountRoute(async (id) => { await accountDeletion.deleteCustomerAccount(id); rt.kick(`customer:${id}`); }));
+app.delete("/api/provider/account", auth.requireAuth("provider"), deleteAccountRoute(async (id) => { await accountDeletion.deleteProviderAccount(id); rt.kick(`provider:${id}`); }));
 
 // ---- Service provider staff management (the company's own employees) ----
 const staffActor = (req) => (req.staff ? { staff: req.staff, name: req.staff.name } : { owner: true, name: "Owner" });
@@ -1480,6 +1482,7 @@ app.get("/api/provider/staff/:id", providerOnly, staffRoute(async (req, res) => 
 app.patch("/api/provider/staff/:id", providerOnly, staffRoute(async (req, res) => {
   const s = await staff.updateStaff(req.user.id, req.params.id, req.body || {}, staffActor(req));
   if (!s) return res.status(404).json({ error: "Staff member not found" });
+  rt.kick(`staff:${req.params.id}`); // reconnects with their new access (or none)
   res.json(s);
 }));
 // The people an order can be assigned to (for staff who can assign but not manage staff).
@@ -1512,11 +1515,13 @@ app.patch("/api/admin/users/:id", adminOnly, crm(async (req, res) => {
   if (!user) return res.status(404).json({ error: "User not found" });
   const changes = store.diffValues(before || {}, user, ["name", "phone", "email", "roleId", "active"]);
   if (changes.length) audit(req, "user.update", "user", user.id, user.name, changes);
+  rt.kick(`adminuser:admin:${user.phone}`);
   res.json(user);
 }));
 app.delete("/api/admin/users/:id", adminOnly, crm(async (req, res) => {
   const before = access.listUsers().find((u) => u.id === req.params.id);
   if (!access.deleteUser(req.params.id, req.admin.id)) return res.status(404).json({ error: "User not found" });
+  if (before?.phone) rt.kick(`adminuser:admin:${before.phone}`);
   audit(req, "user.delete", "user", req.params.id, before?.name);
   res.status(204).end();
 }));
@@ -1537,6 +1542,7 @@ app.patch("/api/admin/roles/:id", adminOnly, crm(async (req, res) => {
   if (added.length) changes.push({ field: "permissions added", from: null, to: added.join(", ") });
   if (removed.length) changes.push({ field: "permissions removed", from: removed.join(", "), to: null });
   if (changes.length) audit(req, "role.update", "role", role.id, role.name, changes);
+  rt.kick("admin:any"); // every admin socket re-checks its permissions
   res.json(role);
 }));
 app.delete("/api/admin/roles/:id", adminOnly, crm(async (req, res) => {

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { api, setAuthToken } from "../api";
-import { socket } from "../socket";
+import { socket, setSocketToken } from "../socket";
 import { loadNotificationPrefs, saveNotificationPrefs } from "../utils/notificationPrefs";
 import { ensurePushSubscribed, onNativeRing } from "../utils/pushNotifications";
 
@@ -94,6 +94,7 @@ export function AppProvider({ children }) {
 
   const login = useCallback((token, user, staff = null) => {
     setAuthToken(token);
+    setSocketToken(token);
     localStorage.setItem(AUTH_KEY, JSON.stringify({ token, user, staff }));
     setProvider(user);
     setStaffSession(staff);
@@ -101,6 +102,7 @@ export function AppProvider({ children }) {
 
   const logout = useCallback(() => {
     setAuthToken(null);
+    setSocketToken(null);
     localStorage.removeItem(AUTH_KEY);
     setProvider(null);
     setStaffSession(null);
@@ -132,6 +134,7 @@ export function AppProvider({ children }) {
         return;
       }
       setAuthToken(initialAuth.token);
+      setSocketToken(initialAuth.token);
       try {
         const { user, staff } = await api.me();
         if (cancelled) return;

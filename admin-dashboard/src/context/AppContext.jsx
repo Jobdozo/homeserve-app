@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { api, setAuthToken } from "../api";
-import { socket } from "../socket";
+import { socket, setSocketToken } from "../socket";
 
 const AppContext = createContext(null);
 const AUTH_KEY = "tikdum-admin-auth-v1";
@@ -40,12 +40,14 @@ export function AppProvider({ children }) {
 
   const login = useCallback((token, user) => {
     setAuthToken(token);
+    setSocketToken(token);
     localStorage.setItem(AUTH_KEY, JSON.stringify({ token, user }));
     setAdmin(user);
   }, []);
 
   const logout = useCallback(() => {
     setAuthToken(null);
+    setSocketToken(null);
     localStorage.removeItem(AUTH_KEY);
     setAdmin(null);
     setOverview(null);
@@ -84,6 +86,7 @@ export function AppProvider({ children }) {
         return;
       }
       setAuthToken(initialAuth.token);
+      setSocketToken(initialAuth.token);
       try {
         const { user } = await api.me();
         if (cancelled) return;
