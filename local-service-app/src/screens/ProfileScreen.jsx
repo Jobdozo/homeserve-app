@@ -24,7 +24,7 @@ export default function ProfileScreen() {
     { icon: "🛡️", label: "Booking Protection", path: "/booking-protection" },
     { icon: "🎟️", label: "Coupons & Offers" },
     { icon: "🔔", label: "Notification Settings" },
-    { icon: "❓", label: "Help & Support" },
+    { icon: "❓", label: "Help & Support", path: "/profile/help" },
     { icon: "📄", label: "Terms & Privacy Policy", href: "/privacy.html" },
   ];
 

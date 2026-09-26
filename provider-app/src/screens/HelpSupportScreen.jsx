@@ -3,9 +3,9 @@ import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
 import { ChevronRightIcon } from "../components/icons";
 
-// Placeholders — replace with real support channels before real providers use this.
 const SUPPORT_EMAIL = "support@tikdum.com";
-const SUPPORT_WHATSAPP = "919876543210";
+const SUPPORT_PHONE = "+919419149336";
+const SUPPORT_PHONE_LABEL = "+91 94191 49336";
 
 const faqs = [
   {
@@ -56,13 +56,18 @@ export default function HelpSupportScreen() {
           <h2 className="mb-2 text-[13px] font-bold text-gray-900">Contact Us</h2>
           <div className="divide-y divide-gray-50 rounded-2xl border border-gray-100">
             <a
-              href={`https://wa.me/${SUPPORT_WHATSAPP}`}
+              href={`https://wa.me/${SUPPORT_PHONE.slice(1)}`}
               target="_blank"
               rel="noreferrer"
               className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50"
             >
               <span className="text-lg">💬</span>
               <span className="flex-1 text-[13px] font-medium text-gray-700">Chat with us on WhatsApp</span>
+              <ChevronRightIcon width={16} height={16} className="text-gray-300" />
+            </a>
+            <a href={`tel:${SUPPORT_PHONE}`} className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50">
+              <span className="text-lg">📞</span>
+              <span className="flex-1 text-[13px] font-medium text-gray-700">Call us · {SUPPORT_PHONE_LABEL}</span>
               <ChevronRightIcon width={16} height={16} className="text-gray-300" />
             </a>
             <button onClick={handleCopyEmail} className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50">
