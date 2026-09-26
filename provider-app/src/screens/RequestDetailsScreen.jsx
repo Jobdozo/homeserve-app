@@ -81,7 +81,8 @@ export default function RequestDetailsScreen() {
           <p className="text-lg font-extrabold text-brand">₹{request.amount}</p>
         </div>
 
-        {!["Rejected", "Cancelled", "Swapped"].includes(request.status) && (request.assignedStaff || can("orders.assign")) && (
+        {!["Rejected", "Cancelled", "Swapped"].includes(request.status) &&
+          (request.assignedStaff || (can("orders.assign") && request.status !== "Completed")) && (
           <div className="flex items-center gap-3 rounded-2xl border border-gray-100 p-3">
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Assigned to</p>
