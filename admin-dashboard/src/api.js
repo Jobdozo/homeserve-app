@@ -50,8 +50,24 @@ async function uploadComplaintEvidence(id, file, note) {
   return data;
 }
 
+// Service photos go up as multipart, after being shrunk in the browser.
+async function uploadServiceImage(id, file) {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(`${API_BASE}/admin/services/${id}/image`, {
+    method: "POST",
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    body,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Upload failed: ${res.status}`);
+  return data;
+}
+
 export const api = {
   importCsv,
+  uploadServiceImage,
+  removeServiceImage: (id) => request(`/admin/services/${id}/image`, { method: "DELETE" }),
   uploadComplaintEvidence,
   requestOtp: (phone, role) => request("/auth/otp/request", { method: "POST", body: JSON.stringify({ phone, role }) }),
   verifyOtp: (phone, code, role) =>

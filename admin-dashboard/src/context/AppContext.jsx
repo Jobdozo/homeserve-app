@@ -267,6 +267,16 @@ export function AppProvider({ children }) {
     [showToast]
   );
 
+  const setServiceImage = useCallback(
+    async (id, file) => {
+      const service = file ? await api.uploadServiceImage(id, file) : await api.removeServiceImage(id);
+      setServices((prev) => upsertById(prev, service));
+      showToast(file ? "Service photo saved" : "Service photo removed");
+      return service;
+    },
+    [showToast]
+  );
+
   const deleteService = useCallback(
     async (id) => {
       await api.deleteService(id);
@@ -373,6 +383,7 @@ export function AppProvider({ children }) {
       toggleServiceStatus,
       reviewService,
       updateService,
+      setServiceImage,
       deleteService,
       refreshData: scheduleRefresh,
       addCategory,
@@ -405,6 +416,7 @@ export function AppProvider({ children }) {
       toggleServiceStatus,
       reviewService,
       updateService,
+      setServiceImage,
       deleteService,
       scheduleRefresh,
       addCategory,

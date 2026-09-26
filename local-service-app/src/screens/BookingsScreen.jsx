@@ -128,7 +128,7 @@ function BookingRow({ booking: b, service, onClick, compact, wrapped }) {
         wrapped ? "rounded-2xl bg-white p-3 shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.99] lg:p-4" : "rounded-xl hover:bg-gray-50"
       }`}
     >
-      <CategoryIcon categoryId={service.categoryId} size={compact ? 44 : 56} className="lg:scale-110" />
+      <CategoryIcon categoryId={service.categoryId} imageUrl={service.imageUrl} size={compact ? 44 : 56} className="lg:scale-110" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
           <p className="truncate text-[13.5px] font-semibold text-gray-900 lg:text-[15px]">{service.name}</p>

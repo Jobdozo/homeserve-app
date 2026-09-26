@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { SERVER_URL } from "../api";
 import { useApp } from "../context/AppContext";
 
 // Flat, brand-styled category illustrations — a real icon system instead of
@@ -171,8 +173,10 @@ export default function CategoryIcon({
   transparent = false,
   variant = "soft",
   fill = false,
+  imageUrl = null,
 }) {
   const { categories } = useApp();
+  const [photoFailed, setPhotoFailed] = useState(false);
   const vivid = variant === "vivid";
   const glyphSize = size * (vivid ? 0.42 : 0.56);
   // "more-services" is the deliberate three-dot glyph; anything else without a
@@ -187,6 +191,18 @@ export default function CategoryIcon({
     : transparent
       ? "transparent"
       : bg;
+
+  // A photo the admin uploaded for this specific service replaces the icon tile.
+  if (imageUrl && !photoFailed) {
+    return (
+      <span
+        className={`flex-shrink-0 overflow-hidden ${rounded} ${fill ? "h-full w-full" : ""} ${className}`}
+        style={fill ? undefined : { width: size, height: size }}
+      >
+        <img src={`${SERVER_URL}${imageUrl}`} alt="" loading="lazy" onError={() => setPhotoFailed(true)} className="h-full w-full object-cover" />
+      </span>
+    );
+  }
 
   return (
     <span

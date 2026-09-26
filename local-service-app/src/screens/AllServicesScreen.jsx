@@ -72,7 +72,7 @@ export default function AllServicesScreen() {
                   </span>
                 )}
                 <div className="flex h-24 items-center justify-center lg:h-36">
-                  <CategoryPhoto categoryId={s.categoryId} size={96} />
+                  <CategoryPhoto categoryId={s.categoryId} imageUrl={s.imageUrl} size={96} />
                 </div>
                 <div className="p-2.5 lg:p-4">
                   <p className="text-[12.5px] font-semibold text-gray-900 lg:text-[15px]">{s.name}</p>

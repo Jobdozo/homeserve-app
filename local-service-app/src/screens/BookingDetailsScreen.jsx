@@ -92,7 +92,7 @@ export default function BookingDetailsScreen() {
       <div className="flex-1 space-y-5 px-4 pb-6 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-10">
         {/* Service summary */}
         <div className="flex items-center gap-3 rounded-2xl bg-gray-50 p-3">
-          <CategoryIcon categoryId={service?.categoryId} size={48} />
+          <CategoryIcon categoryId={service?.categoryId} imageUrl={service?.imageUrl} size={48} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13.5px] font-semibold text-gray-900">{service?.name}</p>
             <p className="text-[11px] text-gray-500">₹{booking.amount}</p>

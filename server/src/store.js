@@ -205,9 +205,48 @@ function updateProviderCoverage(providerId, patch, { allowServeAllAreas = true }
   return saved;
 }
 
+// Admin-uploaded service photos. Services live in the database whose schema we
+// can't extend, so the photo URL is kept in a small id -> url table alongside.
+function serviceImageUrl(serviceId) {
+  return jsonStore.readAll("serviceImages").find((r) => r.id === serviceId)?.url || null;
+}
+
+function deleteUploadedFile(url) {
+  if (!url || !url.startsWith("/uploads/") || !/^[A-Za-z0-9._-]+$/.test(url.slice("/uploads/".length))) return;
+  try {
+    require("fs").unlinkSync(require("path").join(require("./uploads").UPLOADS_DIR, url.slice("/uploads/".length)));
+  } catch (e) {
+    if (e.code !== "ENOENT") console.error("Could not remove old service photo", e.message);
+  }
+}
+
+async function setServiceImage(serviceId, url, actor) {
+  const existing = await getService(serviceId);
+  if (!existing) return undefined;
+  const previous = serviceImageUrl(serviceId);
+  if (url) {
+    if (previous) jsonStore.update("serviceImages", serviceId, { url, updatedAt: new Date().toISOString() });
+    else jsonStore.insert("serviceImages", { id: serviceId, url, updatedAt: new Date().toISOString() });
+  } else if (previous) {
+    jsonStore.remove("serviceImages", serviceId);
+  }
+  if (previous && previous !== url) deleteUploadedFile(previous);
+  cacheClear("service");
+  recordAdminChange({
+    actor,
+    action: "service.update",
+    entityType: "service",
+    entityId: serviceId,
+    entityName: existing.name,
+    changes: [{ field: "photo", from: previous ? "uploaded" : "none", to: url ? "uploaded" : "removed" }],
+  });
+  return getService(serviceId);
+}
+
 function mapService(s) {
   return {
     id: s.id,
+    imageUrl: serviceImageUrl(s.id),
     name: s.name,
     icon: s.icon,
     tagline: s.tagline,
@@ -1192,6 +1231,11 @@ async function adminDeleteService(serviceId, actor) {
   await mutate(`mutation($id: UUID!) { service_delete(id: $id) }`, { id: serviceId });
   jsonStore.readAll("providerAds").filter((a) => a.serviceId === serviceId).forEach((a) => jsonStore.remove("providerAds", a.id));
   jsonStore.remove("serviceReviews", serviceId);
+  const photo = serviceImageUrl(serviceId);
+  if (photo) {
+    jsonStore.remove("serviceImages", serviceId);
+    deleteUploadedFile(photo);
+  }
   cacheClear("service");
   await logActivity("service", `Service "${existing.name}" deleted by admin`);
   recordAdminChange({
@@ -3817,6 +3861,7 @@ module.exports = {
   reviewServiceChange,
   listAdminChanges,
   adminUpdateService,
+  setServiceImage,
   adminDeleteService,
   setProviderVerification,
   deleteProvider,

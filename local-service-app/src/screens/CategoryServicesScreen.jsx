@@ -78,7 +78,7 @@ export default function CategoryServicesScreen() {
                   onClick={() => navigate(`/service/${s.id}`)}
                   className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 p-3 text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.99] lg:p-4"
                 >
-                  <CategoryIcon categoryId={s.categoryId} size={64} />
+                  <CategoryIcon categoryId={s.categoryId} imageUrl={s.imageUrl} size={64} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13.5px] font-semibold text-gray-900 lg:text-[14.5px]">{s.name}</p>
                     {s.reviewCount > 0 ? (

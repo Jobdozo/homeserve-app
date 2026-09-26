@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "../api";
+import { api, SERVER_URL } from "../api";
 import { useApp } from "../context/AppContext";
 import { StarIcon, CheckIcon, XIcon } from "../components/icons";
 import { formatCount, discountPct } from "../utils/format";
@@ -342,6 +342,83 @@ function ServicesPanel({ tab, setTab }) {
   );
 }
 
+// Shrink a photo before upload (longest side 1200px, JPEG) so the customer app
+// stays fast on mobile data. Formats the browser can't decode go up unchanged.
+async function shrinkImage(file, maxSide = 1200) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+    return blob ? new File([blob], "service.jpg", { type: "image/jpeg" }) : file;
+  } catch {
+    return file;
+  }
+}
+
+function ServicePhotoField({ service }) {
+  const { setServiceImage, showToast } = useApp();
+  const [imageUrl, setImageUrl] = useState(service.imageUrl || null);
+  const [busy, setBusy] = useState(false);
+
+  const change = async (file) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("Choose an image file (JPEG, PNG or WebP)");
+      return;
+    }
+    setBusy(true);
+    try {
+      const updated = await setServiceImage(service.id, await shrinkImage(file));
+      setImageUrl(updated.imageUrl);
+    } catch (err) {
+      showToast(err.message || "Could not upload the photo");
+    }
+    setBusy(false);
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try {
+      const updated = await setServiceImage(service.id, null);
+      setImageUrl(updated.imageUrl);
+    } catch (err) {
+      showToast(err.message || "Could not remove the photo");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div>
+      <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Service photo</label>
+      <div className="flex items-center gap-3">
+        <div className="flex h-16 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+          {imageUrl ? (
+            <img src={`${SERVER_URL}${imageUrl}`} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className="px-1 text-center text-[10px] leading-tight text-gray-400">Category picture</span>
+          )}
+        </div>
+        <div className="flex flex-col items-start gap-1.5">
+          <label className={`cursor-pointer rounded-lg border border-gray-200 px-2.5 py-1 text-[11.5px] font-semibold text-gray-600 ${busy ? "pointer-events-none opacity-50" : ""}`}>
+            {busy ? "Working…" : imageUrl ? "Replace photo" : "Upload photo"}
+            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={busy} onChange={(e) => { change(e.target.files?.[0]); e.target.value = ""; }} />
+          </label>
+          {imageUrl && (
+            <button onClick={remove} disabled={busy} className="text-[11.5px] font-semibold text-red-500 disabled:opacity-50">
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+      <p className="mt-1 text-[10.5px] text-gray-400">Shown on this service in the customer app. Without one, the category picture is used.</p>
+    </div>
+  );
+}
+
 function EditServiceModal({ editing, onClose }) {
   const { updateService, categories, showToast } = useApp();
   const [form, setForm] = useState(editing);
@@ -379,6 +456,7 @@ function EditServiceModal({ editing, onClose }) {
   return (
     <Modal title="Edit service" onClose={onClose}>
       <div className="space-y-3">
+        <ServicePhotoField service={editing.service} />
         <div>
           <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Name</label>
           <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={input} />
@@ -466,7 +544,7 @@ function Modal({ title, onClose, children }) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+      <div className="max-h-[92vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-[14px] font-bold text-gray-900">{title}</h2>
           <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100">

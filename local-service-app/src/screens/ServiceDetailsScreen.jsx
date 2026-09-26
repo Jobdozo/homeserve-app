@@ -42,7 +42,7 @@ export default function ServiceDetailsScreen() {
 
       <div className="flex flex-1 flex-col lg:mx-auto lg:w-full lg:max-w-5xl lg:flex-row lg:gap-10 lg:px-8 lg:pb-16">
         <div className="flex h-40 flex-shrink-0 items-center justify-center overflow-hidden lg:h-72 lg:w-80 lg:flex-shrink-0 lg:rounded-3xl">
-          <CategoryPhoto categoryId={service.categoryId} size={160} rounded="" />
+          <CategoryPhoto categoryId={service.categoryId} imageUrl={service.imageUrl} size={160} rounded="" />
         </div>
 
         <div className="flex-1 px-4 pb-24 pt-4 lg:px-0 lg:pb-0 lg:pt-0">

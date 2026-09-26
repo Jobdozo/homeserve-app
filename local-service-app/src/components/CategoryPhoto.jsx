@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { SERVER_URL } from "../api";
 import CategoryIcon from "./CategoryIcon";
 
 // Real branded photos for categories that have one (public/category-photos/) —
@@ -17,14 +19,18 @@ const PHOTOS = {
   "salon-spa": "/category-photos/salon-spa.jpg",
 };
 
-export default function CategoryPhoto({ categoryId, size = 96, rounded = "rounded-none", className = "" }) {
-  const photo = PHOTOS[categoryId];
+// imageUrl = a photo the admin uploaded for this specific service; it wins over
+// the category picture, and if it fails to load the category picture takes over.
+export default function CategoryPhoto({ categoryId, imageUrl, size = 96, rounded = "rounded-none", className = "" }) {
+  const [failed, setFailed] = useState(false);
+  const photo = imageUrl && !failed ? `${SERVER_URL}${imageUrl}` : PHOTOS[categoryId];
   if (photo) {
     return (
       <img
         src={photo}
         alt=""
         loading="lazy"
+        onError={imageUrl ? () => setFailed(true) : undefined}
         className={`h-full w-full object-cover ${rounded} ${className}`}
       />
     );

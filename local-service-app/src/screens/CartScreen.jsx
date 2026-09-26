@@ -130,7 +130,7 @@ export default function CartScreen() {
         {lines.map(({ item, service }) => (
           <div key={item.serviceId} className="rounded-2xl border border-gray-100 p-3 shadow-card">
             <div className="flex items-start gap-3">
-              <CategoryIcon categoryId={service.categoryId} size={48} />
+              <CategoryIcon categoryId={service.categoryId} imageUrl={service.imageUrl} size={48} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13.5px] font-semibold text-gray-900">{service.name}</p>
                 <div className="flex items-center gap-1.5">

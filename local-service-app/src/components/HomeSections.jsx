@@ -100,7 +100,7 @@ function ServiceCard({ service, count, carousel }) {
         </span>
       )}
       <div className="flex h-24 items-center justify-center lg:h-36">
-        <CategoryPhoto categoryId={service.categoryId} size={96} />
+        <CategoryPhoto categoryId={service.categoryId} imageUrl={service.imageUrl} size={96} />
       </div>
       <div className="p-2.5 lg:p-4">
         <p className="text-[12.5px] font-semibold text-gray-900 lg:text-[15px]">{service.name}</p>

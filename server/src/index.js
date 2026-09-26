@@ -808,6 +808,25 @@ app.patch("/api/admin/services/:id", auth.requireAuth("admin"), ah(async (req, r
   res.json(service);
 }));
 
+// Service photo: upload replaces any previous one; DELETE goes back to the category picture.
+app.post("/api/admin/services/:id/image", auth.requireAuth("admin"), upload.single("file"), ah(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Choose a photo to upload" });
+  const service = await store.setServiceImage(req.params.id, `/uploads/${req.file.filename}`, actorOf(req));
+  if (!service) {
+    require("fs").unlink(req.file.path, () => {});
+    return res.status(404).json({ error: "Service not found" });
+  }
+  rt.service("service:updated", service);
+  res.json(service);
+}));
+
+app.delete("/api/admin/services/:id/image", auth.requireAuth("admin"), ah(async (req, res) => {
+  const service = await store.setServiceImage(req.params.id, null, actorOf(req));
+  if (!service) return res.status(404).json({ error: "Service not found" });
+  rt.service("service:updated", service);
+  res.json(service);
+}));
+
 app.delete("/api/admin/services/:id", auth.requireAuth("admin"), ah(async (req, res) => {
   const deleted = await store.adminDeleteService(req.params.id, actorOf(req));
   if (deleted) store.dropFeeOverride("service", req.params.id);

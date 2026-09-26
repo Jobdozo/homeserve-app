@@ -263,6 +263,7 @@ const RULES = [
   [/^\/admin\/providers(\/|$)/, (m) => `providers.${byMethod(m)}`],
   [/^\/providers\/[^/]+\/earnings$/, () => "providers.view"],
   [/^\/admin\/customers/, () => "customers.view"],
+  [/^\/admin\/services\/[^/]+\/image$/, () => "services.edit"],
   [/^\/admin\/services\/[^/]+\/review$/, (m, b) => `services.${decisionAction(b?.decision)}`],
   [/^\/admin\/service-changes\/[^/]+\/review$/, (m, b) => `services.${decisionAction(b?.decision)}`],
   [/^\/admin\/service-changes/, () => "services.view"],

@@ -117,7 +117,7 @@ export default function SearchScreen() {
                     onClick={() => navigate(`/service/${s.id}`)}
                     className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 p-3 text-left shadow-card hover:-translate-y-0.5 active:scale-[0.99]"
                   >
-                    <CategoryIcon categoryId={s.categoryId} size={56} />
+                    <CategoryIcon categoryId={s.categoryId} imageUrl={s.imageUrl} size={56} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[13.5px] font-semibold text-gray-900">{s.name}</p>
                       {s.reviewCount > 0 && (
