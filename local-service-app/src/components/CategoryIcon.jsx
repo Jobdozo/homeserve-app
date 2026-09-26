@@ -1,3 +1,5 @@
+import { useApp } from "../context/AppContext";
+
 // Flat, brand-styled category illustrations — a real icon system instead of
 // raw emoji glyphs, keyed by categoryId so every screen stays in sync.
 
@@ -108,6 +110,52 @@ const glyphs = {
   ),
 };
 
+// Categories added later from the admin panel have no drawn glyph. They show
+// their own emoji instead (set in admin, otherwise guessed from the name) on a
+// colour picked from the category id, so each one is distinct and recognisable.
+const EMOJI_BY_KEYWORD = [
+  [/water tank|tank/, "🛢️"],
+  [/purifier|ro|water/, "💧"],
+  [/laundry|wash|dry ?clean|iron/, "👕"],
+  [/garden|lawn|plant/, "🌿"],
+  [/security|guard|cctv|camera/, "🛡️"],
+  [/gas|chimney|stove|kitchen/, "🔥"],
+  [/mason|brick|tile|construct|civil/, "🧱"],
+  [/interior|decor|furnitur|design/, "🛋️"],
+  [/domestic|maid|cook|nanny|babysit|help/, "🧑‍🍳"],
+  [/maintenance|repair|fix|handyman/, "🛠️"],
+  [/clean/, "🧹"],
+  [/car|auto|vehicle|bike/, "🚗"],
+  [/beauty|salon|spa|massage/, "💆"],
+  [/tutor|teach|class|coaching/, "📚"],
+  [/photo|video|event/, "📷"],
+  [/pet|dog|cat/, "🐾"],
+  [/health|nurse|physio|care/, "🩺"],
+];
+const TINTS = [
+  { bg: "#DBEAFE", fg: "#2563EB" },
+  { bg: "#DCFCE7", fg: "#16A34A" },
+  { bg: "#FEF3C7", fg: "#D97706" },
+  { bg: "#FCE7F3", fg: "#DB2777" },
+  { bg: "#EDE9FE", fg: "#7C3AED" },
+  { bg: "#CFFAFE", fg: "#0891B2" },
+  { bg: "#FFEDD5", fg: "#C2410C" },
+  { bg: "#E0E7FF", fg: "#4F46E5" },
+];
+
+function tintFor(id) {
+  let h = 0;
+  for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return TINTS[h % TINTS.length];
+}
+
+function emojiFor(category, id) {
+  if (category?.icon) return category.icon;
+  const text = `${category?.name || ""} ${id}`.toLowerCase().replace(/[-_/]/g, " ");
+  const hit = EMOJI_BY_KEYWORD.find(([re]) => re.test(text));
+  return hit ? hit[1] : "✨";
+}
+
 // "soft" (default) is the pastel-tile treatment used for small in-context
 // icons (category grid, list rows). "vivid" is the full-bleed card treatment
 // — a gradient built from the category's own color with a white glyph on
@@ -124,10 +172,15 @@ export default function CategoryIcon({
   variant = "soft",
   fill = false,
 }) {
-  const { bg, fg } = palette[categoryId] || palette["more-services"];
-  const draw = glyphs[categoryId] || glyphs["more-services"];
+  const { categories } = useApp();
   const vivid = variant === "vivid";
   const glyphSize = size * (vivid ? 0.42 : 0.56);
+  // "more-services" is the deliberate three-dot glyph; anything else without a
+  // drawing gets its emoji.
+  const custom = !glyphs[categoryId];
+  const { bg, fg } = custom ? tintFor(categoryId) : palette[categoryId];
+  const draw = glyphs[categoryId];
+  const emoji = custom ? emojiFor(categories?.find((c) => c.id === categoryId), categoryId) : null;
 
   const background = vivid
     ? `linear-gradient(135deg, ${fg}b3, ${fg})`
@@ -140,9 +193,15 @@ export default function CategoryIcon({
       className={`flex flex-shrink-0 items-center justify-center ${rounded} ${fill ? "h-full w-full" : ""} ${className}`}
       style={fill ? { background } : { width: size, height: size, background }}
     >
-      <svg width={glyphSize} height={glyphSize} viewBox="0 0 24 24" fill="none">
-        {draw(vivid ? "#fff" : fg, vivid ? fg : "#fff")}
-      </svg>
+      {emoji ? (
+        <span aria-hidden="true" style={{ fontSize: glyphSize * (vivid ? 1.25 : 1), lineHeight: 1 }}>
+          {emoji}
+        </span>
+      ) : (
+        <svg width={glyphSize} height={glyphSize} viewBox="0 0 24 24" fill="none">
+          {draw(vivid ? "#fff" : fg, vivid ? fg : "#fff")}
+        </svg>
+      )}
     </span>
   );
 }
