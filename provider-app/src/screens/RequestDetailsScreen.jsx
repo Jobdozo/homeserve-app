@@ -13,6 +13,7 @@ export default function RequestDetailsScreen() {
   const { requestId } = useParams();
   const navigate = useNavigate();
   const { getRequest, acceptRequest, rejectRequest, swapRequest, showToast, can, staff, setRequestAssignee } = useApp();
+  const request = getRequest(requestId);
   const [liveLocation, setLiveLocation] = useState(null);
   const [swapOpen, setSwapOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
@@ -24,8 +25,6 @@ export default function RequestDetailsScreen() {
   useEffect(() => {
     if (request?.status === "Accepted") api.getSwapRules().then(setSwapRules).catch(() => {});
   }, [request?.status]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const request = getRequest(requestId);
 
   // Poll the customer's real-time position every 30s (matching how often
   // they report it) so directions target where they actually are.

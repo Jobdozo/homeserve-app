@@ -1,5 +1,6 @@
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppProvider, useApp } from "./context/AppContext";
+import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/Layout";
 import LoginScreen from "./screens/LoginScreen";
 import DashboardPage from "./pages/DashboardPage";
@@ -80,9 +81,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <AppProvider>
-      <HashRouter>
-        <AppRoutes />
-      </HashRouter>
+      <ErrorBoundary>
+        <HashRouter>
+          <AppRoutes />
+        </HashRouter>
+      </ErrorBoundary>
     </AppProvider>
   );
 }

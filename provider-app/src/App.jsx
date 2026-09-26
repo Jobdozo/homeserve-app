@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AppProvider, useApp } from "./context/AppContext";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { MainLayout, DetailLayout } from "./components/PhoneFrame";
 import LoginScreen from "./screens/LoginScreen";
 import { useAndroidBackButton } from "./utils/useAndroidBackButton";
@@ -121,9 +122,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <AppProvider>
-      <HashRouter>
-        <AppRoutes />
-      </HashRouter>
+      <ErrorBoundary>
+        <HashRouter>
+          <AppRoutes />
+        </HashRouter>
+      </ErrorBoundary>
     </AppProvider>
   );
 }

@@ -12,6 +12,8 @@ const statusStyles = {
   Rejected: "bg-red-100 text-red-600",
 };
 
+const SWAP_STATUS_LABEL = "Swapped to another provider";
+
 const STATUS_LABELS = {
   Pending: "Booking placed",
   Accepted: "Accepted the request",
@@ -21,8 +23,6 @@ const STATUS_LABELS = {
   Cancelled: "Cancelled",
   Swapped: SWAP_STATUS_LABEL,
 };
-
-const SWAP_STATUS_LABEL = "Swapped to another provider";
 
 const CHECKPOINT_LABELS = {
   reached_location: "Reached the location",
