@@ -44,8 +44,9 @@ set -e
 [ "$code" -le 1 ] || { rm -f "$tmp"; fail "tar exited with code $code"; }
 
 # Verify before keeping it: readable, and it holds the records.
-tar -tzf "$tmp" > /dev/null || { rm -f "$tmp"; fail "archive is unreadable"; }
-tar -tzf "$tmp" | grep -q '\.json$' || { rm -f "$tmp"; fail "archive has no data files"; }
+listing=$(tar -tzf "$tmp") || { rm -f "$tmp"; fail "archive is unreadable"; }
+# (not `tar | grep -q`: grep quitting early would SIGPIPE tar and trip pipefail)
+grep -q '\.json$' <<< "$listing" || { rm -f "$tmp"; fail "archive has no data files"; }
 mv "$tmp" "$DEST/daily/$name"
 
 # One copy per week (Sundays) is kept much longer.
