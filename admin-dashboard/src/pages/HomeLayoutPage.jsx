@@ -427,8 +427,9 @@ function BannerModal({ banner, onClose, onSave }) {
               </div>
             </div>
             <div>
-              <label className={labelCls}>Background image URL (optional)</label>
-              <input className={inputCls} value={f.imageUrl} onChange={(e) => set("imageUrl", e.target.value)} placeholder="https://…" />
+              <label className={labelCls}>Background picture link (optional)</label>
+              <input className={inputCls} value={f.imageUrl} onChange={(e) => set("imageUrl", e.target.value)} placeholder="https://…/picture.jpg" />
+              <p className="mt-1 text-[10.5px] text-gray-400">A direct link to a picture, not a page. Leave empty to use the colour. Use "Tapping opens" below to link to a service.</p>
             </div>
             <div className="grid grid-cols-2 gap-2.5">
               <div>

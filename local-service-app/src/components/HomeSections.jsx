@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { StarIcon, ChevronRightIcon } from "./icons";
@@ -33,6 +33,9 @@ function useBannerTarget() {
 
 export function PromoBanner({ banner, hero = false }) {
   const open = useBannerTarget();
+  // A picture link that doesn't load is dropped, so the banner falls back to its colour and icon.
+  const [imageFailed, setImageFailed] = useState(false);
+  const imageUrl = imageFailed ? null : banner.imageUrl;
   const clickable = banner.linkType && banner.linkType !== "none" && banner.linkId;
   const gradient = BANNER_GRADIENTS[banner.color] || BANNER_GRADIENTS.brand;
   const Tag = clickable ? "button" : "div";
@@ -43,9 +46,9 @@ export function PromoBanner({ banner, hero = false }) {
         hero ? "min-h-[120px] py-4 lg:min-h-[220px] lg:px-10 lg:py-10" : "min-h-[96px] py-3.5 lg:min-h-[140px] lg:px-8"
       }`}
     >
-      {banner.imageUrl && (
+      {imageUrl && (
         <>
-          <img src={banner.imageUrl} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+          <img src={imageUrl} alt="" loading="lazy" onError={() => setImageFailed(true)} className="absolute inset-0 h-full w-full object-cover" />
           <span className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/25 to-transparent" />
         </>
       )}
@@ -64,7 +67,7 @@ export function PromoBanner({ banner, hero = false }) {
           </span>
         )}
       </div>
-      {!banner.imageUrl && (
+      {!imageUrl && (
         <span className={`relative z-10 flex-shrink-0 ${hero ? "text-5xl lg:text-8xl" : "text-4xl lg:text-6xl"}`}>{banner.icon}</span>
       )}
     </Tag>
