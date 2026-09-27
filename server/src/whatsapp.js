@@ -22,18 +22,24 @@ const MSG91_OTP_TEMPLATE_LANG = process.env.MSG91_OTP_TEMPLATE_LANG || "en";
 const MSG91_OTP_HAS_BUTTON = process.env.MSG91_OTP_HAS_BUTTON === "true";
 
 const isConfigured = Boolean(MSG91_AUTH_KEY && MSG91_SENDER_NUMBER);
-const MSG91_URL = "https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/";
+// Two different MSG91 endpoints — not interchangeable. The bulk one only
+// accepts content_type "template" ("for now, only template is supported for
+// bulk" is the literal error otherwise); the session one is query-string
+// based (no JSON body) and only delivers within 24h of the recipient last
+// messaging the business number.
+const MSG91_BULK_URL = "https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/";
+const MSG91_SESSION_URL = "https://control.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/";
 
 function toGatewayNumber(phone) {
   return String(phone || "").replace(/\D/g, "");
 }
 
-async function postToMsg91(payload, label) {
+async function postJsonToMsg91(payload, label) {
   if (!isConfigured) {
     console.log(`[WhatsApp] (MSG91 not configured) ${label}`);
     return false;
   }
-  const res = await fetch(MSG91_URL, {
+  const res = await fetch(MSG91_BULK_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", authkey: MSG91_AUTH_KEY },
     body: JSON.stringify(payload),
@@ -71,27 +77,39 @@ function buildOtpPayload(phone, code) {
 }
 
 async function sendOtpViaWhatsApp(phone, code) {
-  return postToMsg91(buildOtpPayload(phone, code), "OTP send");
+  return postJsonToMsg91(buildOtpPayload(phone, code), "OTP send");
 }
 
-// Plain free-form text — standard WhatsApp Cloud API text-message shape.
-// Only deliverable within 24 hours of the recipient last messaging the
-// business number; unconfirmed against a real send, see file header.
-function buildTextPayload(phone, message) {
-  return {
+// MSG91's "Send message (once session started)" endpoint — plain free-form
+// text, but only deliverable within 24 hours of the recipient last messaging
+// the business number (WhatsApp's own rule; MSG91 just enforces it). Outside
+// that window this fails and returns false — there is no workaround short of
+// getting a template approved for this message too.
+function buildTextUrl(phone, message) {
+  const params = new URLSearchParams({
     integrated_number: MSG91_SENDER_NUMBER,
+    recipient_number: toGatewayNumber(phone),
     content_type: "text",
-    payload: {
-      messaging_product: "whatsapp",
-      to: toGatewayNumber(phone),
-      type: "text",
-      text: { body: message },
-    },
-  };
+    text: message,
+  });
+  return `${MSG91_SESSION_URL}?${params.toString()}`;
 }
 
 async function sendWhatsAppMessage(phone, message) {
-  return postToMsg91(buildTextPayload(phone, message), "Text send");
+  if (!isConfigured) {
+    console.log(`[WhatsApp] (MSG91 not configured) Text send`);
+    return false;
+  }
+  const res = await fetch(buildTextUrl(phone, message), {
+    method: "POST",
+    headers: { Accept: "application/json", authkey: MSG91_AUTH_KEY, "Content-Type": "application/json" },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.status === "error" || data.hasError) {
+    console.error("[WhatsApp/MSG91] Text send failed:", res.status, data);
+    return false;
+  }
+  return true;
 }
 
-module.exports = { sendOtpViaWhatsApp, sendWhatsAppMessage, isConfigured, buildOtpPayload, buildTextPayload };
+module.exports = { sendOtpViaWhatsApp, sendWhatsAppMessage, isConfigured, buildOtpPayload, buildTextUrl };
