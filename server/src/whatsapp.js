@@ -1,13 +1,18 @@
-// WhatsApp senders.
+// All WhatsApp sending goes through MSG91's official WhatsApp Business API —
+// a real Meta Business Solution Provider. The old unofficial web.saasyto.com
+// gateway (a WhatsApp Web session paired by QR code) has been removed.
 //
-// OTP codes go through MSG91's official WhatsApp Business API (a real Meta
-// Business Solution Provider, using a pre-approved template) — see
-// sendOtpViaWhatsApp. Everything else (provider warnings, wallet recharge,
-// reminders) still goes through web.saasyto.com, an unofficial WhatsApp Web
-// automation gateway (a real WhatsApp Web session paired by QR code in their
-// dashboard). That one is free-form text, which only the unofficial gateway
-// supports; moving it to MSG91 would mean getting a template approved by
-// Meta for each message type.
+// Two message shapes:
+//   - OTP: a pre-approved "template" send (see sendOtpViaWhatsApp) — this is
+//     the one confirmed working against a real account and real messages.
+//   - Everything else (provider warnings, wallet recharge, reminders): a
+//     plain "text" send (see sendWhatsAppMessage). WhatsApp only allows
+//     free-form business-initiated text within 24 hours of the recipient
+//     last messaging the business number; outside that window Meta rejects
+//     it and this returns false. If these need to reach providers reliably
+//     regardless of that window, they should become approved templates too
+//     (same pattern as the OTP one) — ask before assuming this path is
+//     verified end-to-end; it hasn't been tested against a real send yet.
 const MSG91_AUTH_KEY = process.env.MSG91_AUTH_KEY;
 const MSG91_SENDER_NUMBER = process.env.MSG91_WHATSAPP_NUMBER; // MSG91's "integrated_number"
 const MSG91_OTP_TEMPLATE = process.env.MSG91_OTP_TEMPLATE || "otp";
@@ -16,42 +21,34 @@ const MSG91_OTP_TEMPLATE_LANG = process.env.MSG91_OTP_TEMPLATE_LANG || "en";
 // Meta rejects the request either way if this doesn't match the template.
 const MSG91_OTP_HAS_BUTTON = process.env.MSG91_OTP_HAS_BUTTON === "true";
 
-const isMsg91Configured = Boolean(MSG91_AUTH_KEY && MSG91_SENDER_NUMBER);
-
-const INSTANCE_ID = process.env.WHATSAPP_INSTANCE_ID;
-const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
-
-const isConfigured = Boolean(INSTANCE_ID && ACCESS_TOKEN);
+const isConfigured = Boolean(MSG91_AUTH_KEY && MSG91_SENDER_NUMBER);
+const MSG91_URL = "https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/";
 
 function toGatewayNumber(phone) {
   return String(phone || "").replace(/\D/g, "");
 }
 
-async function sendWhatsAppMessage(phone, message) {
+async function postToMsg91(payload, label) {
   if (!isConfigured) {
-    console.log(`[WhatsApp] (no provider configured) To ${phone}: ${message}`);
+    console.log(`[WhatsApp] (MSG91 not configured) ${label}`);
     return false;
   }
-
-  const url = new URL("https://web.saasyto.com/api/send");
-  url.searchParams.set("number", toGatewayNumber(phone));
-  url.searchParams.set("type", "text");
-  url.searchParams.set("message", message);
-  url.searchParams.set("instance_id", INSTANCE_ID);
-  url.searchParams.set("access_token", ACCESS_TOKEN);
-
-  const res = await fetch(url.toString());
+  const res = await fetch(MSG91_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", authkey: MSG91_AUTH_KEY },
+    body: JSON.stringify(payload),
+  });
   const data = await res.json().catch(() => ({}));
-  if (data.status !== "success") {
-    console.error("[WhatsApp] Send failed:", data);
+  if (!res.ok || data.status === "error" || data.hasError) {
+    console.error(`[WhatsApp/MSG91] ${label} failed:`, res.status, data);
     return false;
   }
   return true;
 }
 
-// MSG91's WhatsApp template-send request body for one recipient, one body
-// variable (the code) and, optionally, a "Copy code" button carrying the
-// same value — MSG91's documented component keys for their v5 bulk endpoint.
+// MSG91's template-send request body for one recipient, one body variable
+// (the code) and, optionally, a "Copy code" button carrying the same value —
+// MSG91's documented component keys for their v5 bulk endpoint.
 function buildOtpPayload(phone, code) {
   const components = { body_1: { type: "text", value: code } };
   if (MSG91_OTP_HAS_BUTTON) {
@@ -73,24 +70,28 @@ function buildOtpPayload(phone, code) {
   };
 }
 
-async function sendOtpViaMsg91(phone, code) {
-  const res = await fetch("https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", authkey: MSG91_AUTH_KEY },
-    body: JSON.stringify(buildOtpPayload(phone, code)),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.status === "error" || data.hasError) {
-    console.error("[WhatsApp/MSG91] OTP send failed:", res.status, data);
-    return false;
-  }
-  return true;
-}
-
 async function sendOtpViaWhatsApp(phone, code) {
-  if (isMsg91Configured) return sendOtpViaMsg91(phone, code);
-  // Falls back to the old free-text gateway until MSG91 env vars are set.
-  return sendWhatsAppMessage(phone, `Your Tikdum verification code is ${code}. It expires in 5 minutes.`);
+  return postToMsg91(buildOtpPayload(phone, code), "OTP send");
 }
 
-module.exports = { sendOtpViaWhatsApp, sendWhatsAppMessage, isConfigured, isMsg91Configured, buildOtpPayload };
+// Plain free-form text — standard WhatsApp Cloud API text-message shape.
+// Only deliverable within 24 hours of the recipient last messaging the
+// business number; unconfirmed against a real send, see file header.
+function buildTextPayload(phone, message) {
+  return {
+    integrated_number: MSG91_SENDER_NUMBER,
+    content_type: "text",
+    payload: {
+      messaging_product: "whatsapp",
+      to: toGatewayNumber(phone),
+      type: "text",
+      text: { body: message },
+    },
+  };
+}
+
+async function sendWhatsAppMessage(phone, message) {
+  return postToMsg91(buildTextPayload(phone, message), "Text send");
+}
+
+module.exports = { sendOtpViaWhatsApp, sendWhatsAppMessage, isConfigured, buildOtpPayload, buildTextPayload };
