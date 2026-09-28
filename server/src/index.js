@@ -116,14 +116,20 @@ async function dispatchBooking(booking, triedProviderIds = [booking.providerId])
   // Separate channel, separate failure mode: FCM is what lets the native
   // provider app ring like an incoming call (see TikdumMessagingService) —
   // web push alone can't do that even when it's delivered successfully.
-  fcm
-    .sendToDevices("provider", provider.id, {
-      title: "New booking request",
-      body: `${booking.service?.name || "A service"} request nearby`,
-      bookingId: booking.id,
-      type: "booking:created",
-    })
-    .catch((e) => console.error("fcm send failed", e));
+  const newBookingPush = {
+    title: "New booking request",
+    body: `${booking.service?.name || "A service"} request nearby`,
+    bookingId: booking.id,
+    type: "booking:created",
+  };
+  fcm.sendToDevices("provider", provider.id, newBookingPush).catch((e) => console.error("fcm send failed", e));
+  // A brand-new, not-yet-assigned request only rings staff who can actually
+  // do something with it (see it and/or assign it) — a Field Staff member
+  // who can only see orders already assigned to them has nothing to act on
+  // here yet, and shouldn't have their phone ring for someone else's job.
+  for (const s of staff.eligibleForNewBookingPing(provider.id)) {
+    fcm.sendToDevices("provider", `${provider.id}:staff:${s.id}`, newBookingPush).catch((e) => console.error("fcm send failed (staff)", e));
+  }
   setTimeout(async () => {
     try {
       const current = await store.getBooking(booking.id);
@@ -1168,10 +1174,17 @@ app.patch("/api/provider/notification-prefs", auth.requireAuth("provider"), ah(a
 }));
 
 // ---- FCM device tokens (native apps only — see fcm.js) ----
+// A staff member's token carries the SAME provider id as the owner's (that's
+// how they act on the company's data) — without this, whichever of them
+// (owner or any staff) last opened the app would silently overwrite the
+// other's registered token under the shared key, and only that one device
+// would ever ring for a new job. Each person gets their own key instead.
+const fcmIdFor = (user) => (user.staffId ? `${user.id}:staff:${user.staffId}` : user.id);
+
 app.post("/api/provider/fcm-token", auth.requireAuth("provider"), ah(async (req, res) => {
   const { token } = req.body || {};
   if (!token) return res.status(400).json({ error: "token is required" });
-  fcm.saveToken("provider", req.user.id, token);
+  fcm.saveToken("provider", fcmIdFor(req.user), token);
   res.status(201).json({ ok: true });
 }));
 

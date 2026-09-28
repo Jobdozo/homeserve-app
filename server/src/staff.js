@@ -7,6 +7,7 @@
 const jsonStore = require("./jsonStore");
 const store = require("./store");
 const auth = require("./auth");
+const fcm = require("./fcm");
 
 const STAFF = "providerStaff";
 const ASSIGNMENTS = "orderAssignments";
@@ -82,6 +83,17 @@ function allStaff() {
 
 function getStaff(id) {
   return allStaff().find((s) => s.id === id) || null;
+}
+
+// Who a brand-new, not-yet-assigned booking should ring besides the owner:
+// only staff who can actually do something with an unassigned request —
+// see it (orders.view_all) or hand it to someone (orders.assign). A Field
+// Staff member scoped to orders.view_assigned has nothing to act on until
+// it's assigned to them specifically, so their phone shouldn't ring for it.
+function eligibleForNewBookingPing(providerId) {
+  return allStaff().filter(
+    (s) => s.providerId === providerId && s.active !== false && has(s.permissions, ["orders.view_all", "orders.assign"])
+  );
 }
 
 function activeStaffByPhone(phone) {
@@ -221,6 +233,18 @@ async function assignOrder(providerId, booking, staffId, actor) {
   if (existing) jsonStore.update(ASSIGNMENTS, booking.id, record);
   else jsonStore.insert(ASSIGNMENTS, record);
   log(providerId, { name: actor.name }, "Assigned order", booking.id, `to ${s.name}`, true);
+  // The in-app notification above is a quiet record for the account; the
+  // person actually doing the job needs the same urgent, ring-like alert a
+  // brand-new dispatch gets (see dispatchBooking in index.js) — otherwise
+  // "assigned" means nothing until they happen to open the app and notice.
+  fcm
+    .sendToDevices("provider", `${providerId}:staff:${staffId}`, {
+      title: "You've been assigned a job",
+      body: `${booking.service?.name || "A service"} request`,
+      bookingId: booking.id,
+      type: "booking:created",
+    })
+    .catch((e) => console.error("fcm send failed (assignment)", e));
   try {
     await store.addNotification({
       recipientType: "provider",
@@ -423,5 +447,6 @@ module.exports = {
   PERMISSION_GROUPS, ROLE_TEMPLATES, roleTemplates, validateTemplates,
   getStaff, activeStaffByPhone, createStaff, updateStaff, listWithStats, detail, catalogue,
   assignments, assignmentFor, assignedBookingIds, assignOrder, clearAssignment,
+  eligibleForNewBookingPing,
   log, listActivity, loginProfile, recordLogin, guard, ordersScope, emptyEarnings,
 };
