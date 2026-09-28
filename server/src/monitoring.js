@@ -10,7 +10,17 @@ const jsonStore = require("./jsonStore");
 // while open), so there's no separate client change to ship. "Last seen" is
 // persisted (throttled) so it survives a server restart; Online itself is
 // in-memory only, so after a restart everyone is Offline until they next call.
-const ONLINE_WINDOW_MS = 90 * 1000;
+//
+// This window has to be much longer than the 30s poll interval itself:
+// Android suspends a backgrounded WebView's JS timers almost immediately
+// (screen lock, switching apps — completely routine for a provider not
+// staring at their phone), which silently stops the heartbeat well before
+// the app is actually "gone". A 90s window flipped providers to Offline
+// within seconds of the screen turning off, even though they were still
+// logged in and would still get a ringing push for a new job. 5 minutes
+// tolerates normal background throttling and flaky mobile networks while
+// still going Offline reasonably soon after the app is truly closed.
+const ONLINE_WINDOW_MS = 5 * 60 * 1000;
 const presenceStore = require("./presence");
 const { touchProvider } = presenceStore;
 

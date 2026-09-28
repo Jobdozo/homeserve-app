@@ -185,7 +185,7 @@ export default function MonitoringPage() {
         ))}
       </div>
       <p className="-mt-2 px-1 text-[11px] text-gray-400">
-        Online = provider's app contacted the server in the last 90 seconds. Completed / Rejected count providers with such orders in the selected dates; the other tiles show the current state.
+        Online = provider's app contacted the server in the last 5 minutes. Completed / Rejected count providers with such orders in the selected dates; the other tiles show the current state.
       </p>
 
       {/* Filters */}
