@@ -34,12 +34,17 @@ export default function StaffDetailScreen() {
 
   const toggleActive = async () => {
     setBusy(true);
+    const nextActive = s.active === false;
+    // Flip the badge the instant the request goes out, instead of leaving it
+    // showing the old status until the follow-up load() round trip resolves.
+    setData((prev) => (prev ? { ...prev, staff: { ...prev.staff, active: nextActive } } : prev));
     try {
-      await api.updateStaff(s.id, { active: s.active === false });
-      showToast(s.active === false ? "Staff member reactivated" : "Staff member deactivated");
+      await api.updateStaff(s.id, { active: nextActive });
+      showToast(nextActive ? "Staff member reactivated" : "Staff member deactivated");
       await load();
     } catch (e) {
       showToast(e.message || "Couldn't update");
+      await load(); // revert the optimistic flip back to the real server state
     } finally {
       setBusy(false);
     }

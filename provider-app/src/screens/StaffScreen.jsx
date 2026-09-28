@@ -124,8 +124,19 @@ export default function StaffScreen() {
       {adding && (
         <StaffForm
           onClose={() => setAdding(false)}
-          onSaved={() => {
+          onSaved={(saved) => {
             setAdding(false);
+            // Show the new hire immediately (counts, list) instead of
+            // waiting on a second round trip — load() below still runs to
+            // pick up the computed stats (pending/completed/lastActiveAt)
+            // a plain create response doesn't carry.
+            setStaff((prev) => {
+              if (!prev) return prev;
+              const exists = prev.some((s) => s.id === saved.id);
+              return exists
+                ? prev.map((s) => (s.id === saved.id ? { ...s, ...saved } : s))
+                : [...prev, { pending: 0, completed: 0, lastActiveAt: null, ...saved }];
+            });
             load();
           }}
         />
