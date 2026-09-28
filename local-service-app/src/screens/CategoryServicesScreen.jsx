@@ -75,7 +75,7 @@ export default function CategoryServicesScreen() {
               return (
                 <button
                   key={s.id}
-                  onClick={() => navigate(`/service/${s.id}`)}
+                  onClick={() => navigate(`/find-service/${s.id}`)}
                   className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 p-3 text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.99] lg:p-4"
                 >
                   <CategoryIcon categoryId={s.categoryId} imageUrl={s.imageUrl} size={64} />

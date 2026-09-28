@@ -63,7 +63,7 @@ export default function AllServicesScreen() {
             return (
               <button
                 key={s.id}
-                onClick={() => navigate(`/service/${s.id}`)}
+                onClick={() => navigate(`/find-service/${s.id}`)}
                 className="relative overflow-hidden rounded-2xl bg-white text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.98]"
               >
                 {pct > 0 && (

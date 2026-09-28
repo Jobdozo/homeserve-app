@@ -17,6 +17,7 @@ const BookingsScreen = lazy(() => import("./screens/BookingsScreen"));
 const MessagesListScreen = lazy(() => import("./screens/MessagesListScreen"));
 const ProfileScreen = lazy(() => import("./screens/ProfileScreen"));
 const ServiceDetailsScreen = lazy(() => import("./screens/ServiceDetailsScreen"));
+const ServiceProvidersScreen = lazy(() => import("./screens/ServiceProvidersScreen"));
 const CategoryServicesScreen = lazy(() => import("./screens/CategoryServicesScreen"));
 const BookingDetailsScreen = lazy(() => import("./screens/BookingDetailsScreen"));
 const ChatScreen = lazy(() => import("./screens/ChatScreen"));
@@ -84,6 +85,7 @@ function AppRoutes() {
           <Route path="/search" element={<SearchScreen />} />
           <Route path="/category/:categoryId" element={<CategoryServicesScreen />} />
           <Route path="/service/:serviceId" element={<ServiceDetailsScreen />} />
+          <Route path="/find-service/:serviceId" element={<ServiceProvidersScreen />} />
           <Route path="/cart" element={<CartScreen />} />
           <Route path="/booking/:bookingId" element={<BookingDetailsScreen />} />
           <Route path="/chat/:bookingId" element={<ChatScreen />} />

@@ -92,7 +92,7 @@ function ServiceCard({ service, count, carousel }) {
   const pct = discountPct(service.price, service.originalPrice);
   return (
     <button
-      onClick={() => navigate(`/service/${service.id}`)}
+      onClick={() => navigate(`/find-service/${service.id}`)}
       className={`relative overflow-hidden rounded-2xl bg-white text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.98] ${
         carousel ? "w-40 flex-shrink-0 lg:w-56" : ""
       }`}

@@ -103,7 +103,7 @@ export default function HomeScreen() {
       <HeroBanners banners={heroBanners} />
       {heroBanners.length > 0 ? null : bestOffer ? (
         <button
-          onClick={() => navigate(`/service/${bestOffer.service.id}`)}
+          onClick={() => navigate(`/find-service/${bestOffer.service.id}`)}
           className="mx-4 mt-4 flex items-center justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-brand to-brand-dark px-4 py-4 text-left text-white lg:mx-0 lg:mt-6 lg:px-10 lg:py-10"
         >
           <div>
