@@ -40,6 +40,7 @@ public class BatteryOptPlugin extends Plugin {
       PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
       ignoring = pm != null && pm.isIgnoringBatteryOptimizations(ctx.getPackageName());
     }
+    Log.e("TikdumFcm", "isIgnoringBatteryOptimizations() -> " + ignoring + " (manufacturer=" + Build.MANUFACTURER + ")");
     JSObject result = new JSObject();
     result.put("ignoring", ignoring);
     result.put("manufacturer", Build.MANUFACTURER);
