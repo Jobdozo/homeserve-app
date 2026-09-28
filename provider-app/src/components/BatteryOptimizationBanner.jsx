@@ -40,6 +40,27 @@ export default function BatteryOptimizationBanner() {
     setDismissed(true);
   };
 
+  // Some OEMs (confirmed on Vivo) route the official Android exemption dialog
+  // into their own settings screen, and isIgnoringBatteryOptimizations() can
+  // keep reporting false afterwards even once the person has actually granted
+  // it there — the standard API just doesn't reflect the OEM screen's own
+  // toggle. Re-nagging someone who already went through the flow is worse
+  // than trusting they did it, so both actions below rest the banner for the
+  // same week as "Not now"; it comes back on its own if the risk is real.
+  // dismiss() runs FIRST, before the native call — these buttons background
+  // the app into a heavy OEM settings screen, and on a phone aggressive
+  // enough to need this banner in the first place, that's exactly the moment
+  // its process is most likely to get killed before an after-the-fact
+  // localStorage write would've flushed.
+  const fixNow = () => {
+    dismiss();
+    requestBatteryExemption();
+  };
+  const allowAutostart = () => {
+    dismiss();
+    openAutostartSettings();
+  };
+
   return (
     <div className="mx-4 mt-3 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-card lg:mx-8 lg:p-6">
       <AlertIcon width={20} height={20} className="mt-0.5 flex-shrink-0 text-amber-500" />
@@ -50,13 +71,10 @@ export default function BatteryOptimizationBanner() {
           this once so requests always reach you.
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <button
-            onClick={requestBatteryExemption}
-            className="rounded-lg bg-amber-500 px-3 py-1.5 text-[11.5px] font-semibold text-white"
-          >
+          <button onClick={fixNow} className="rounded-lg bg-amber-500 px-3 py-1.5 text-[11.5px] font-semibold text-white">
             Fix now
           </button>
-          <button onClick={openAutostartSettings} className="text-[11.5px] font-semibold text-amber-700 underline">
+          <button onClick={allowAutostart} className="text-[11.5px] font-semibold text-amber-700 underline">
             Also allow autostart
           </button>
           <button onClick={dismiss} className="text-[11.5px] font-semibold text-amber-600">
