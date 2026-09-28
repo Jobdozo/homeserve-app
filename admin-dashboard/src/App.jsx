@@ -3,6 +3,7 @@ import { AppProvider, useApp } from "./context/AppContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/Layout";
 import LoginScreen from "./screens/LoginScreen";
+import LogoMark from "./components/LogoMark";
 import DashboardPage from "./pages/DashboardPage";
 import CustomersPage from "./pages/CustomersPage";
 import ProvidersPage from "./pages/ProvidersPage";
@@ -37,7 +38,9 @@ function AppRoutes() {
   if (authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-brand-light border-t-brand" />
+        <div className="flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl bg-brand text-white">
+          <LogoMark size={34} />
+        </div>
       </div>
     );
   }

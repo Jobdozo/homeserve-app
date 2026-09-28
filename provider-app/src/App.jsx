@@ -4,6 +4,7 @@ import { AppProvider, useApp } from "./context/AppContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { MainLayout, DetailLayout } from "./components/PhoneFrame";
 import LoginScreen from "./screens/LoginScreen";
+import LogoMark from "./components/LogoMark";
 import { useAndroidBackButton } from "./utils/useAndroidBackButton";
 import AgreementScreen from "./screens/AgreementScreen";
 import RingingOverlay from "./components/RingingOverlay";
@@ -53,7 +54,9 @@ function AppRoutes() {
         <div className="app-body">
           <div className="phone-frame">
             <div className="screen flex items-center justify-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-brand-light border-t-brand" />
+              <div className="flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl bg-brand text-white">
+                <LogoMark size={34} />
+              </div>
             </div>
           </div>
         </div>
