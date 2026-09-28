@@ -57,6 +57,11 @@ public class TikdumMessagingService extends FirebaseMessagingService {
 
     NotificationCompat.Builder builder = new NotificationCompat.Builder(ctx, CHANNEL_ID)
         .setSmallIcon(R.drawable.ic_launcher_foreground)
+        // The small icon is just a white silhouette (Android's own rule for
+        // status-bar icons); without an explicit color, OEM notification
+        // shades that tint or badge it (MIUI, etc.) fall back to a generic
+        // blue instead of the Tikdum brand purple.
+        .setColor(0xFF634AE0)
         .setContentTitle(title)
         .setContentText(body)
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
