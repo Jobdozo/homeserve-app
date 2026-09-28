@@ -1,20 +1,20 @@
 import { COUNTRY_CODES } from "../data/countryCodes";
 
-export default function PhoneInput({ country, onCountryChange, number, onNumberChange, autoFocus }) {
+// India-only launch: the country is fixed, so this shows a plain +91 badge
+// instead of a dropdown. `country`/`onCountryChange` are accepted but unused
+// so callers don't need to change — restore the <select> here if a second
+// country is ever added to countryCodes.js.
+export default function PhoneInput({ number, onNumberChange, autoFocus }) {
+  const { flag, dial, name } = COUNTRY_CODES[0];
   return (
     <div className="flex gap-2">
-      <select
-        value={country}
-        onChange={(e) => onCountryChange(e.target.value)}
-        aria-label="Country code"
-        className="w-[104px] flex-shrink-0 rounded-xl border border-gray-200 px-2 text-[14px] text-gray-800 focus:border-brand focus:outline-none"
+      <span
+        title={name}
+        aria-label={`Country: ${name}, ${dial}`}
+        className="flex w-[68px] flex-shrink-0 items-center justify-center gap-1 rounded-xl border border-gray-200 px-2 text-[14px] text-gray-800"
       >
-        {COUNTRY_CODES.map((c) => (
-          <option key={c.iso2} value={c.iso2}>
-            {c.flag} {c.dial}
-          </option>
-        ))}
-      </select>
+        <span aria-hidden="true">{flag}</span> {dial}
+      </span>
       <input
         type="tel"
         inputMode="numeric"
