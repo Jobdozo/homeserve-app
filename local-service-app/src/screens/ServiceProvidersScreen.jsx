@@ -68,7 +68,9 @@ export default function ServiceProvidersScreen() {
                 onClick={() => navigate(`/service/${s.id}`)}
                 className="flex w-full items-start gap-3 rounded-2xl border border-gray-100 p-3 text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.99] lg:p-4"
               >
-                <CategoryPhoto categoryId={s.categoryId} imageUrl={s.imageUrl} size={64} />
+                <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl">
+                  <CategoryPhoto categoryId={s.categoryId} imageUrl={s.imageUrl} size={64} rounded="rounded-xl" />
+                </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13.5px] font-semibold text-gray-900 lg:text-[14.5px]">
                     {p?.name || "Service provider"}

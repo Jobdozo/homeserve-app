@@ -33,6 +33,11 @@ body {
      real bar heights instead of 0; they're 0 in a normal browser tab. */
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
+  /* The reserved strips above show through as this background — a plain
+     browser tab tints its own status bar from <meta name="theme-color">,
+     but the native edge-to-edge WebView doesn't, so without this the strips
+     read as a plain white gap instead of matching the app's own header. */
+  background: #15803D;
 }
 
 .app-body {

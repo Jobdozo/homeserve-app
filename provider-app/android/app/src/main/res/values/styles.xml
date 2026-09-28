@@ -13,6 +13,12 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- Backstop for any area the WebView itself doesn't cover — e.g. a
+             3-button nav bar reporting a zero safe-area-inset-bottom to the
+             page, where CSS has no strip to color and this device's true
+             system-bar area would otherwise show AppCompat's default white
+             instead of the app's own brand color. -->
+        <item name="android:windowBackground">@color/brand</item>
     </style>
 
 

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same brand green as tailwind.config.js' `brand` color and the
+         <meta name="theme-color"> in index.html — keep all three in sync. -->
+    <color name="brand">#15803D</color>
+</resources>
