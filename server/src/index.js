@@ -1037,7 +1037,7 @@ app.post("/api/bookings/:id/swap", auth.requireAuth("provider"), ah(async (req, 
   rt.booking("booking:updated", result.booking, { previous: [req.user.id] });
   rt.booking("booking:created", result.booking);
   rt.activity((await store.listActivities(1))[0]);
-  dispatchBooking(result.booking, result.excluded);
+  dispatchBooking(result.booking, result.excluded).catch((e) => console.error("dispatchBooking failed", e));
   res.json({ booking: result.swappedOut });
 }));
 
@@ -1057,7 +1057,7 @@ app.post("/api/bookings", auth.requireAuth("customer"), ah(async (req, res) => {
   const booking = await store.createBooking({ ...req.body, customerId: req.user.id });
   rt.booking("booking:created", booking);
   rt.activity((await store.listActivities(1))[0]);
-  dispatchBooking(booking);
+  dispatchBooking(booking).catch((e) => console.error("dispatchBooking failed", e));
   res.status(201).json(booking);
 }));
 
@@ -1066,7 +1066,7 @@ app.post("/api/orders", auth.requireAuth("customer"), ah(async (req, res) => {
   const bookings = await store.createOrder({ ...req.body, customerId: req.user.id });
   bookings.forEach((b) => {
     rt.booking("booking:created", b);
-    dispatchBooking(b);
+    dispatchBooking(b).catch((e) => console.error("dispatchBooking failed", e));
   });
   rt.activity((await store.listActivities(1))[0]);
   res.status(201).json(bookings);
@@ -1095,7 +1095,9 @@ app.patch("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
     rt.activity((await store.listActivities(1))[0]);
     if (result.reassigned) {
       rt.booking("booking:created", result.booking);
-      dispatchBooking(result.booking, [req.user.id, result.booking.providerId]);
+      dispatchBooking(result.booking, [req.user.id, result.booking.providerId]).catch((e) =>
+        console.error("dispatchBooking failed", e)
+      );
     }
     return res.json(result.booking);
   }
