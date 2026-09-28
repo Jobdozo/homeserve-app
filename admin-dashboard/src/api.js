@@ -133,6 +133,17 @@ export const api = {
   broadcastNotification: (data) =>
     request("/admin/notifications/broadcast", { method: "POST", body: JSON.stringify(data) }),
 
+  listLocations: () => request("/admin/locations"),
+  createCity: (data) => request("/admin/locations/cities", { method: "POST", body: JSON.stringify(data) }),
+  updateCity: (id, patch) => request(`/admin/locations/cities/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deleteCity: (id) => request(`/admin/locations/cities/${id}`, { method: "DELETE" }),
+  createArea: (data) => request("/admin/locations/areas", { method: "POST", body: JSON.stringify(data) }),
+  updateArea: (id, patch) => request(`/admin/locations/areas/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deleteArea: (id) => request(`/admin/locations/areas/${id}`, { method: "DELETE" }),
+  createPincode: (data) => request("/admin/locations/pincodes", { method: "POST", body: JSON.stringify(data) }),
+  updatePincode: (id, patch) => request(`/admin/locations/pincodes/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deletePincode: (id) => request(`/admin/locations/pincodes/${id}`, { method: "DELETE" }),
+
   listBanners: () => request("/admin/banners"),
   createBanner: (data) => request("/admin/banners", { method: "POST", body: JSON.stringify(data) }),
   updateBanner: (id, patch) => request(`/admin/banners/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),

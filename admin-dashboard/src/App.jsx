@@ -8,6 +8,7 @@ import CustomersPage from "./pages/CustomersPage";
 import ProvidersPage from "./pages/ProvidersPage";
 import ServicesPage from "./pages/ServicesPage";
 import HomeLayoutPage from "./pages/HomeLayoutPage";
+import LocationsPage from "./pages/LocationsPage";
 import MonitoringPage from "./pages/MonitoringPage";
 import ComplaintsPage from "./pages/ComplaintsPage";
 import BookingsPage from "./pages/BookingsPage";
@@ -51,6 +52,7 @@ function AppRoutes() {
     ["/providers", <ProvidersPage />, "providers.view"],
     ["/services", <ServicesPage />, "services.view"],
     ["/home-layout", <HomeLayoutPage />, "cms.view"],
+    ["/locations", <LocationsPage />, "locations.view"],
     ["/monitoring", <MonitoringPage />, "monitoring.view"],
     ["/complaints", <ComplaintsPage />, "complaints.view"],
     ["/bookings", <BookingsPage />, "bookings.view"],

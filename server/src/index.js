@@ -11,6 +11,7 @@ const complaints = require("./complaints");
 const access = require("./access");
 const staff = require("./staff");
 const rulesConfig = require("./rules");
+const locations = require("./locations");
 const accountDeletion = require("./accountDeletion");
 const rt = require("./realtime");
 const csvImport = require("./csvImport");
@@ -715,6 +716,81 @@ app.delete("/api/admin/home-sections/:id", auth.requireAuth("admin"), ah(async (
 app.delete("/api/admin/banners/:id", auth.requireAuth("admin"), ah(async (req, res) => {
   const ok = store.deleteBanner(req.params.id);
   if (!ok) return res.status(404).json({ error: "Banner not found" });
+  res.status(204).end();
+}));
+
+// ---- locations: the serviceable Cities / Areas / PIN codes list ----
+app.get("/api/admin/locations", auth.requireAuth("admin"), ah(async (req, res) => res.json(locations.tree())));
+
+app.post("/api/admin/locations/cities", auth.requireAuth("admin"), ah(async (req, res) => {
+  try {
+    res.status(201).json(locations.createCity(req.body || {}, actorOf(req)));
+  } catch (e) {
+    res.status(e.status || 400).json({ error: e.message });
+  }
+}));
+
+app.patch("/api/admin/locations/cities/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  let city;
+  try {
+    city = locations.updateCity(req.params.id, req.body || {}, actorOf(req));
+  } catch (e) {
+    return res.status(e.status || 400).json({ error: e.message });
+  }
+  if (!city) return res.status(404).json({ error: "City not found" });
+  res.json(city);
+}));
+
+app.delete("/api/admin/locations/cities/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  if (!locations.deleteCity(req.params.id, actorOf(req))) return res.status(404).json({ error: "City not found" });
+  res.status(204).end();
+}));
+
+app.post("/api/admin/locations/areas", auth.requireAuth("admin"), ah(async (req, res) => {
+  try {
+    res.status(201).json(locations.createArea(req.body || {}, actorOf(req)));
+  } catch (e) {
+    res.status(e.status || 400).json({ error: e.message });
+  }
+}));
+
+app.patch("/api/admin/locations/areas/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  let area;
+  try {
+    area = locations.updateArea(req.params.id, req.body || {}, actorOf(req));
+  } catch (e) {
+    return res.status(e.status || 400).json({ error: e.message });
+  }
+  if (!area) return res.status(404).json({ error: "Area not found" });
+  res.json(area);
+}));
+
+app.delete("/api/admin/locations/areas/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  if (!locations.deleteArea(req.params.id, actorOf(req))) return res.status(404).json({ error: "Area not found" });
+  res.status(204).end();
+}));
+
+app.post("/api/admin/locations/pincodes", auth.requireAuth("admin"), ah(async (req, res) => {
+  try {
+    res.status(201).json(locations.createPincode(req.body || {}, actorOf(req)));
+  } catch (e) {
+    res.status(e.status || 400).json({ error: e.message });
+  }
+}));
+
+app.patch("/api/admin/locations/pincodes/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  let pincode;
+  try {
+    pincode = locations.updatePincode(req.params.id, req.body || {}, actorOf(req));
+  } catch (e) {
+    return res.status(e.status || 400).json({ error: e.message });
+  }
+  if (!pincode) return res.status(404).json({ error: "PIN code not found" });
+  res.json(pincode);
+}));
+
+app.delete("/api/admin/locations/pincodes/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  if (!locations.deletePincode(req.params.id, actorOf(req))) return res.status(404).json({ error: "PIN code not found" });
   res.status(204).end();
 }));
 
