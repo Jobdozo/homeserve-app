@@ -3,6 +3,7 @@ import { api } from "../api";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { BellIcon, StarIcon, ShieldCheckIcon, TrendUpIcon, TrendDownIcon, AlertIcon } from "../components/icons";
+import BatteryOptimizationBanner from "../components/BatteryOptimizationBanner";
 
 export default function DashboardScreen() {
   const navigate = useNavigate();
@@ -91,6 +92,8 @@ export default function DashboardScreen() {
           <span className="switch-knob" />
         </button>
       </div>
+
+      <BatteryOptimizationBanner />
 
       {capacity?.restricted && (
         <div className="mx-4 mt-3 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-card lg:mx-8 lg:p-6">

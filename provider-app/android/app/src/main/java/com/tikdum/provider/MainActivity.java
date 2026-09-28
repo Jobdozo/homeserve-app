@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
   public void onCreate(Bundle savedInstanceState) {
     Log.e("TikdumFcm", "MainActivity.onCreate — registering FcmTokenPlugin");
     registerPlugin(FcmTokenPlugin.class);
+    registerPlugin(BatteryOptPlugin.class);
     super.onCreate(savedInstanceState);
     handleRingIntent(getIntent());
   }

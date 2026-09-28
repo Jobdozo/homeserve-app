@@ -44,4 +44,9 @@
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Lets the app ask the OS to stop battery-optimizing it — confirmed
+         necessary via live device testing (a new-job push never arrived while
+         the app was closed on a Vivo phone, even after Android's own Doze
+         whitelist). See BatteryOptPlugin.java. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 </manifest>
