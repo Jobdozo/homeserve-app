@@ -2,7 +2,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { BackIcon, SearchIcon, StarIcon, ChevronRightIcon, XIcon } from "../components/icons";
-import { formatCount, discountPct } from "../utils/format";
+import { formatCount, discountPct, dedupeByName } from "../utils/format";
 import CategoryIcon from "../components/CategoryIcon";
 import CartBar from "../components/CartBar";
 
@@ -25,8 +25,8 @@ export default function SearchScreen() {
 
   const matchedServices = useMemo(() => {
     if (!q) return [];
-    return services.filter(
-      (s) => s.name.toLowerCase().includes(q) || (s.tagline || "").toLowerCase().includes(q)
+    return dedupeByName(
+      services.filter((s) => s.name.toLowerCase().includes(q) || (s.tagline || "").toLowerCase().includes(q))
     );
   }, [services, q]);
 

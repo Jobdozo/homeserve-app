@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
 import { StarIcon, ChevronRightIcon } from "../components/icons";
-import { formatCount, discountPct } from "../utils/format";
+import { formatCount, discountPct, dedupeByName } from "../utils/format";
 import CategoryIcon from "../components/CategoryIcon";
 import CartBar from "../components/CartBar";
 
@@ -13,7 +13,11 @@ export default function CategoryServicesScreen() {
   const { categories, services, showToast } = useApp();
 
   const category = categories.find((c) => c.id === categoryId);
+  // Ratings/reviews stay computed from every provider's listing (real
+  // activity shouldn't shrink because two providers happen to share a
+  // name) — only the cards shown below are deduped by name.
   const inCategory = useMemo(() => services.filter((s) => s.categoryId === categoryId), [services, categoryId]);
+  const displayList = useMemo(() => dedupeByName(inCategory), [inCategory]);
 
   const aggregate = useMemo(() => {
     const rated = inCategory.filter((s) => s.reviewCount > 0);
@@ -51,7 +55,7 @@ export default function CategoryServicesScreen() {
               </div>
             ) : (
               <p className="mt-0.5 text-[11.5px] text-gray-400">
-                {inCategory.length} service{inCategory.length === 1 ? "" : "s"} available
+                {displayList.length} service{displayList.length === 1 ? "" : "s"} available
               </p>
             )}
           </div>
@@ -70,7 +74,7 @@ export default function CategoryServicesScreen() {
           </div>
         ) : (
           <div className="mt-4 space-y-3 lg:mt-6 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
-            {inCategory.map((s) => {
+            {displayList.map((s) => {
               const pct = discountPct(s.price, s.originalPrice);
               return (
                 <button

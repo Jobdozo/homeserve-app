@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
 import { StarIcon } from "../components/icons";
-import { formatCount, discountPct } from "../utils/format";
+import { formatCount, discountPct, dedupeByName } from "../utils/format";
 import CategoryPhoto from "../components/CategoryPhoto";
 import CartBar from "../components/CartBar";
 
@@ -36,7 +36,7 @@ export default function AllServicesScreen() {
   const { services } = useApp();
   const [sort, setSort] = useState("popular");
 
-  const sorted = useMemo(() => sortServices(services, sort), [services, sort]);
+  const sorted = useMemo(() => dedupeByName(sortServices(services, sort)), [services, sort]);
 
   return (
     <div className="flex flex-1 flex-col">

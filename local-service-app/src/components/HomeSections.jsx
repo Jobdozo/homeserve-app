@@ -2,7 +2,7 @@ import { Fragment, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { StarIcon, ChevronRightIcon } from "./icons";
-import { formatCount, discountPct } from "../utils/format";
+import { formatCount, discountPct, dedupeByName } from "../utils/format";
 import CategoryIcon from "./CategoryIcon";
 import CategoryPhoto from "./CategoryPhoto";
 
@@ -230,7 +230,7 @@ export default function HomeSections({ sections, services, categories, banners, 
   const navigate = useNavigate();
   const list = sections.length > 0 ? sections : FALLBACK_SECTIONS;
   const inlineBanners = banners.filter((b) => b.placement === "inline").sort((a, b) => (a.afterItems || 3) - (b.afterItems || 3));
-  const byPopularity = [...services].sort((a, b) => b.reviewCount - a.reviewCount);
+  const byPopularity = dedupeByName([...services].sort((a, b) => b.reviewCount - a.reviewCount));
 
   return (
     <>
@@ -240,13 +240,13 @@ export default function HomeSections({ sections, services, categories, banners, 
           return <CategoryCarousel key={section.id} section={section} categories={categories} />;
         }
         if (section.type === "most_booked") {
-          const items = [...services]
-            .sort((a, b) => (bookingCounts[b.id] || 0) - (bookingCounts[a.id] || 0) || b.reviewCount - a.reviewCount)
-            .slice(0, limit);
+          const items = dedupeByName(
+            [...services].sort((a, b) => (bookingCounts[b.id] || 0) - (bookingCounts[a.id] || 0) || b.reviewCount - a.reviewCount)
+          ).slice(0, limit);
           return <ServiceCarousel key={section.id} section={section} items={items} counts={bookingCounts} seeAll={() => navigate("/services")} />;
         }
         if (section.type === "category") {
-          const items = matchServices(section, services, categories).slice(0, limit);
+          const items = dedupeByName(matchServices(section, services, categories)).slice(0, limit);
           const seeAll = section.categoryId ? () => navigate(`/category/${section.categoryId}`) : () => navigate("/services");
           return <ServiceCarousel key={section.id} section={section} items={items} counts={bookingCounts} seeAll={seeAll} />;
         }
