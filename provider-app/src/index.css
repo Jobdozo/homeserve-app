@@ -25,6 +25,14 @@ body {
   height: 100dvh;
   display: flex;
   flex-direction: column;
+  /* Android 15+ (targetSdk 36) draws the app behind the status and
+     navigation bars by default (edge-to-edge is no longer optional) —
+     without this, content can end up squeezed into whatever the WebView
+     happens to report as the "safe" area instead of the real full screen.
+     viewport-fit=cover (index.html) is what makes these resolve to the
+     real bar heights instead of 0; they're 0 in a normal browser tab. */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .app-body {
