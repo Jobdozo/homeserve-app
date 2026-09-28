@@ -269,6 +269,8 @@ const RULES = [
   [/^\/admin\/service-changes\/[^/]+\/review$/, (m, b) => `services.${decisionAction(b?.decision)}`],
   [/^\/admin\/service-changes/, () => "services.view"],
   [/^\/admin\/(categories|services)(\/|$)/, (m) => `services.${byMethod(m)}`],
+  [/^\/admin\/service-catalog\/[^/]+\/apply$/, () => "services.add"],
+  [/^\/admin\/service-catalog(\/|$)/, (m) => `services.${byMethod(m)}`],
   [/^\/services\/[^/]+$/, () => "services.edit"],
   [/^\/admin\/communication-fees/, (m) => (m === "GET" ? ["services.view", "settings.view"] : ["services.edit", "settings.edit"])],
   [/^\/admin\/home-sections\/reorder$/, () => "cms.edit"],

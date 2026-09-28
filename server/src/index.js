@@ -12,6 +12,7 @@ const access = require("./access");
 const staff = require("./staff");
 const rulesConfig = require("./rules");
 const locations = require("./locations");
+const serviceCatalog = require("./serviceCatalog");
 const accountDeletion = require("./accountDeletion");
 const rt = require("./realtime");
 const csvImport = require("./csvImport");
@@ -610,6 +611,49 @@ app.post("/api/admin/services", auth.requireAuth("admin"), ah(async (req, res) =
   const provider = await store.getProvider(providerId);
   if (!provider) return res.status(404).json({ error: "Provider not found" });
   const service = await store.adminCreateService(providerId, { categorySlug, name, price, originalPrice }, actorOf(req));
+  rt.service("service:created", service);
+  rt.activity((await store.listActivities(1))[0]);
+  res.status(201).json(service);
+}));
+
+// ---- service catalog: ready-made services a Super Admin can push onto any
+// provider in one click, instead of typing every field from scratch ----
+app.get("/api/admin/service-catalog", auth.requireAuth("admin"), ah(async (req, res) => res.json(serviceCatalog.list())));
+
+app.post("/api/admin/service-catalog", auth.requireAuth("admin"), ah(async (req, res) => {
+  try {
+    res.status(201).json(serviceCatalog.create(req.body || {}, actorOf(req)));
+  } catch (e) {
+    res.status(e.status || 400).json({ error: e.message });
+  }
+}));
+
+app.patch("/api/admin/service-catalog/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  let item;
+  try {
+    item = serviceCatalog.update(req.params.id, req.body || {}, actorOf(req));
+  } catch (e) {
+    return res.status(e.status || 400).json({ error: e.message });
+  }
+  if (!item) return res.status(404).json({ error: "Catalog item not found" });
+  res.json(item);
+}));
+
+app.delete("/api/admin/service-catalog/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  if (!serviceCatalog.remove(req.params.id, actorOf(req))) return res.status(404).json({ error: "Catalog item not found" });
+  res.status(204).end();
+}));
+
+// The one-click action: create a real service on a provider from a catalog item.
+app.post("/api/admin/service-catalog/:id/apply", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { providerId, ...overrides } = req.body || {};
+  if (!providerId) return res.status(400).json({ error: "providerId is required" });
+  let service;
+  try {
+    service = await serviceCatalog.applyToProvider(req.params.id, providerId, overrides, actorOf(req));
+  } catch (e) {
+    return res.status(e.status || 400).json({ error: e.message });
+  }
   rt.service("service:created", service);
   rt.activity((await store.listActivities(1))[0]);
   res.status(201).json(service);

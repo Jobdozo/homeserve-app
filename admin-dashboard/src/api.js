@@ -130,6 +130,13 @@ export const api = {
   createCategory: (data) => request("/admin/categories", { method: "POST", body: JSON.stringify(data) }),
   createProvider: (data) => request("/admin/providers", { method: "POST", body: JSON.stringify(data) }),
   createService: (data) => request("/admin/services", { method: "POST", body: JSON.stringify(data) }),
+
+  listServiceCatalog: () => request("/admin/service-catalog"),
+  createServiceCatalogItem: (data) => request("/admin/service-catalog", { method: "POST", body: JSON.stringify(data) }),
+  updateServiceCatalogItem: (id, patch) => request(`/admin/service-catalog/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deleteServiceCatalogItem: (id) => request(`/admin/service-catalog/${id}`, { method: "DELETE" }),
+  applyServiceCatalogItem: (id, providerId, overrides) =>
+    request(`/admin/service-catalog/${id}/apply`, { method: "POST", body: JSON.stringify({ providerId, ...overrides }) }),
   broadcastNotification: (data) =>
     request("/admin/notifications/broadcast", { method: "POST", body: JSON.stringify(data) }),
 

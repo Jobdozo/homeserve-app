@@ -76,6 +76,7 @@ function ServicesModule() {
         {[
           ["services", "Services"],
           ["categories", "Categories"],
+          ["catalog", "Catalog"],
           ["changes", `Change requests${pendingChanges.length ? ` (${pendingChanges.length})` : ""}`],
         ].map(([key, label]) => (
           <button
@@ -90,6 +91,8 @@ function ServicesModule() {
 
       {view === "categories" ? (
         <CategoriesPanel filter={catFilter} setFilter={setCatFilter} />
+      ) : view === "catalog" ? (
+        <CatalogPanel />
       ) : view === "changes" ? (
         <ChangeRequestsPanel
           requests={pendingChanges}
@@ -902,5 +905,269 @@ function ChangeRequestsPanel({ requests, onReviewed }) {
         );
       })}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- catalog
+// Ready-made services a Super Admin curates once, then pushes onto any
+// provider in one click instead of retyping name/category/price each time.
+
+function CatalogPanel() {
+  const { categories, providers, showToast } = useApp();
+  const [items, setItems] = useState(null);
+  const [editing, setEditing] = useState(null); // {} for new, or the item for edit
+  const [applying, setApplying] = useState(null); // the item being pushed to a provider
+  const [busyId, setBusyId] = useState(null);
+
+  const refresh = () => api.listServiceCatalog().then(setItems).catch(() => setItems([]));
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const categoryName = (slug) => categories.find((c) => c.id === slug)?.name || slug;
+
+  const toggleActive = async (item) => {
+    setBusyId(item.id);
+    try {
+      await api.updateServiceCatalogItem(item.id, { active: item.active === false });
+      refresh();
+    } catch (e) {
+      showToast(e.message || "Failed to update");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const remove = async (item) => {
+    if (!confirm(`Delete "${item.name}" from the catalog? Services already given to providers are not affected.`)) return;
+    setBusyId(item.id);
+    try {
+      await api.deleteServiceCatalogItem(item.id);
+      showToast("Removed from catalog");
+      refresh();
+    } catch (e) {
+      showToast(e.message || "Failed to delete");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (items === null) return <div className="py-16 text-center text-[13px] text-gray-400">Loading…</div>;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[12.5px] text-gray-500">
+          A ready-made list of services. Pick one for any provider and it's added to their page instantly, already filled in.
+        </p>
+        <button onClick={() => setEditing({})} className="rounded-lg bg-brand px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-brand-dark">
+          + Add to catalog
+        </button>
+      </div>
+
+      {items.length === 0 && (
+        <div className="rounded-2xl bg-white p-8 text-center shadow-card">
+          <p className="text-[13px] text-gray-500">No catalog items yet — add the first one above.</p>
+        </div>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {items.map((item) => {
+          const pct = discountPct(item.price, item.originalPrice);
+          return (
+            <div key={item.id} className={`rounded-2xl bg-white p-4 shadow-card ${item.active === false ? "opacity-60" : ""}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-[13.5px] font-bold text-gray-900">{item.name}</p>
+                  <p className="text-[11px] text-gray-400">{categoryName(item.categorySlug)}</p>
+                </div>
+                <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${item.active === false ? "bg-gray-200 text-gray-500" : "bg-emerald-100 text-emerald-700"}`}>
+                  {item.active === false ? "Inactive" : "Active"}
+                </span>
+              </div>
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <span className="text-[13px] font-semibold text-gray-800">₹{item.price}</span>
+                {pct > 0 && (
+                  <>
+                    <span className="text-[11px] text-gray-400 line-through">₹{item.originalPrice}</span>
+                    <span className="text-[10.5px] font-semibold text-emerald-600">{pct}% off</span>
+                  </>
+                )}
+              </div>
+              {item.tagline && <p className="mt-1 text-[11.5px] text-gray-500">{item.tagline}</p>}
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                <button
+                  onClick={() => setApplying(item)}
+                  disabled={item.active === false}
+                  className="rounded-lg bg-brand px-3 py-1.5 text-[11.5px] font-semibold text-white hover:bg-brand-dark disabled:opacity-40"
+                >
+                  Add to provider →
+                </button>
+                <button onClick={() => setEditing(item)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11.5px] font-semibold text-gray-600">
+                  Edit
+                </button>
+                <button
+                  onClick={() => toggleActive(item)}
+                  disabled={busyId === item.id}
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11.5px] font-semibold text-gray-600 disabled:opacity-50"
+                >
+                  {item.active === false ? "Activate" : "Deactivate"}
+                </button>
+                <button
+                  onClick={() => remove(item)}
+                  disabled={busyId === item.id}
+                  className="rounded-lg border border-red-200 px-3 py-1.5 text-[11.5px] font-semibold text-red-600 disabled:opacity-50"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {editing && <CatalogItemModal item={editing} categories={categories} onClose={() => setEditing(null)} onSaved={refresh} />}
+      {applying && <ApplyCatalogItemModal item={applying} providers={providers} onClose={() => setApplying(null)} onApplied={refresh} />}
+    </div>
+  );
+}
+
+function CatalogItemModal({ item, categories, onClose, onSaved }) {
+  const { showToast } = useApp();
+  const isNew = !item.id;
+  const [form, setForm] = useState({
+    categorySlug: item.categorySlug || "",
+    name: item.name || "",
+    price: item.price != null ? String(item.price) : "",
+    originalPrice: item.originalPrice != null ? String(item.originalPrice) : "",
+    tagline: item.tagline || "",
+    includesText: (item.includes || []).join("\n"),
+  });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    const price = Number(form.price);
+    if (!form.categorySlug) return showToast("Choose a category");
+    if (!form.name.trim()) return showToast("Enter a name");
+    if (!Number.isFinite(price) || price < 0) return showToast("Enter a valid price");
+    setSaving(true);
+    const payload = {
+      categorySlug: form.categorySlug,
+      name: form.name.trim(),
+      price,
+      originalPrice: form.originalPrice.trim() ? Number(form.originalPrice) : null,
+      tagline: form.tagline.trim(),
+      includes: form.includesText.split("\n").map((t) => t.trim()).filter(Boolean),
+    };
+    try {
+      if (isNew) await api.createServiceCatalogItem(payload);
+      else await api.updateServiceCatalogItem(item.id, payload);
+      showToast(isNew ? "Added to catalog" : "Catalog item updated");
+      onSaved();
+      onClose();
+    } catch (e) {
+      showToast(e.message || "Failed to save");
+      setSaving(false);
+    }
+  };
+
+  const input = "w-full rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] outline-none focus:border-brand";
+  return (
+    <Modal title={isNew ? "Add to catalog" : "Edit catalog item"} onClose={onClose}>
+      <div className="space-y-3">
+        <div>
+          <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Category</label>
+          <select value={form.categorySlug} onChange={(e) => setForm({ ...form, categorySlug: e.target.value })} className={input}>
+            <option value="">Select a category</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.icon} {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Name</label>
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. AC Gas Refill" className={input} />
+        </div>
+        <div>
+          <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Tagline (optional)</label>
+          <input value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} className={input} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Price (₹)</label>
+            <input type="number" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className={input} />
+          </div>
+          <div>
+            <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Original price (₹)</label>
+            <input type="number" min="0" value={form.originalPrice} onChange={(e) => setForm({ ...form, originalPrice: e.target.value })} className={input} />
+          </div>
+        </div>
+        <div>
+          <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">What's included (one per line)</label>
+          <textarea
+            value={form.includesText}
+            onChange={(e) => setForm({ ...form, includesText: e.target.value })}
+            rows={4}
+            className={input + " resize-none"}
+          />
+        </div>
+        <button onClick={save} disabled={saving} className="w-full rounded-lg bg-brand py-2 text-[12.5px] font-semibold text-white disabled:opacity-50">
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function ApplyCatalogItemModal({ item, providers, onClose, onApplied }) {
+  const { showToast } = useApp();
+  const [providerId, setProviderId] = useState("");
+  const [price, setPrice] = useState(String(item.price));
+  const [saving, setSaving] = useState(false);
+
+  const apply = async () => {
+    if (!providerId) return showToast("Choose a provider");
+    const n = Number(price);
+    if (!Number.isFinite(n) || n < 0) return showToast("Enter a valid price");
+    setSaving(true);
+    try {
+      await api.applyServiceCatalogItem(item.id, providerId, { price: n });
+      const providerName = providers.find((p) => p.id === providerId)?.name || "the provider";
+      showToast(`"${item.name}" added to ${providerName}`);
+      onApplied();
+      onClose();
+    } catch (e) {
+      showToast(e.message || "Failed to add service");
+      setSaving(false);
+    }
+  };
+
+  const input = "w-full rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] outline-none focus:border-brand";
+  return (
+    <Modal title={`Add "${item.name}" to a provider`} onClose={onClose}>
+      <div className="space-y-3">
+        <div>
+          <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Provider</label>
+          <select value={providerId} onChange={(e) => setProviderId(e.target.value)} className={input}>
+            <option value="">Select a provider</option>
+            {providers.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Price for this provider (₹)</label>
+          <input type="number" min="0" value={price} onChange={(e) => setPrice(e.target.value)} className={input} />
+          <p className="mt-1 text-[10.5px] text-gray-400">Defaults to the catalog price — change it if this provider charges differently.</p>
+        </div>
+        <button onClick={apply} disabled={saving || !providerId} className="w-full rounded-lg bg-brand py-2 text-[12.5px] font-semibold text-white disabled:opacity-50">
+          {saving ? "Adding…" : "Add to provider"}
+        </button>
+      </div>
+    </Modal>
   );
 }
