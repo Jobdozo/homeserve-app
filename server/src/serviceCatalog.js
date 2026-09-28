@@ -4,11 +4,45 @@
 // that provider in one click — name, category, price, tagline and included
 // items all pre-filled — instead of typing every field by hand each time.
 // Flat-JSON storage, independent of the provider services it creates.
+//
+// A catalog item's photo is copied to its own physical file each time it's
+// applied to a provider (never the same file referenced twice), so deleting
+// or replacing one service's photo can never blank out another's.
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
 const jsonStore = require("./jsonStore");
 const store = require("./store");
+const { UPLOADS_DIR } = require("./uploads");
 
 const COLLECTION = "serviceCatalog";
 const fail = (status, message) => Object.assign(new Error(message), { status });
+
+function deleteUploadedFile(url) {
+  if (!url || !url.startsWith("/uploads/") || !/^[A-Za-z0-9._-]+$/.test(url.slice("/uploads/".length))) return;
+  try {
+    fs.unlinkSync(path.join(UPLOADS_DIR, url.slice("/uploads/".length)));
+  } catch (e) {
+    if (e.code !== "ENOENT") console.error("Could not remove old catalog photo", e.message);
+  }
+}
+
+// Duplicates the catalog item's photo file under a fresh name, so the new
+// service owns an independent copy — deleting it later can't affect the
+// template or any other service that started from the same catalog item.
+function copyImageForService(url) {
+  if (!url || !url.startsWith("/uploads/") || !/^[A-Za-z0-9._-]+$/.test(url.slice("/uploads/".length))) return null;
+  const srcName = url.slice("/uploads/".length);
+  const ext = path.extname(srcName) || ".jpg";
+  const destName = `${crypto.randomBytes(16).toString("hex")}${ext}`;
+  try {
+    fs.copyFileSync(path.join(UPLOADS_DIR, srcName), path.join(UPLOADS_DIR, destName));
+    return `/uploads/${destName}`;
+  } catch (e) {
+    console.error("Could not copy catalog photo for new service", e.message);
+    return null;
+  }
+}
 
 function cleanIncludes(input) {
   return (Array.isArray(input) ? input : []).map((t) => String(t).trim()).filter(Boolean).slice(0, 12);
@@ -75,9 +109,28 @@ function update(id, input, actor) {
 function remove(id, actor) {
   const existing = jsonStore.readAll(COLLECTION).find((r) => r.id === id);
   if (!existing) return false;
+  if (existing.imageUrl) deleteUploadedFile(existing.imageUrl);
   jsonStore.remove(COLLECTION, id);
   store.recordAdminChange({ actor, action: "service_catalog.delete", entityType: "service_catalog", entityId: id, entityName: existing.name });
   return true;
+}
+
+// Photo on the catalog template itself — upload replaces any previous one.
+function setImage(id, url, actor) {
+  const existing = jsonStore.readAll(COLLECTION).find((r) => r.id === id);
+  if (!existing) return undefined;
+  const previous = existing.imageUrl || null;
+  const updated = jsonStore.update(COLLECTION, id, { imageUrl: url || null });
+  if (previous && previous !== url) deleteUploadedFile(previous);
+  store.recordAdminChange({
+    actor,
+    action: "service_catalog.update",
+    entityType: "service_catalog",
+    entityId: id,
+    entityName: updated.name,
+    changes: [{ field: "photo", from: previous ? "uploaded" : "none", to: url ? "uploaded" : "removed" }],
+  });
+  return updated;
 }
 
 // The one-click action: create a real, live service on a provider from a
@@ -100,7 +153,12 @@ async function applyToProvider(id, providerId, overrides = {}, actor) {
   const patch = {};
   if (item.tagline) patch.tagline = item.tagline;
   if (item.includes?.length) patch.includes = item.includes;
-  const finalService = Object.keys(patch).length ? await store.adminUpdateService(service.id, patch, actor) : service;
+  let finalService = Object.keys(patch).length ? await store.adminUpdateService(service.id, patch, actor) : service;
+
+  if (item.imageUrl) {
+    const copiedUrl = copyImageForService(item.imageUrl);
+    if (copiedUrl) finalService = await store.setServiceImage(service.id, copiedUrl, actor);
+  }
 
   store.recordAdminChange({
     actor,
@@ -113,4 +171,4 @@ async function applyToProvider(id, providerId, overrides = {}, actor) {
   return finalService;
 }
 
-module.exports = { list, create, update, remove, applyToProvider };
+module.exports = { list, create, update, remove, setImage, applyToProvider };

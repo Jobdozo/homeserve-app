@@ -270,6 +270,7 @@ const RULES = [
   [/^\/admin\/service-changes/, () => "services.view"],
   [/^\/admin\/(categories|services)(\/|$)/, (m) => `services.${byMethod(m)}`],
   [/^\/admin\/service-catalog\/[^/]+\/apply$/, () => "services.add"],
+  [/^\/admin\/service-catalog\/[^/]+\/image$/, () => "services.edit"],
   [/^\/admin\/service-catalog(\/|$)/, (m) => `services.${byMethod(m)}`],
   [/^\/services\/[^/]+$/, () => "services.edit"],
   [/^\/admin\/communication-fees/, (m) => (m === "GET" ? ["services.view", "settings.view"] : ["services.edit", "settings.edit"])],

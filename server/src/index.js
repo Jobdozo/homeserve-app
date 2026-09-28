@@ -659,6 +659,22 @@ app.post("/api/admin/service-catalog/:id/apply", auth.requireAuth("admin"), ah(a
   res.status(201).json(service);
 }));
 
+app.post("/api/admin/service-catalog/:id/image", auth.requireAuth("admin"), upload.single("file"), ah(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Choose a photo to upload" });
+  const item = serviceCatalog.setImage(req.params.id, `/uploads/${req.file.filename}`, actorOf(req));
+  if (!item) {
+    require("fs").unlink(req.file.path, () => {});
+    return res.status(404).json({ error: "Catalog item not found" });
+  }
+  res.json(item);
+}));
+
+app.delete("/api/admin/service-catalog/:id/image", auth.requireAuth("admin"), ah(async (req, res) => {
+  const item = serviceCatalog.setImage(req.params.id, null, actorOf(req));
+  if (!item) return res.status(404).json({ error: "Catalog item not found" });
+  res.json(item);
+}));
+
 // ---- admin: broadcast a notification ----
 app.post("/api/admin/notifications/broadcast", auth.requireAuth("admin"), ah(async (req, res) => {
   const { audience, recipientId, title, message } = req.body || {};

@@ -977,9 +977,18 @@ function CatalogPanel() {
           return (
             <div key={item.id} className={`rounded-2xl bg-white p-4 shadow-card ${item.active === false ? "opacity-60" : ""}`}>
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate text-[13.5px] font-bold text-gray-900">{item.name}</p>
-                  <p className="text-[11px] text-gray-400">{categoryName(item.categorySlug)}</p>
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                    {item.imageUrl ? (
+                      <img src={`${SERVER_URL}${item.imageUrl}`} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-[9px] text-gray-300">No photo</span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-[13.5px] font-bold text-gray-900">{item.name}</p>
+                    <p className="text-[11px] text-gray-400">{categoryName(item.categorySlug)}</p>
+                  </div>
                 </div>
                 <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${item.active === false ? "bg-gray-200 text-gray-500" : "bg-emerald-100 text-emerald-700"}`}>
                   {item.active === false ? "Inactive" : "Active"}
@@ -1026,13 +1035,79 @@ function CatalogPanel() {
         })}
       </div>
 
-      {editing && <CatalogItemModal item={editing} categories={categories} onClose={() => setEditing(null)} onSaved={refresh} />}
+      {editing && (
+        <CatalogItemModal item={editing} categories={categories} onClose={() => setEditing(null)} onSaved={refresh} onPhotoChanged={refresh} />
+      )}
       {applying && <ApplyCatalogItemModal item={applying} providers={providers} onClose={() => setApplying(null)} onApplied={refresh} />}
     </div>
   );
 }
 
-function CatalogItemModal({ item, categories, onClose, onSaved }) {
+function CatalogPhotoField({ item, onChanged }) {
+  const { showToast } = useApp();
+  const [imageUrl, setImageUrl] = useState(item.imageUrl || null);
+  const [busy, setBusy] = useState(false);
+
+  const change = async (file) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("Choose an image file (JPEG, PNG or WebP)");
+      return;
+    }
+    setBusy(true);
+    try {
+      const updated = await api.uploadServiceCatalogImage(item.id, await shrinkImage(file));
+      setImageUrl(updated.imageUrl);
+      onChanged?.();
+    } catch (err) {
+      showToast(err.message || "Could not upload the photo");
+    }
+    setBusy(false);
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try {
+      const updated = await api.removeServiceCatalogImage(item.id);
+      setImageUrl(updated.imageUrl);
+      onChanged?.();
+    } catch (err) {
+      showToast(err.message || "Could not remove the photo");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div>
+      <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Photo</label>
+      <div className="flex items-center gap-3">
+        <div className="flex h-16 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+          {imageUrl ? (
+            <img src={`${SERVER_URL}${imageUrl}`} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className="px-1 text-center text-[10px] leading-tight text-gray-400">Category picture</span>
+          )}
+        </div>
+        <div className="flex flex-col items-start gap-1.5">
+          <label className={`cursor-pointer rounded-lg border border-gray-200 px-2.5 py-1 text-[11.5px] font-semibold text-gray-600 ${busy ? "pointer-events-none opacity-50" : ""}`}>
+            {busy ? "Working…" : imageUrl ? "Replace photo" : "Upload photo"}
+            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={busy} onChange={(e) => { change(e.target.files?.[0]); e.target.value = ""; }} />
+          </label>
+          {imageUrl && (
+            <button onClick={remove} disabled={busy} className="text-[11.5px] font-semibold text-red-500 disabled:opacity-50">
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+      <p className="mt-1 text-[10.5px] text-gray-400">
+        Copied to each service this catalog item is added to, so editing or removing it later never affects those.
+      </p>
+    </div>
+  );
+}
+
+function CatalogItemModal({ item, categories, onClose, onSaved, onPhotoChanged }) {
   const { showToast } = useApp();
   const isNew = !item.id;
   const [form, setForm] = useState({
@@ -1075,6 +1150,7 @@ function CatalogItemModal({ item, categories, onClose, onSaved }) {
   return (
     <Modal title={isNew ? "Add to catalog" : "Edit catalog item"} onClose={onClose}>
       <div className="space-y-3">
+        {!isNew && <CatalogPhotoField item={item} onChanged={onPhotoChanged} />}
         <div>
           <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Category</label>
           <select value={form.categorySlug} onChange={(e) => setForm({ ...form, categorySlug: e.target.value })} className={input}>
