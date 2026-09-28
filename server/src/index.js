@@ -1662,6 +1662,11 @@ app.post("/api/provider/orders/:id/assign", providerOnly, staffRoute(async (req,
   const booking = await store.getBooking(req.params.id);
   if (!booking || booking.providerId !== req.user.id) return res.status(404).json({ error: "Order not found" });
   const assignedStaff = await staff.assignOrder(req.user.id, booking, req.body?.staffId || null, staffActor(req));
+  // Live-app equivalent of the FCM ring in assignOrder(): a staff-limited
+  // session only ever joins the booking's room once it's assigned to them
+  // (see realtime.js), so this is the only way their open app finds out —
+  // without it they'd only learn of it via a push or the next manual refresh.
+  if (assignedStaff) rt.booking("booking:created", booking);
   res.json({ assignedStaff });
 }));
 

@@ -317,9 +317,13 @@ export function AppProvider({ children }) {
     const onBookingCreated = (booking) => {
       if (booking.providerId !== providerId) return;
       // Staff who only see their assigned orders never take the broadcast at
-      // face value — re-read the list the server filtered for them.
+      // face value — re-read the list the server filtered for them. This
+      // event only ever reaches a staff-limited session once a job has just
+      // been assigned to them (see realtime.js), so it's exactly as urgent
+      // as a fresh dispatch is for the owner — it still needs to ring.
       if (staffLimitedRef.current) {
         api.listBookings().then(setRequests).catch(() => {});
+        if (booking.status === "Pending") setRingingRequest(booking);
         return;
       }
       setRequests((prev) => upsertById(prev, booking));
