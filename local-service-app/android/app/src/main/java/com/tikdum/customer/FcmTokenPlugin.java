@@ -71,15 +71,24 @@ public class FcmTokenPlugin extends Plugin {
   public void getToken(PluginCall call) {
     Log.e("TikdumFcm", "getToken() called from JS");
     FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
-      if (!task.isSuccessful() || task.getResult() == null) {
-        Log.e("TikdumFcm", "getToken failed", task.getException());
-        call.reject("Could not get FCM token", task.getException());
-        return;
-      }
-      Log.e("TikdumFcm", "getToken success: " + task.getResult());
-      JSObject result = new JSObject();
-      result.put("token", task.getResult());
-      call.resolve(result);
+      // addOnCompleteListener with no Executor specified can run on a
+      // background thread (Firebase's own, not Capacitor's) — confirmed
+      // live on-device (on the provider app's identical setup) that
+      // resolving a PluginCall from there can silently fail to reach JS at
+      // all: native logs "success" right here, but the JS-side await never
+      // settles, hangs forever, no error either side. Hopping back to the
+      // main thread before resolve()/reject() is what fixed it.
+      getActivity().runOnUiThread(() -> {
+        if (!task.isSuccessful() || task.getResult() == null) {
+          Log.e("TikdumFcm", "getToken failed", task.getException());
+          call.reject("Could not get FCM token", task.getException());
+          return;
+        }
+        Log.e("TikdumFcm", "getToken success: " + task.getResult());
+        JSObject result = new JSObject();
+        result.put("token", task.getResult());
+        call.resolve(result);
+      });
     });
   }
 
