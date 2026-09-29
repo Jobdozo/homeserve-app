@@ -439,10 +439,19 @@ export function AppProvider({ children }) {
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     };
-    report();
+    // A fresh login can hit this at the same moment as the notification
+    // permission prompt in ensurePushSubscribed() — confirmed on-device that
+    // when both land together, Android's location dialog wins and the
+    // notification permission request never resolves or rejects at all, just
+    // hangs forever (so the app never registers for FCM). Giving the
+    // notification prompt a few seconds' head start avoids the collision;
+    // location reporting can afford a short delay, notification permission
+    // can't.
+    const initialDelay = setTimeout(report, 5000);
     const interval = setInterval(report, 30000);
     return () => {
       cancelled = true;
+      clearTimeout(initialDelay);
       clearInterval(interval);
     };
   }, [provider, hasActiveJob]);

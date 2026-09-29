@@ -1,5 +1,4 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
-import { PushNotifications } from "@capacitor/push-notifications";
 import { api } from "../api";
 
 const FcmToken = registerPlugin("FcmToken");
@@ -7,12 +6,18 @@ const FcmToken = registerPlugin("FcmToken");
 async function ensureFcmRegistered() {
   // Android 13+ treats notifications as a dangerous runtime permission —
   // declaring it in the manifest isn't enough, the OS prompt only appears
-  // once something actually calls requestPermissions(). We only need the
-  // prompt itself here; PushNotifications.register()/addListener() are
-  // deliberately never called, since that plugin's own notification
-  // listener would compete with our own FcmTokenPlugin-driven handling.
+  // once something actually requests it. Deliberately routed through our own
+  // FcmTokenPlugin instead of @capacitor/push-notifications'
+  // requestPermissions(): confirmed live on-device that call can hang
+  // forever — never resolving, never rejecting, no dialog ever shown — for
+  // reasons never fully pinned down. Our own plugin's own
+  // requestNotificationPermission() (backed by MainActivity's raw AndroidX
+  // Activity Result launcher) is what's confirmed reliable instead.
+  // PushNotifications.register()/addListener() are separately never used at
+  // all — that plugin's own notification listener would compete with our
+  // own FcmTokenPlugin-driven handling.
   try {
-    await PushNotifications.requestPermissions();
+    await FcmToken.requestNotificationPermission();
   } catch (e) {
     console.error("Notification permission request failed", e);
   }

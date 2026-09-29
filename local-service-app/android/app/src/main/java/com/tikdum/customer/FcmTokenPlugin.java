@@ -1,5 +1,6 @@
 package com.tikdum.customer;
 
+import android.os.Build;
 import android.util.Log;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -43,6 +44,27 @@ public class FcmTokenPlugin extends Plugin {
     JSObject data = new JSObject();
     data.put("bookingId", bookingId);
     activeInstance.notifyListeners("notificationTap", data);
+  }
+
+  // Android 13+ (API 33/Tiramisu) is the first version where notifications
+  // are a runtime permission at all — older versions have nothing to ask for.
+  // Goes through MainActivity's own AndroidX Activity Result launcher rather
+  // than Capacitor's @Permission/requestPermissionForAlias or
+  // @capacitor/push-notifications' requestPermissions() — confirmed live
+  // on-device (on the provider app's identical setup) that both of those
+  // never settle at all when called from a manually-registered plugin like
+  // this one: no dialog, no resolve, no reject, permanently.
+  @PluginMethod
+  public void requestNotificationPermission(PluginCall call) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+      call.resolve();
+      return;
+    }
+    ((MainActivity) getActivity()).requestNotificationPermission(granted -> {
+      JSObject result = new JSObject();
+      result.put("granted", granted);
+      call.resolve(result);
+    });
   }
 
   @PluginMethod
