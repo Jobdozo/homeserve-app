@@ -20,7 +20,18 @@ export default function PhoneInput({ number, onNumberChange, autoFocus }) {
         inputMode="numeric"
         autoFocus={autoFocus}
         value={number}
-        onChange={(e) => onNumberChange(e.target.value.replace(/\D/g, ""))}
+        onChange={(e) => {
+          let digits = e.target.value.replace(/\D/g, "");
+          // A 10-digit Indian mobile never needs more digits than that — if
+          // someone types the country code into this field out of habit
+          // (it's already shown as the "+91" badge), the extra "91" would
+          // otherwise get prepended a second time, producing an invalid
+          // number MSG91/Meta silently rejects (confirmed via MSG91's logs:
+          // 919596618930 sent twice-prefixed as 91919596618930 failed every
+          // time with error 131026 "Message undeliverable").
+          if (digits.length > 10 && digits.startsWith("91")) digits = digits.slice(2);
+          onNumberChange(digits.slice(0, 10));
+        }}
         placeholder="98765 43210"
         className="min-w-0 flex-1 rounded-xl border border-gray-200 px-4 py-3 text-[14px] focus:border-brand focus:outline-none"
       />
