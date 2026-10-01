@@ -4,7 +4,27 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Tikdum</title>
+    <!--
+      This static baseline matters beyond the first paint: react-helmet-async
+      (see src/components/Seo.jsx) only rewrites these tags after the JS
+      bundle runs, so link-preview bots (WhatsApp, etc.) and any crawler that
+      doesn't execute JS only ever see what's written here.
+    -->
+    <title>Tikdum — Book Trusted Home Services Near You</title>
+    <meta
+      name="description"
+      content="Book trusted home services near you on Tikdum — cleaning, pest control, AC repair, and more. Compare verified local providers and book instantly over WhatsApp."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Tikdum" />
+    <meta property="og:title" content="Tikdum — Book Trusted Home Services Near You" />
+    <meta
+      property="og:description"
+      content="Book trusted home services near you on Tikdum — cleaning, pest control, AC repair, and more. Compare verified local providers and book instantly over WhatsApp."
+    />
+    <meta property="og:url" content="https://tikdum.com/" />
+    <meta property="og:image" content="https://tikdum.com/pwa-512.png" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="apple-mobile-web-app-title" content="Tikdum" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />

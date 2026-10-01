@@ -562,6 +562,32 @@ app.get("/api/providers/:id/reviews", ah(async (req, res) => {
 // ---- categories ----
 // Customers and providers only ever see active categories; admins see all
 // (each carries an `active` flag).
+// Served at the site root (not under /api) since that's where crawlers and
+// robots.txt's Sitemap: directive expect it — local-service-app's nginx
+// proxies /sitemap.xml here (see local-service-app/nginx.conf). Lists only
+// what an anonymous visitor can actually browse to, matching the public
+// /api/categories and /api/services({activeOnly:true}) filtering exactly.
+app.get("/sitemap.xml", ah(async (req, res) => {
+  const SITE_URL = "https://tikdum.com";
+  const [categories, services] = await Promise.all([
+    store.listCategories(),
+    store.listServices({ activeOnly: true }),
+  ]);
+  const escapeXml = (s) => String(s).replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]));
+  const urls = [
+    { loc: `${SITE_URL}/home`, priority: "1.0" },
+    { loc: `${SITE_URL}/categories`, priority: "0.8" },
+    { loc: `${SITE_URL}/services`, priority: "0.8" },
+    { loc: `${SITE_URL}/booking-protection`, priority: "0.3" },
+    ...categories.filter((c) => c.active).map((c) => ({ loc: `${SITE_URL}/category/${encodeURIComponent(c.id)}`, priority: "0.7" })),
+    ...services.map((s) => ({ loc: `${SITE_URL}/service/${encodeURIComponent(s.id)}`, priority: "0.6" })),
+  ];
+  const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls
+    .map((u) => `  <url>\n    <loc>${escapeXml(u.loc)}</loc>\n    <priority>${u.priority}</priority>\n  </url>`)
+    .join("\n")}\n</urlset>\n`;
+  res.set("Content-Type", "application/xml").send(body);
+}));
+
 app.get("/api/categories", ah(async (req, res) => {
   const categories = await store.listCategories();
   res.json(access.adminCan(viewerAdmin(req), ["services.view", "customers.view", "providers.view", "bookings.view", "dashboard.view"]) ? categories : categories.filter((c) => c.active));

@@ -6,6 +6,7 @@ import { StarIcon, ChevronRightIcon } from "../components/icons";
 import { formatCount, discountPct } from "../utils/format";
 import CategoryPhoto from "../components/CategoryPhoto";
 import CartBar from "../components/CartBar";
+import Seo from "../components/Seo";
 
 // Same service, every vendor offering it: tapping a service card anywhere in
 // the app lands here first instead of jumping straight into one provider's
@@ -41,6 +42,7 @@ export default function ServiceProvidersScreen() {
   if (!anchor) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+        <Seo title="Service Not Found" path={`/find-service/${serviceId}`} noindex />
         <p className="text-sm text-gray-500">Service not found.</p>
         <button onClick={() => navigate("/home")} className="text-sm font-semibold text-brand">
           Back to Home
@@ -51,6 +53,11 @@ export default function ServiceProvidersScreen() {
 
   return (
     <div className="flex flex-1 flex-col">
+      <Seo
+        title={`${anchor.name} Providers`}
+        description={`Compare ${vendors.length} trusted provider${vendors.length === 1 ? "" : "s"} for ${anchor.name}${category ? ` in ${category.name}` : ""} on Tikdum. Book instantly over WhatsApp.`}
+        path={`/find-service/${anchor.id}`}
+      />
       <ScreenHeader title={anchor.name} maxWidth="lg:max-w-3xl" />
 
       <div className="flex-1 px-4 pb-6 lg:mx-auto lg:w-full lg:max-w-3xl lg:px-8 lg:pb-16">

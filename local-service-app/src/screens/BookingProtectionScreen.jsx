@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
+import Seo from "../components/Seo";
 
 const BADGES = [
   { icon: "🛡️", label: "Genuine service guarantee" },
@@ -40,6 +41,11 @@ export default function BookingProtectionScreen() {
 
   return (
     <div className="flex flex-1 flex-col">
+      <Seo
+        title="Booking Protection"
+        description="Every booking on Tikdum is covered by our genuine service guarantee, damage protection up to ₹10,000, fair price guarantee, and SOS emergency help."
+        path="/booking-protection"
+      />
       <ScreenHeader title="Booking Protection" maxWidth="lg:max-w-2xl" />
 
       <div className="flex-1 space-y-5 px-4 pb-8 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-10">

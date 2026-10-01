@@ -6,6 +6,7 @@ import { StarIcon, ChevronRightIcon } from "../components/icons";
 import { formatCount, discountPct, dedupeByName } from "../utils/format";
 import CategoryIcon from "../components/CategoryIcon";
 import CartBar from "../components/CartBar";
+import Seo from "../components/Seo";
 
 export default function CategoryServicesScreen() {
   const { categoryId } = useParams();
@@ -30,6 +31,7 @@ export default function CategoryServicesScreen() {
   if (!category) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+        <Seo title="Category Not Found" path={`/category/${categoryId}`} noindex />
         <p className="text-sm text-gray-500">Category not found.</p>
         <button onClick={() => navigate("/categories")} className="text-sm font-semibold text-brand">
           Back to Categories
@@ -40,6 +42,11 @@ export default function CategoryServicesScreen() {
 
   return (
     <div className="flex flex-1 flex-col">
+      <Seo
+        title={category.name}
+        description={`Book ${category.name} services near you on Tikdum — compare ${displayList.length} trusted local provider${displayList.length === 1 ? "" : "s"} and book instantly over WhatsApp.`}
+        path={`/category/${category.id}`}
+      />
       <ScreenHeader title={category.name} maxWidth="lg:max-w-3xl" />
 
       <div className="flex-1 px-4 pb-6 lg:mx-auto lg:w-full lg:max-w-3xl lg:px-8 lg:pb-16">

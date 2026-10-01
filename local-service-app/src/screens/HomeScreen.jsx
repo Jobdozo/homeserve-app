@@ -6,6 +6,16 @@ import { discountPct } from "../utils/format";
 import CategoryIcon from "../components/CategoryIcon";
 import CartBar from "../components/CartBar";
 import HomeSections, { HeroBanners } from "../components/HomeSections";
+import Seo, { SITE_URL } from "../components/Seo";
+
+const HOME_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "LocalBusiness",
+  name: "Tikdum",
+  description: "Book trusted home services near you — cleaning, pest control, AC repair, and more.",
+  url: SITE_URL,
+  image: `${SITE_URL}/pwa-512.png`,
+};
 
 export default function HomeScreen() {
   const navigate = useNavigate();
@@ -27,6 +37,7 @@ export default function HomeScreen() {
 
   return (
     <div className="flex flex-col pb-4 lg:px-8 lg:py-8">
+      <Seo path="/home" jsonLd={HOME_JSON_LD} />
       {/* Location + notification */}
       <div className="flex items-center justify-between px-4 pt-1 lg:px-0 lg:pt-0">
         <button

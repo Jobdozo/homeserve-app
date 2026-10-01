@@ -6,6 +6,7 @@ import { useApp } from "../context/AppContext";
 import { api } from "../api";
 import { formatCount, discountPct } from "../utils/format";
 import CategoryPhoto from "../components/CategoryPhoto";
+import Seo, { SITE_URL } from "../components/Seo";
 
 export default function ServiceDetailsScreen() {
   const { serviceId } = useParams();
@@ -28,6 +29,7 @@ export default function ServiceDetailsScreen() {
   if (!service) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+        <Seo title="Service Not Found" path={`/service/${serviceId}`} noindex />
         <p className="text-sm text-gray-500">Service not found.</p>
         <button onClick={() => navigate("/home")} className="text-sm font-semibold text-brand">
           Back to Home
@@ -36,8 +38,36 @@ export default function ServiceDetailsScreen() {
     );
   }
 
+  const serviceJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Service",
+    name: service.name,
+    description: service.tagline || `${service.name} — book trusted local providers on Tikdum.`,
+    image: service.imageUrl,
+    offers: {
+      "@type": "Offer",
+      price: service.price,
+      priceCurrency: "INR",
+      url: `${SITE_URL}/service/${service.id}`,
+    },
+    ...(provider && { provider: { "@type": "LocalBusiness", name: provider.name } }),
+    ...(service.reviewCount > 0 && {
+      aggregateRating: { "@type": "AggregateRating", ratingValue: service.rating, reviewCount: service.reviewCount },
+    }),
+  };
+
   return (
     <div className="flex flex-1 flex-col">
+      <Seo
+        title={service.name}
+        description={
+          service.tagline ||
+          `Book ${service.name} near you on Tikdum from ₹${service.price}${provider ? ` with ${provider.name}` : ""}. Compare trusted local providers and book instantly over WhatsApp.`
+        }
+        path={`/service/${service.id}`}
+        image={service.imageUrl}
+        jsonLd={serviceJsonLd}
+      />
       <ScreenHeader title="Service Details" maxWidth="lg:max-w-5xl" />
 
       <div className="flex flex-1 flex-col lg:mx-auto lg:w-full lg:max-w-5xl lg:flex-row lg:gap-10 lg:px-8 lg:pb-16">

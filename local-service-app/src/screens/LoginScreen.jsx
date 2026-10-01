@@ -1,12 +1,16 @@
 import { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
 import LogoMark from "../components/LogoMark";
 import PhoneInput from "../components/PhoneInput";
 import { detectDefaultCountry, COUNTRY_CODES } from "../data/countryCodes";
+import Seo from "../components/Seo";
 
 export default function LoginScreen() {
   const { login } = useApp();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [step, setStep] = useState("phone"); // "phone" | "otp"
   const [country, setCountry] = useState(detectDefaultCountry);
   const [number, setNumber] = useState("");
@@ -43,6 +47,7 @@ export default function LoginScreen() {
     try {
       const { token, user } = await api.verifyOtp(fullPhone, code.trim(), "customer", name.trim());
       login(token, user);
+      navigate(location.state?.from || "/home", { replace: true });
     } catch (err) {
       setError(err.message || "Incorrect code");
     } finally {
@@ -52,6 +57,7 @@ export default function LoginScreen() {
 
   return (
     <div className="app-shell">
+      <Seo title="Log In" path="/login" noindex />
       <div className="app-body">
         <div className="phone-frame">
           <div className="screen no-scrollbar flex flex-col justify-center px-6 py-10">

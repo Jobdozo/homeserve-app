@@ -6,7 +6,7 @@ import { Component } from "react";
 const LOAD_ERROR = /dynamically imported module|Loading chunk|Loading CSS chunk|Importing a module script failed|error loading dynamically/i;
 const RECOVERED_KEY = "tikdum-auto-recovered";
 
-async function clearCachesAndReload(hash) {
+async function clearCachesAndReload(path) {
   try {
     const regs = (await navigator.serviceWorker?.getRegistrations?.()) || [];
     await Promise.all(regs.map((r) => r.unregister()));
@@ -14,8 +14,11 @@ async function clearCachesAndReload(hash) {
   } catch (e) {
     console.error("cache clear failed", e);
   }
-  if (hash) window.location.hash = hash;
-  window.location.reload();
+  if (path) {
+    window.location.href = path;
+  } else {
+    window.location.reload();
+  }
 }
 
 // Catches a crash in any screen so the app shows a way out instead of a blank
@@ -53,7 +56,7 @@ export default class ErrorBoundary extends Component {
           <button onClick={() => clearCachesAndReload()} style={{ background: "#5B3FE0", color: "#fff", border: 0, borderRadius: 12, padding: "10px 18px", fontWeight: 600, fontSize: 14 }}>
             Reload
           </button>
-          <button onClick={() => clearCachesAndReload("#/")} style={{ background: "#fff", color: "#5b5b6e", border: "1px solid #ddd", borderRadius: 12, padding: "10px 18px", fontWeight: 600, fontSize: 14 }}>
+          <button onClick={() => clearCachesAndReload("/home")} style={{ background: "#fff", color: "#5b5b6e", border: "1px solid #ddd", borderRadius: 12, padding: "10px 18px", fontWeight: 600, fontSize: 14 }}>
             Go to start
           </button>
         </div>

@@ -6,6 +6,7 @@ import ScreenHeader from "../components/ScreenHeader";
 import { StarIcon, ShieldCheckIcon } from "../components/icons";
 import { formatCount, discountPct } from "../utils/format";
 import CategoryIcon from "../components/CategoryIcon";
+import Seo from "../components/Seo";
 
 export default function ProviderProfileScreen() {
   const { providerId } = useParams();
@@ -49,6 +50,7 @@ export default function ProviderProfileScreen() {
   if (!provider) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+        <Seo title="Provider Not Found" path={`/provider/${providerId}`} noindex />
         <p className="text-sm text-gray-500">Provider not found.</p>
         <button onClick={() => navigate("/home")} className="text-sm font-semibold text-brand">
           Back to Home
@@ -57,8 +59,23 @@ export default function ProviderProfileScreen() {
     );
   }
 
+  const providerJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "LocalBusiness",
+    name: provider.name,
+    ...(provider.rating && {
+      aggregateRating: { "@type": "AggregateRating", ratingValue: provider.rating, reviewCount: reviews.length },
+    }),
+  };
+
   return (
     <div className="flex flex-1 flex-col">
+      <Seo
+        title={provider.name}
+        description={`${provider.name} on Tikdum — rated ${provider.rating || "new"} with ${providerServices.length} service${providerServices.length === 1 ? "" : "s"} available. Book trusted home services near you.`}
+        path={`/provider/${provider.id}`}
+        jsonLd={providerJsonLd}
+      />
       <ScreenHeader title="Provider Profile" maxWidth="lg:max-w-3xl" />
 
       <div className="flex-1 px-4 pb-8 lg:mx-auto lg:w-full lg:max-w-3xl lg:px-8 lg:pb-16">

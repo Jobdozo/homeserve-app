@@ -3,6 +3,7 @@ import { SearchIcon } from "../components/icons";
 import { useApp } from "../context/AppContext";
 import CategoryIcon from "../components/CategoryIcon";
 import CartBar from "../components/CartBar";
+import Seo from "../components/Seo";
 
 export default function CategoriesScreen() {
   const navigate = useNavigate();
@@ -10,6 +11,11 @@ export default function CategoriesScreen() {
 
   return (
     <div className="flex flex-col pb-4 lg:px-8 lg:py-8">
+      <Seo
+        title="Service Categories"
+        description="Browse every home service category on Tikdum — cleaning, pest control, AC repair, and more — and find trusted local providers near you."
+        path="/categories"
+      />
       <div className="flex items-center justify-between px-4 pt-1 lg:px-0 lg:pt-0">
         <h1 className="text-lg font-bold text-gray-900 lg:text-2xl">Categories</h1>
         <button

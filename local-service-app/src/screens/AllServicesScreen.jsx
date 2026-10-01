@@ -6,6 +6,7 @@ import { StarIcon } from "../components/icons";
 import { formatCount, discountPct, dedupeByName } from "../utils/format";
 import CategoryPhoto from "../components/CategoryPhoto";
 import CartBar from "../components/CartBar";
+import Seo from "../components/Seo";
 
 const SORTS = [
   { id: "popular", label: "Popular" },
@@ -40,6 +41,11 @@ export default function AllServicesScreen() {
 
   return (
     <div className="flex flex-1 flex-col">
+      <Seo
+        title="All Services"
+        description={`Browse all ${services.length} home services available on Tikdum, from top-rated local providers near you.`}
+        path="/services"
+      />
       <ScreenHeader title="All Services" subtitle={`${services.length} services available`} maxWidth="lg:max-w-4xl" />
 
       <div className="flex-1 px-4 pb-6 lg:mx-auto lg:w-full lg:max-w-4xl lg:px-8 lg:pb-16">

@@ -74,7 +74,7 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const bookingId = event.notification.data?.bookingId;
   const type = event.notification.data?.type;
-  const path = type === "booking" && bookingId ? `/#/booking/${bookingId}` : "/#/notifications";
+  const path = type === "booking" && bookingId ? `/booking/${bookingId}` : "/notifications";
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {

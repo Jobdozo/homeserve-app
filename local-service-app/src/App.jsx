@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
-import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { AppProvider, useApp } from "./context/AppContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { MainLayout, DetailLayout } from "./components/PhoneFrame";
@@ -40,6 +40,17 @@ function ScreenFallback() {
   );
 }
 
+// Gates booking/checkout/account screens behind login while leaving the
+// catalog (home, categories, individual services) publicly browsable —
+// both so anonymous visitors can shop before signing up, and so search
+// engines have real content to index instead of a login wall on every URL.
+function RequireAuth({ children }) {
+  const { customer } = useApp();
+  const location = useLocation();
+  if (!customer) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+  return children;
+}
+
 function AppRoutes() {
   const { customer, authLoading, pendingNotificationBookingId, clearPendingNotification } = useApp();
   const navigate = useNavigate();
@@ -68,17 +79,36 @@ function AppRoutes() {
     );
   }
 
-  if (!customer) return <LoginScreen />;
-
   return (
     <Suspense fallback={<ScreenFallback />}>
       <Routes>
         <Route element={<MainLayout />}>
           <Route path="/home" element={<HomeScreen />} />
           <Route path="/categories" element={<CategoriesScreen />} />
-          <Route path="/bookings" element={<BookingsScreen />} />
-          <Route path="/messages" element={<MessagesListScreen />} />
-          <Route path="/profile" element={<ProfileScreen />} />
+          <Route
+            path="/bookings"
+            element={
+              <RequireAuth>
+                <BookingsScreen />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/messages"
+            element={
+              <RequireAuth>
+                <MessagesListScreen />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <RequireAuth>
+                <ProfileScreen />
+              </RequireAuth>
+            }
+          />
         </Route>
 
         <Route element={<DetailLayout />}>
@@ -86,19 +116,76 @@ function AppRoutes() {
           <Route path="/category/:categoryId" element={<CategoryServicesScreen />} />
           <Route path="/service/:serviceId" element={<ServiceDetailsScreen />} />
           <Route path="/find-service/:serviceId" element={<ServiceProvidersScreen />} />
-          <Route path="/cart" element={<CartScreen />} />
-          <Route path="/booking/:bookingId" element={<BookingDetailsScreen />} />
-          <Route path="/chat/:bookingId" element={<ChatScreen />} />
-          <Route path="/review/:bookingId" element={<RateReviewScreen />} />
-          <Route path="/notifications" element={<NotificationsScreen />} />
           <Route path="/provider/:providerId" element={<ProviderProfileScreen />} />
           <Route path="/services" element={<AllServicesScreen />} />
-          <Route path="/refer" element={<ReferFriendScreen />} />
           <Route path="/booking-protection" element={<BookingProtectionScreen />} />
-          <Route path="/address" element={<SavedAddressScreen />} />
-          <Route path="/profile/help" element={<HelpSupportScreen />} />
+          <Route
+            path="/cart"
+            element={
+              <RequireAuth>
+                <CartScreen />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/booking/:bookingId"
+            element={
+              <RequireAuth>
+                <BookingDetailsScreen />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/chat/:bookingId"
+            element={
+              <RequireAuth>
+                <ChatScreen />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/review/:bookingId"
+            element={
+              <RequireAuth>
+                <RateReviewScreen />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <RequireAuth>
+                <NotificationsScreen />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/refer"
+            element={
+              <RequireAuth>
+                <ReferFriendScreen />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/address"
+            element={
+              <RequireAuth>
+                <SavedAddressScreen />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/profile/help"
+            element={
+              <RequireAuth>
+                <HelpSupportScreen />
+              </RequireAuth>
+            }
+          />
         </Route>
 
+        <Route path="/login" element={customer ? <Navigate to="/home" replace /> : <LoginScreen />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>
     </Suspense>
@@ -109,9 +196,9 @@ export default function App() {
   return (
     <AppProvider>
       <ErrorBoundary>
-        <HashRouter>
+        <BrowserRouter>
           <AppRoutes />
-        </HashRouter>
+        </BrowserRouter>
       </ErrorBoundary>
     </AppProvider>
   );

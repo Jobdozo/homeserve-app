@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /cart
+Disallow: /bookings
+Disallow: /booking/
+Disallow: /chat/
+Disallow: /review/
+Disallow: /messages
+Disallow: /profile
+Disallow: /notifications
+Disallow: /refer
+Disallow: /address
+
+Sitemap: https://tikdum.com/sitemap.xml
