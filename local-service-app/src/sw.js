@@ -22,7 +22,12 @@ registerRoute(
     /\/api\/(bootstrap|categories|services|providers|bookings|notifications|banners)(\/|\?|$)/.test(url.pathname),
   new NetworkFirst({
     cacheName: "tikdum-api-cache",
-    networkTimeoutSeconds: 4,
+    // 4s was tuned for a fast connection — 2G round-trips alone can exceed
+    // that, so it was falling back to cache (or failing outright on a fresh
+    // install with nothing cached yet) before a perfectly good response had
+    // time to arrive. 15s gives slow links a real chance while still
+    // bounding the wait.
+    networkTimeoutSeconds: 15,
     plugins: [
       new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 }),
       new CacheableResponsePlugin({ statuses: [0, 200] }),

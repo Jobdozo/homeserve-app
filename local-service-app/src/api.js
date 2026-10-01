@@ -6,17 +6,34 @@ export function setAuthToken(token) {
   authToken = token;
 }
 
+// On 2G, a stalled request would otherwise hang forever with no error —
+// fetch() has no built-in timeout. This bounds every call so the UI can
+// recover (session-restore's authLoading screen in particular would
+// otherwise never resolve, leaving the whole app stuck behind the splash).
+const REQUEST_TIMEOUT_MS = 25000;
+
 async function request(path, options) {
-  // Network-level failures (offline, DNS, etc.) throw here with no `status`
-  // attached — callers use that to tell "can't reach the server" apart from
-  // a real HTTP error response (see AppContext's session restore).
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    },
-    ...options,
-  });
+  // Network-level failures (offline, DNS, timeout, etc.) throw here with no
+  // `status` attached — callers use that to tell "can't reach the server"
+  // apart from a real HTTP error response (see AppContext's session restore).
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      signal: controller.signal,
+      ...options,
+    });
+  } catch (e) {
+    if (e.name === "AbortError") throw new Error("Request timed out — check your connection and try again");
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const err = new Error(body.error || `Request failed: ${res.status}`);

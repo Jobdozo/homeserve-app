@@ -16,9 +16,39 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <style>
+      /*
+        On a slow connection the JS bundle can take well over a minute to
+        download — without this, the screen stays blank white the whole
+        time and looks broken rather than loading. This is plain CSS/HTML
+        rendered before any script runs; React overwrites #root's contents
+        the moment it mounts, so nothing needs to remove this manually.
+      */
+      #initial-loader {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f8f8fb;
+      }
+      #initial-loader .mark {
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
+        background: #15803d;
+        animation: initial-loader-pulse 1.4s ease-in-out infinite;
+      }
+      @keyframes initial-loader-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.6; transform: scale(0.92); }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="initial-loader"><div class="mark"></div></div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
