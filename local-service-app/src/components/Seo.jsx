@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Helmet } from "react-helmet-async";
 
 // Centralizes meta tags so every public (unauthenticated-browsable) screen
@@ -10,7 +11,13 @@ const DEFAULT_DESCRIPTION =
   "Book trusted home services near you on Tikdum — cleaning, pest control, AC repair, and more. Compare verified local providers and book instantly over WhatsApp.";
 const DEFAULT_IMAGE = `${SITE_URL}/pwa-512.png`;
 
-export default function Seo({ title, description = DEFAULT_DESCRIPTION, path = "/", image = DEFAULT_IMAGE, jsonLd, noindex = false }) {
+const absoluteUrl = (u) => (!u ? DEFAULT_IMAGE : /^https?:\/\//.test(u) ? u : `${SITE_URL}${u.startsWith("/") ? "" : "/"}${u}`);
+
+export default function Seo({ title, description = DEFAULT_DESCRIPTION, path = "/", image, jsonLd, noindex = false }) {
+  image = absoluteUrl(image);
+  useEffect(() => {
+    document.querySelectorAll("[data-static-seo]").forEach((el) => el.remove());
+  }, []);
   const fullTitle = title ? `${title} | ${SITE_NAME}` : `${SITE_NAME} — Book Trusted Home Services Near You`;
   const url = `${SITE_URL}${path}`;
   const jsonLdList = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];

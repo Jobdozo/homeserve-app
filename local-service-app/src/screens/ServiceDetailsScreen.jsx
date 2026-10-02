@@ -43,7 +43,9 @@ export default function ServiceDetailsScreen() {
     "@type": "Service",
     name: service.name,
     description: service.tagline || `${service.name} — book trusted local providers on Tikdum.`,
-    image: service.imageUrl,
+    ...(service.imageUrl && {
+      image: /^https?:\/\//.test(service.imageUrl) ? service.imageUrl : `${SITE_URL}${service.imageUrl}`,
+    }),
     offers: {
       "@type": "Offer",
       price: service.price,
