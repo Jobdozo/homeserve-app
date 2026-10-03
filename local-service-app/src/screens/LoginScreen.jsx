@@ -6,6 +6,7 @@ import LogoMark from "../components/LogoMark";
 import PhoneInput from "../components/PhoneInput";
 import { detectDefaultCountry, COUNTRY_CODES } from "../data/countryCodes";
 import Seo from "../components/Seo";
+import OtpSenderHint from "../components/OtpSenderHint";
 
 export default function LoginScreen() {
   const { login } = useApp();
@@ -95,6 +96,7 @@ export default function LoginScreen() {
                 >
                   {busy ? "Sending code…" : "Send WhatsApp code"}
                 </button>
+                <OtpSenderHint />
               </form>
             )}
 
@@ -103,6 +105,7 @@ export default function LoginScreen() {
                 <p className="text-center text-[13px] text-gray-500">
                   We sent a code via WhatsApp to <span className="font-semibold text-gray-800">{fullPhone}</span>
                 </p>
+                <OtpSenderHint />
                 {devOtp && (
                   <p className="rounded-xl bg-amber-50 px-3 py-2 text-center text-[12.5px] font-medium text-amber-700">
                     No WhatsApp provider connected yet — dev code: <span className="font-bold">{devOtp}</span>
