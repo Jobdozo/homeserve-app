@@ -198,7 +198,7 @@ function PincodeCoverage({ provider, updateCoverage }) {
     <div>
       <h2 className="mb-2 text-[13px] font-bold text-gray-900">Service Area — PIN Codes</h2>
       <p className="mb-2 text-[11.5px] text-gray-400">
-        Only customers in these PIN codes will see your services. Leave empty to be visible everywhere.
+        Only customers in these PIN codes will see your services. Leave empty to be shown across Tikdum's default region (Jammu &amp; Kashmir).
       </p>
       {coverage.serveAllAreas && (
         <p className="mb-2 rounded-lg bg-emerald-50 px-3 py-2 text-[11.5px] font-medium text-emerald-700">

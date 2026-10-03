@@ -10,6 +10,15 @@ const verificationStyles = {
   rejected: "bg-red-100 text-red-600",
 };
 
+// Quick-fill service areas (PIN prefixes). Worth a quick check against India
+// Post's list before relying on the exact district boundaries.
+const COVERAGE_PRESETS = [
+  ["Jammu division", "180, 181, 182, 183, 184, 185"],
+  ["Kashmir division", "190, 191, 192, 193"],
+  ["Ladakh", "194"],
+  ["All J&K + Ladakh", "18, 19"],
+];
+
 const DOC_LABELS = {
   id_proof: "ID Proof",
   gst_certificate: "GST Certificate",
@@ -401,7 +410,7 @@ export default function ProviderDetailModal({ providerId, onClose }) {
             <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 text-[12.5px]">
               <span className="flex items-center gap-2 text-gray-500">
                 <MapPinIcon width={16} height={16} className="text-gray-400" />
-                Serve all areas (ignore PIN codes)
+                Serve everywhere in India (ignore PIN codes)
               </span>
               <input
                 type="checkbox"
@@ -428,7 +437,7 @@ export default function ProviderDetailModal({ providerId, onClose }) {
               <input
                 value={pincodeInput}
                 onChange={(e) => setPincodeInput(e.target.value)}
-                placeholder="PIN codes, e.g. 110001, 110002"
+                placeholder="PIN codes or prefixes, e.g. 180, 181, 190012"
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] text-gray-800 outline-none focus:border-brand"
               />
               <button
@@ -439,7 +448,23 @@ export default function ProviderDetailModal({ providerId, onClose }) {
                 {savingCoverage ? "Saving…" : "Save"}
               </button>
             </div>
-            <p className="text-[11px] text-gray-400">Empty PIN codes means visible to customers everywhere.</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] text-gray-400">Quick fill:</span>
+              {COVERAGE_PRESETS.map(([label, prefixes]) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setPincodeInput(prefixes)}
+                  className="rounded-full border border-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] leading-snug text-gray-400">
+              A short number covers every PIN code that starts with it: <b>180</b> covers all of 180xxx, <b>18</b> all of 18xxxx. Leave it empty
+              to use the default region from Settings → Visibility &amp; coverage (not the whole country).
+            </p>
           </Section>
 
           <Section title="Customer Visibility">

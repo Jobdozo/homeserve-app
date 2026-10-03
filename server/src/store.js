@@ -149,16 +149,28 @@ function isProviderAcceptingRequests(providerId) {
   return getProviderCoverage(providerId).acceptingRequests;
 }
 
-// A provider with no coverage configured yet (the common case today, since
-// this is a new feature) is visible everywhere — restriction is opt-in, so
-// existing providers aren't silently hidden from every customer the moment
-// this ships. Once they (or an admin) set specific PIN codes, only matching
-// customers see them — unless an admin sets serveAllAreas to override that.
+// A coverage entry is a full 6-digit PIN or a shorter prefix: "180" covers
+// every PIN starting with 180 (a whole postal district), "18" all of Jammu
+// division and so on. Matching is simply "the customer's PIN starts with it".
+function pincodeCovered(entries, pincode) {
+  const pin = String(pincode || "").trim();
+  return Boolean(pin) && (entries || []).some((e) => pin.startsWith(String(e).trim()));
+}
+
+// What a provider actually covers. Serve-everywhere is an admin switch; a
+// provider with no PINs of their own falls back to the platform's default
+// region (J&K prefixes unless Super Admin changes it) instead of the whole
+// country. An empty default region means "everywhere".
+function effectiveCoverage(coverage) {
+  if (coverage.serveAllAreas) return { everywhere: true, entries: [], source: "all" };
+  if (coverage.pincodes && coverage.pincodes.length > 0) return { everywhere: false, entries: coverage.pincodes, source: "own" };
+  const fallback = getSettings().defaultCoveragePrefixes || [];
+  return fallback.length > 0 ? { everywhere: false, entries: fallback, source: "default" } : { everywhere: true, entries: [], source: "default" };
+}
+
 function isProviderVisibleForPincode(providerId, pincode) {
-  const coverage = getProviderCoverage(providerId);
-  if (coverage.serveAllAreas) return true;
-  if (!coverage.pincodes || coverage.pincodes.length === 0) return true;
-  return coverage.pincodes.includes(String(pincode || "").trim());
+  const eff = effectiveCoverage(getProviderCoverage(providerId));
+  return eff.everywhere || pincodeCovered(eff.entries, pincode);
 }
 
 function updateProviderCoverage(providerId, patch, { allowServeAllAreas = true } = {}) {
@@ -168,9 +180,22 @@ function updateProviderCoverage(providerId, patch, { allowServeAllAreas = true }
     const cleaned = (Array.isArray(patch.pincodes) ? patch.pincodes : [])
       .map((p) => String(p).trim())
       .filter(Boolean);
+    // Only Super Admin (allowServeAllAreas) may enter prefixes like 180; a
+    // provider enters full 6-digit PINs, though prefixes an admin already set
+    // are kept when the provider saves their list.
     for (const pin of cleaned) {
-      if (!/^\d{4,10}$/.test(pin)) {
-        throw Object.assign(new Error(`"${pin}" is not a valid PIN code`), { status: 400 });
+      const ok = allowServeAllAreas
+        ? /^\d{2,6}$/.test(pin)
+        : /^\d{6}$/.test(pin) || (existing.pincodes || []).includes(pin);
+      if (!ok) {
+        throw Object.assign(
+          new Error(
+            allowServeAllAreas
+              ? `"${pin}" is not a valid PIN code or prefix (use 2 to 6 digits)`
+              : `"${pin}" is not a valid 6-digit PIN code`
+          ),
+          { status: 400 }
+        );
       }
     }
     next.pincodes = [...new Set(cleaned)];
@@ -1703,7 +1728,8 @@ function providerVisibilityChecks(providerId, ctx, { pincode } = {}) {
   const add = (key, label, ok, detail, soft = false, na = false) => checks.push({ key, label, status: na ? "na" : ok ? "pass" : "fail", detail, soft });
 
   const pin = String(pincode || "").trim();
-  const area = coverage.serveAllAreas ? "serves all areas" : coverage.pincodes?.length ? `serves PIN ${coverage.pincodes.join(", ")}` : "no PIN restriction";
+  const eff = effectiveCoverage(coverage);
+  const area = eff.source === "all" ? "serves all areas" : eff.everywhere ? "no PIN restriction" : eff.source === "default" ? `serves the default region (${eff.entries.join(", ")})` : `serves PIN ${eff.entries.join(", ")}`;
   add("pincode", "Customer PIN is inside the provider's service area", !pin || isProviderVisibleForPincode(providerId, pin), pin ? `Customer ${pin} — provider ${area}` : `No customer PIN given — provider ${area}`, true, !pin);
   add("wallet", "Provider account is active (wallet funded)", ctx.activeWallets.has(providerId), ctx.activeWallets.has(providerId) ? "Wallet balance is positive" : "Wallet balance is empty — account is paused");
   add("approval", "Provider is approved", provider?.verificationStatus === "approved", `Approval status: ${provider?.verificationStatus || "unknown"}`);
@@ -2844,6 +2870,9 @@ const DEFAULT_SETTINGS = {
   minVersionCodeCustomer: 0,
   minVersionCodeProvider: 0,
   updateMessage: "",
+  // Region a provider with no PIN codes of their own is visible in (PIN
+  // prefixes; 18 and 19 = Jammu & Kashmir and Ladakh). Empty = everywhere.
+  defaultCoveragePrefixes: ["18", "19"],
   ...rules.DEFAULTS, // the other business rules (see rules.js)
 };
 
@@ -3034,6 +3063,15 @@ function updateSettings(patch) {
       }
       patch = { ...patch, [key]: code };
     }
+  }
+  if (patch.defaultCoveragePrefixes !== undefined) {
+    const list = (Array.isArray(patch.defaultCoveragePrefixes) ? patch.defaultCoveragePrefixes : String(patch.defaultCoveragePrefixes || "").split(/[,\s]+/))
+      .map((p) => String(p).trim())
+      .filter(Boolean);
+    const bad = list.find((p) => !/^\d{2,6}$/.test(p));
+    if (bad) throw Object.assign(new Error(`"${bad}" isn't a valid PIN prefix (use 2 to 6 digits)`), { status: 400 });
+    if (list.length > 50) throw Object.assign(new Error("Use at most 50 default prefixes"), { status: 400 });
+    patch = { ...patch, defaultCoveragePrefixes: [...new Set(list)] };
   }
   if (patch.updateMessage !== undefined) {
     patch = { ...patch, updateMessage: String(patch.updateMessage || "").trim().slice(0, 300) };
@@ -3949,6 +3987,7 @@ module.exports = {
   saveCustomerAddress,
   deleteCustomerOffice,
   getProviderCoverage,
+  isProviderVisibleForPincode,
   updateProviderCoverage,
   getProviderCapacity,
   getAllProviderCapacities,

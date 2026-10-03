@@ -191,10 +191,20 @@ const VIS_RULES = [
 function VisibilityTab({ data, save, reload }) {
   const { showToast } = useApp();
   const s = data.settings;
-  const keys = useMemo(() => ["visibilityRules", "pinRequireCoverage", "pinMaxPerProvider", "visibilityOverrideDefaultHours"], []);
+  const keys = useMemo(() => ["visibilityRules", "pinRequireCoverage", "pinMaxPerProvider", "visibilityOverrideDefaultHours", "defaultCoveragePrefixes"], []);
   const form = useDraft(s, keys);
   const rules = form.draft.visibilityRules || {};
   const [busyId, setBusyId] = useState(null);
+
+  // The prefixes are edited as free text ("18, 19") and stored as a list; the
+  // text is kept separately so typing a comma doesn't get swallowed.
+  const parsePrefixes = (t) => t.split(/[,\s]+/).filter(Boolean);
+  const draftPrefixes = form.draft.defaultCoveragePrefixes || [];
+  const [prefixText, setPrefixText] = useState(draftPrefixes.join(", "));
+  useEffect(() => {
+    if (JSON.stringify(parsePrefixes(prefixText)) !== JSON.stringify(draftPrefixes)) setPrefixText(draftPrefixes.join(", "));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(draftPrefixes)]);
 
   const removeOverride = async (o) => {
     setBusyId(o.providerId);
@@ -225,11 +235,27 @@ function VisibilityTab({ data, save, reload }) {
       <Card title="PIN-code coverage" desc="How provider service areas work. Each provider's own PIN codes are edited on their profile in Providers." form={form} save={save}>
         <Toggle
           label="Providers must set a service area to be shown"
-          hint="Off: a provider with no PIN codes is shown everywhere. On: they need PIN codes (or “serve all areas”, which only you can grant)."
+          hint="Off: a provider with no PIN codes is shown in the default region below. On: they need PIN codes of their own (or “serve everywhere”, which only you can grant)."
           checked={form.draft.pinRequireCoverage}
           onChange={(v) => form.set("pinRequireCoverage", v)}
         />
         <Num label="Maximum PIN codes per provider" value={form.draft.pinMaxPerProvider} min={1} max={500} onChange={(v) => form.set("pinMaxPerProvider", v)} />
+        <div>
+          <label className={labelCls}>Default region for providers with no PIN codes</label>
+          <input
+            className={inputCls}
+            value={prefixText}
+            placeholder="18, 19"
+            onChange={(e) => {
+              setPrefixText(e.target.value);
+              form.set("defaultCoveragePrefixes", parsePrefixes(e.target.value));
+            }}
+          />
+          <p className="mt-1 text-[11.5px] leading-snug text-gray-400">
+            PIN prefixes, comma separated. <b>18, 19</b> = Jammu &amp; Kashmir and Ladakh (Jammu 180–185, Kashmir 190–193, Ladakh 194). A provider who hasn't set
+            their own PIN codes is shown only to customers in this region. Leave it empty to show them everywhere in India.
+          </p>
+        </div>
       </Card>
 
       <VisibilityCard />

@@ -177,7 +177,7 @@ async function build(query) {
     // Provider-level filters: match the provider's profile, or (for the
     // order-derived ones) any of the orders in scope.
     if (q && !(lc(p.name).includes(q) || lc(p.businessName).includes(q) || lc(p.phone).includes(q) || p.id === f.provider)) continue;
-    if (f.pin && !(coverage.pincodes || []).includes(f.pin) && mine.length + live.length === 0) continue;
+    if (f.pin && !store.isProviderVisibleForPincode(p.id, f.pin) && mine.length + live.length === 0) continue;
     if (f.area && !lc(p.serviceArea).includes(lc(f.area)) && mine.length + live.length === 0) continue;
     if (f.serviceId && !svcs.some((s) => s.id === f.serviceId) && mine.length + live.length === 0) continue;
     if (f.categoryId && !svcs.some((s) => s.categoryId === f.categoryId) && lc(p.category) !== lc(f.categoryId) && mine.length + live.length === 0) continue;
