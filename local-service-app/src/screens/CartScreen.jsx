@@ -33,6 +33,7 @@ export default function CartScreen() {
   } = useApp();
   const [submitting, setSubmitting] = useState(false);
   const [placeKey, setPlaceKey] = useState(null);
+  const [landmark, setLandmark] = useState("");
   const [availability, setAvailability] = useState(null); // { pin, ids: Set } for the chosen PIN
   const [couponInput, setCouponInput] = useState("");
   const [applyingCoupon, setApplyingCoupon] = useState(false);
@@ -98,7 +99,9 @@ export default function CartScreen() {
   const bookingAddress = chosen?.data
     ? {
         label: chosen.key === "current" ? chosen.data.label || "Current location" : chosen.title,
-        line: chosen.data.line,
+        // The booking has one address line, so the house/flat/landmark goes
+        // in front of it — the provider and admin see it wherever the address shows.
+        line: landmark.trim() ? `${landmark.trim()}, ${chosen.data.line}` : chosen.data.line,
         lat: chosen.data.lat,
         lng: chosen.data.lng,
         pincode: chosen.data.pincode || "",
@@ -303,6 +306,19 @@ export default function CartScreen() {
                 </div>
               );
             })}
+          </div>
+          <div className="mt-2.5">
+            <label className="mb-1 block text-[12px] font-semibold text-gray-700">
+              House / flat / landmark <span className="font-normal text-gray-400">(optional)</span>
+            </label>
+            <input
+              value={landmark}
+              onChange={(e) => setLandmark(e.target.value.slice(0, 120))}
+              placeholder="e.g. House 14, near Jama Masjid, 2nd floor"
+              maxLength={120}
+              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[13px] text-gray-800 outline-none placeholder:text-gray-400 focus:border-brand"
+            />
+            <p className="mt-1 text-[11px] text-gray-400">Helps the provider find you. They'll see it with your address.</p>
           </div>
           {unavailable.length > 0 && (
             <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11.5px] font-medium text-amber-700">
