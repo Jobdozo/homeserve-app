@@ -236,6 +236,16 @@ export function AppProvider({ children }) {
     [showToast, scheduleRefresh]
   );
 
+  const updateProviderProfile = useCallback(
+    async (id, patch) => {
+      const updated = await api.updateProviderProfile(id, patch);
+      setProviders((prev) => prev.map((p) => (p.id === id ? { ...p, ...updated, coverage: p.coverage } : p)));
+      showToast("Provider details saved");
+      return updated;
+    },
+    [showToast]
+  );
+
   const updateProviderCoverage = useCallback(
     async (id, patch) => {
       const coverage = await api.updateProviderCoverage(id, patch);
@@ -379,6 +389,7 @@ export function AppProvider({ children }) {
       approveProvider,
       rejectProvider,
       deleteProvider,
+      updateProviderProfile,
       updateProviderCoverage,
       toggleServiceStatus,
       reviewService,
@@ -412,6 +423,7 @@ export function AppProvider({ children }) {
       approveProvider,
       rejectProvider,
       deleteProvider,
+      updateProviderProfile,
       updateProviderCoverage,
       toggleServiceStatus,
       reviewService,

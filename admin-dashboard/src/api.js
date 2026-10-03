@@ -78,8 +78,28 @@ async function uploadServiceCatalogImage(id, file) {
   return data;
 }
 
+// A provider's KYC document photo, uploaded by Super Admin on their behalf.
+async function uploadProviderKycDocument(providerId, file, docType) {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("docType", docType);
+  const res = await fetch(`${API_BASE}/admin/providers/${providerId}/kyc-documents`, {
+    method: "POST",
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    body,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Upload failed: ${res.status}`);
+  return data;
+}
+
 export const api = {
   importCsv,
+  uploadProviderKycDocument,
+  deleteProviderKycDocument: (providerId, docId) =>
+    request(`/admin/providers/${providerId}/kyc-documents/${docId}`, { method: "DELETE" }),
+  updateProviderProfile: (id, patch) =>
+    request(`/admin/providers/${id}/profile`, { method: "PATCH", body: JSON.stringify(patch) }),
   uploadServiceImage,
   uploadServiceCatalogImage,
   removeServiceCatalogImage: (id) => request(`/admin/service-catalog/${id}/image`, { method: "DELETE" }),

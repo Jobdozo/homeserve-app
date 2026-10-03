@@ -485,6 +485,38 @@ app.patch("/api/providers/:id/profile", auth.requireAuth("provider"), ah(async (
   res.json(provider);
 }));
 
+// Super Admin edit: same fields a provider can change, but not locked once the
+// account is verified (that lock sends providers to "contact support" — this is
+// the support side of it).
+app.patch("/api/admin/providers/:id/profile", auth.requireAuth("admin"), ah(async (req, res) => {
+  const existing = await store.getProvider(req.params.id);
+  if (!existing) return res.status(404).json({ error: "Provider not found" });
+  const body = req.body || {};
+  if (body.email && !/^\S+@\S+\.\S+$/.test(String(body.email).trim())) {
+    return res.status(400).json({ error: "Enter a valid email address" });
+  }
+  if (body.name !== undefined && !String(body.name).trim()) {
+    return res.status(400).json({ error: "Name can't be empty" });
+  }
+  const trimmed = Object.fromEntries(Object.entries(body).map(([k, v]) => [k, typeof v === "string" ? v.trim() : v]));
+  const provider = await store.updateProviderProfile(req.params.id, trimmed);
+  const changes = ["name", "category", "businessName", "experience", "serviceArea", "email", "gstNumber"]
+    .filter((f) => trimmed[f] !== undefined && (existing[f] ?? "") !== (provider[f] ?? ""))
+    .map((f) => ({ field: f, from: existing[f] ?? null, to: provider[f] ?? null }));
+  if (changes.length) {
+    store.recordAdminChange({
+      actor: actorOf(req),
+      action: "provider.profile.update",
+      entityType: "provider",
+      entityId: req.params.id,
+      entityName: provider.name,
+      changes,
+    });
+  }
+  io.emit("provider:updated", publicProvider(provider));
+  res.json(provider);
+}));
+
 app.patch("/api/providers/:id/verification", auth.requireAuth("admin"), ah(async (req, res) => {
   const { status } = req.body || {};
   if (!["pending", "approved", "rejected"].includes(status)) {
@@ -1312,6 +1344,47 @@ app.delete("/api/provider/kyc-documents/:id", auth.requireAuth("provider"), ah(a
 
 app.get("/api/admin/providers/:id/kyc-documents", auth.requireAuth("admin"), ah(async (req, res) => {
   res.json(store.listKycDocuments(req.params.id));
+}));
+
+// Super Admin can add or replace documents on a provider's behalf, including
+// after the account is verified (providers themselves are locked out then).
+app.post(
+  "/api/admin/providers/:id/kyc-documents",
+  auth.requireAuth("admin"),
+  upload.single("file"),
+  ah(async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "Choose a photo of the document" });
+    const provider = await store.getProvider(req.params.id);
+    if (!provider) return res.status(404).json({ error: "Provider not found" });
+    const docType = ["id_proof", "gst_certificate", "other"].includes(req.body?.docType) ? req.body.docType : "other";
+    const doc = store.addKycDocument(req.params.id, { docType, url: `/uploads/${req.file.filename}` });
+    store.recordAdminChange({
+      actor: actorOf(req),
+      action: "provider.document.add",
+      entityType: "provider",
+      entityId: req.params.id,
+      entityName: provider.name,
+      changes: [{ field: "document", from: null, to: docType }],
+    });
+    await store.logActivity("provider", `Admin uploaded a KYC document (${docType}) for ${provider.name}`);
+    res.status(201).json(doc);
+  })
+);
+
+app.delete("/api/admin/providers/:id/kyc-documents/:docId", auth.requireAuth("admin"), ah(async (req, res) => {
+  const doc = store.listKycDocuments(req.params.id).find((d) => d.id === req.params.docId);
+  if (!doc) return res.status(404).json({ error: "Document not found" });
+  store.deleteKycDocument(req.params.id, req.params.docId);
+  const provider = await store.getProvider(req.params.id);
+  store.recordAdminChange({
+    actor: actorOf(req),
+    action: "provider.document.delete",
+    entityType: "provider",
+    entityId: req.params.id,
+    entityName: provider?.name || req.params.id,
+    changes: [{ field: "document", from: doc.docType, to: null }],
+  });
+  res.status(204).end();
 }));
 
 // ---- job before/after photos (attached to a specific booking, provider must own it) ----

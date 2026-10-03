@@ -13,10 +13,12 @@ const verificationStyles = {
 const DOC_LABELS = {
   id_proof: "ID Proof",
   gst_certificate: "GST Certificate",
+  other: "Other",
 };
 
 export default function ProviderDetailModal({ providerId, onClose }) {
-  const { providers, approveProvider, rejectProvider, deleteProvider, updateProviderCoverage, showToast } = useApp();
+  const { providers, approveProvider, rejectProvider, deleteProvider, updateProviderProfile, updateProviderCoverage, showToast } =
+    useApp();
   const provider = providers.find((p) => p.id === providerId);
   const [services, setServices] = useState(null);
   const [earnings, setEarnings] = useState(null);
@@ -34,6 +36,74 @@ export default function ProviderDetailModal({ providerId, onClose }) {
   const [maxInput, setMaxInput] = useState("");
   const [capacityBusy, setCapacityBusy] = useState(false);
   const [warning, setWarning] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({});
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [docType, setDocType] = useState("id_proof");
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [confirmDocId, setConfirmDocId] = useState(null);
+
+  const startEditing = () => {
+    setForm({
+      name: provider.name || "",
+      businessName: provider.businessName || "",
+      category: provider.category || "",
+      email: provider.email || "",
+      serviceArea: provider.serviceArea || "",
+      experience: provider.experience != null ? String(provider.experience) : "",
+      gstNumber: provider.gstNumber || "",
+    });
+    setEditing(true);
+  };
+
+  const saveProfile = async (e) => {
+    e.preventDefault();
+    setSavingProfile(true);
+    try {
+      await updateProviderProfile(provider.id, form);
+      setEditing(false);
+    } catch (err) {
+      showToast(err.message || "Couldn't save the details");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const uploadDocument = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      showToast("That photo is over 15 MB — choose a smaller one");
+      return;
+    }
+    setUploadingDoc(true);
+    try {
+      const doc = await api.uploadProviderKycDocument(provider.id, file, docType);
+      setDocuments((prev) => [...(prev || []), doc]);
+      showToast("Document uploaded");
+    } catch (err) {
+      showToast(err.message || "Upload failed");
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const removeDocument = async (docId) => {
+    if (confirmDocId !== docId) {
+      setConfirmDocId(docId);
+      return;
+    }
+    try {
+      await api.deleteProviderKycDocument(provider.id, docId);
+      setDocuments((prev) => (prev || []).filter((d) => d.id !== docId));
+      showToast("Document removed");
+    } catch (err) {
+      showToast(err.message || "Couldn't remove the document");
+    } finally {
+      setConfirmDocId(null);
+    }
+  };
 
   const loadCapacity = () =>
     api
@@ -262,16 +332,70 @@ export default function ProviderDetailModal({ providerId, onClose }) {
             )}
           </Section>
 
-          <div className="grid grid-cols-2 gap-3 text-[12.5px]">
-            <Field label="Phone" value={provider.phone} />
-            <Field label="Email" value={provider.email} />
-            <Field label="Category" value={provider.category} />
-            <Field label="Service area" value={provider.serviceArea} />
-            <Field label="Experience" value={provider.experience ? `${provider.experience} yrs` : null} />
-            <Field label="GST number" value={provider.gstNumber} />
-            <Field label="Response rate" value={provider.responseRate != null ? `${provider.responseRate}%` : null} />
-            <Field label="Joined" value={provider.joinedAt ? new Date(provider.joinedAt).toLocaleDateString("en-IN") : null} />
-          </div>
+          <Section
+            title="Provider Details"
+            action={
+              !editing && (
+                <button onClick={startEditing} className="text-[11.5px] font-semibold normal-case tracking-normal text-brand">
+                  Edit
+                </button>
+              )
+            }
+          >
+            {editing ? (
+              <form onSubmit={saveProfile} className="space-y-2.5">
+                {[
+                  ["name", "Name", "text"],
+                  ["businessName", "Business name", "text"],
+                  ["category", "Category", "text"],
+                  ["email", "Email", "email"],
+                  ["serviceArea", "Service area", "text"],
+                  ["experience", "Experience (years)", "text"],
+                  ["gstNumber", "GST number", "text"],
+                ].map(([key, label, type]) => (
+                  <label key={key} className="block text-[11.5px] font-semibold text-gray-500">
+                    {label}
+                    <input
+                      type={type}
+                      value={form[key] ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] font-normal text-gray-800 outline-none focus:border-brand"
+                    />
+                  </label>
+                ))}
+                <p className="text-[11px] text-gray-400">
+                  The phone number can't be changed here — it's the provider's login.
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditing(false)}
+                    className="rounded-lg px-3.5 py-2 text-[12px] font-semibold text-gray-500"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingProfile || !form.name?.trim()}
+                    className="rounded-lg bg-brand px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
+                  >
+                    {savingProfile ? "Saving…" : "Save details"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 text-[12.5px]">
+                <Field label="Phone" value={provider.phone} />
+                <Field label="Email" value={provider.email} />
+                <Field label="Category" value={provider.category} />
+                <Field label="Service area" value={provider.serviceArea} />
+                <Field label="Experience" value={provider.experience ? `${provider.experience} yrs` : null} />
+                <Field label="GST number" value={provider.gstNumber} />
+                <Field label="Response rate" value={provider.responseRate != null ? `${provider.responseRate}%` : null} />
+                <Field label="Joined" value={provider.joinedAt ? new Date(provider.joinedAt).toLocaleDateString("en-IN") : null} />
+              </div>
+            )}
+          </Section>
 
           <Section title="Service Area">
             <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 text-[12.5px]">
@@ -458,25 +582,54 @@ export default function ProviderDetailModal({ providerId, onClose }) {
             {documents === null && <p className="text-[12px] text-gray-400">Loading…</p>}
             {documents?.length === 0 && <p className="text-[12px] text-gray-400">No documents uploaded.</p>}
             {documents?.map((d) => (
-              <a
-                key={d.id}
-                href={`${SERVER_URL}${d.url}`}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-3 rounded-lg border border-gray-100 px-3 py-2 hover:bg-gray-50"
-              >
-                <img src={`${SERVER_URL}${d.url}`} alt="" className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[12.5px] font-semibold text-gray-800">
-                    {DOC_LABELS[d.docType] || d.docType}
-                  </p>
-                  <p className="text-[11px] text-gray-400">
-                    {new Date(d.uploadedAt).toLocaleDateString("en-IN")}
-                  </p>
-                </div>
-                <FileIcon width={16} height={16} className="flex-shrink-0 text-gray-300" />
-              </a>
+              <div key={d.id} className="flex items-center gap-2 rounded-lg border border-gray-100 pr-3 hover:bg-gray-50">
+                <a
+                  href={`${SERVER_URL}${d.url}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2"
+                >
+                  <img src={`${SERVER_URL}${d.url}`} alt="" className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12.5px] font-semibold text-gray-800">
+                      {DOC_LABELS[d.docType] || d.docType}
+                    </p>
+                    <p className="text-[11px] text-gray-400">
+                      {new Date(d.uploadedAt).toLocaleDateString("en-IN")}
+                    </p>
+                  </div>
+                  <FileIcon width={16} height={16} className="flex-shrink-0 text-gray-300" />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => removeDocument(d.id)}
+                  className={`flex-shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold ${
+                    confirmDocId === d.id ? "bg-red-600 text-white" : "text-red-500 hover:bg-red-50"
+                  }`}
+                >
+                  {confirmDocId === d.id ? "Confirm" : "Remove"}
+                </button>
+              </div>
             ))}
+            <div className="flex gap-2">
+              <select
+                value={docType}
+                onChange={(e) => setDocType(e.target.value)}
+                className="rounded-lg border border-gray-200 px-2.5 py-2 text-[12.5px] text-gray-800 outline-none focus:border-brand"
+              >
+                <option value="id_proof">ID Proof</option>
+                <option value="gst_certificate">GST Certificate</option>
+                <option value="other">Other</option>
+              </select>
+              <label
+                className={`flex flex-1 cursor-pointer items-center justify-center rounded-lg border border-dashed border-brand/40 bg-brand-light/40 px-3 py-2 text-[12px] font-semibold text-brand-dark ${
+                  uploadingDoc ? "pointer-events-none opacity-50" : ""
+                }`}
+              >
+                {uploadingDoc ? "Uploading…" : "Upload document photo"}
+                <input type="file" accept="image/*" onChange={uploadDocument} className="hidden" />
+              </label>
+            </div>
           </Section>
 
           <Section title="Services">
@@ -556,10 +709,13 @@ function Field({ label, value }) {
   );
 }
 
-function Section({ title, children }) {
+function Section({ title, action, children }) {
   return (
     <div>
-      <p className="mb-2 text-[11.5px] font-bold uppercase tracking-wide text-gray-400">{title}</p>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-[11.5px] font-bold uppercase tracking-wide text-gray-400">{title}</p>
+        {action}
+      </div>
       <div className="space-y-2">{children}</div>
     </div>
   );
