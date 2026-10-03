@@ -500,7 +500,12 @@ function getCustomerAddress(customerId) {
   return jsonStore.readAll("customerAddresses").find((a) => a.id === customerId) || null;
 }
 
-function saveCustomerAddress(customerId, { label, line, pincode, lat, lng }) {
+// The record is the customer's Home address (flat fields, as before) plus an
+// optional `office` sub-object — two saved places, plus the live "current
+// location" which is never stored here. Keeping Office nested on the same
+// record means account deletion and existing readers of `address.pincode`
+// keep working untouched.
+function saveCustomerAddress(customerId, { label, line, pincode, lat, lng, slot }) {
   const trimmedPincode = String(pincode || "").trim();
   if (!/^\d{4,10}$/.test(trimmedPincode)) {
     throw Object.assign(new Error("Enter a valid PIN code"), { status: 400 });
@@ -508,19 +513,47 @@ function saveCustomerAddress(customerId, { label, line, pincode, lat, lng }) {
   if (!line || !String(line).trim()) {
     throw Object.assign(new Error("Address line is required"), { status: 400 });
   }
-  const address = {
-    id: customerId,
-    label: (label || "Home").trim() || "Home",
+  if (slot !== undefined && slot !== "home" && slot !== "office") {
+    throw Object.assign(new Error("Unknown address slot"), { status: 400 });
+  }
+  const now = new Date().toISOString();
+  const place = {
     line: String(line).trim(),
     pincode: trimmedPincode,
     lat: typeof lat === "number" ? lat : null,
     lng: typeof lng === "number" ? lng : null,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
   };
   const existing = jsonStore.readAll("customerAddresses").find((a) => a.id === customerId);
+  let address;
+  if (slot === "office") {
+    // Office needs a Home to hang off; if there isn't one yet, seed Home from it
+    // so the flat fields (which drive the catalog fallback) are never empty.
+    address = existing
+      ? { ...existing, office: { label: "Office", ...place } }
+      : { id: customerId, label: "Home", ...place, office: { label: "Office", ...place } };
+  } else {
+    address = {
+      ...(existing || {}),
+      id: customerId,
+      label: (label || "Home").trim() || "Home",
+      ...place,
+    };
+  }
   if (existing) jsonStore.update("customerAddresses", customerId, address);
   else jsonStore.insert("customerAddresses", address);
   return address;
+}
+
+function deleteCustomerOffice(customerId) {
+  const all = jsonStore.readAll("customerAddresses");
+  const idx = all.findIndex((a) => a.id === customerId);
+  if (idx === -1) return null;
+  // jsonStore.update() merges, so it can't drop a field — rewrite the record.
+  const { office, ...rest } = all[idx];
+  all[idx] = rest;
+  jsonStore.writeAll("customerAddresses", all);
+  return rest;
 }
 
 async function getCustomerByPhone(phone) {
@@ -1341,11 +1374,34 @@ async function getMessages(bookingId) {
   return messages.map(mapMessage);
 }
 
+// The booking row has no PIN column, so the PIN travels inside the address
+// line (reassignment and the provider both read it from there). Without
+// this, a "Current location" or Office pick could silently lose its PIN.
+function bookingPincode(address) {
+  const pin = String(address?.pincode || "").trim();
+  return /^\d{4,10}$/.test(pin) ? pin : "";
+}
+
+function withPincodeInLine(address) {
+  const pin = bookingPincode(address);
+  if (!address || !pin || String(address.line || "").includes(pin)) return address;
+  return { ...address, line: `${String(address.line || "").trim()}${address.line ? ", " : ""}${pin}` };
+}
+
+function assertServedAtPincode(service, address) {
+  const pin = bookingPincode(address);
+  if (pin && !isProviderVisibleForPincode(service.providerId, pin)) {
+    throw Object.assign(new Error(`${service.name} isn't available at PIN ${pin}. Pick a different location or remove it from your cart.`), { status: 409 });
+  }
+}
+
 // `offerCode` (never a raw discount percentage) is re-validated here server-side
 // on every call — a client can never supply its own discount amount directly.
 async function createBooking({ serviceId, date, time, address, issue, customerId, orderId, offerCode, flatDiscount = 0 }) {
   const service = await getService(serviceId);
   if (!service) throw new Error("Unknown service");
+  assertServedAtPincode(service, address);
+  address = withPincodeInLine(address);
   if (service.status === "pending_approval" || service.status === "rejected") {
     throw Object.assign(new Error("This service isn't available yet"), { status: 409 });
   }
@@ -1424,6 +1480,12 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
 async function createOrder({ items, address, customerId, offerCode, referralCode, useCredits }) {
   if (!Array.isArray(items) || items.length === 0) throw new Error("Order must have at least one item");
   const orderId = `ORD-${Date.now().toString(36)}`;
+  // Check every line against the chosen location up front, so one unavailable
+  // item can't leave a half-created order (and a spent referral) behind.
+  for (const item of items) {
+    const svc = await getService(item.serviceId);
+    if (svc) assertServedAtPincode(svc, address);
+  }
   if (offerCode) {
     const result = validateOffer(offerCode);
     if (!result.valid) throw new Error(result.error);
@@ -3868,6 +3930,7 @@ module.exports = {
   updateProviderProfile,
   getCustomerAddress,
   saveCustomerAddress,
+  deleteCustomerOffice,
   getProviderCoverage,
   updateProviderCoverage,
   getProviderCapacity,

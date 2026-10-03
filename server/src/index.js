@@ -348,6 +348,10 @@ app.put("/api/customer/address", auth.requireAuth("customer"), ah(async (req, re
   res.json(address);
 }));
 
+app.delete("/api/customer/address/office", auth.requireAuth("customer"), ah(async (req, res) => {
+  res.json(store.deleteCustomerOffice(req.user.id));
+}));
+
 // ---- provider service-area coverage (PIN codes; serveAllAreas is admin-only) ----
 app.patch("/api/providers/:id/coverage", auth.requireAuth("provider"), ah(async (req, res) => {
   if (req.params.id !== req.user.id) return res.status(403).json({ error: "Not your profile" });

@@ -86,4 +86,5 @@ export const api = {
   registerAdClick: (serviceId) => request(`/services/${serviceId}/ad-click`, { method: "POST" }),
   getMyAddress: () => request("/customer/address"),
   saveMyAddress: (data) => request("/customer/address", { method: "PUT", body: JSON.stringify(data) }),
+  deleteMyOffice: () => request("/customer/address/office", { method: "DELETE" }),
 };

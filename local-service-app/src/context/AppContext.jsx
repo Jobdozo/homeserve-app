@@ -427,6 +427,12 @@ export function AppProvider({ children }) {
     [showToast]
   );
 
+  const removeOfficeAddress = useCallback(async () => {
+    const saved = await api.deleteMyOffice();
+    setCustomer((prev) => (prev ? { ...prev, address: saved } : prev));
+    showToast("Office address removed");
+  }, [showToast]);
+
   const getService = useCallback((id) => services.find((s) => s.id === id), [services]);
   const getProvider = useCallback((id) => providers[id], [providers]);
   const getBooking = useCallback((id) => bookings.find((b) => b.id === id), [bookings]);
@@ -530,9 +536,12 @@ export function AppProvider({ children }) {
   }, []);
 
   const checkout = useCallback(
-    async (address, { referralCode, useCredits } = {}) => {
-      if (cart.length === 0) return [];
-      const items = cart.map(({ serviceId, date, time, issue }) => ({ serviceId, date, time, issue }));
+    async (address, { referralCode, useCredits, serviceIds } = {}) => {
+      // Only book what the customer can actually see in their cart — items
+      // hidden because they aren't offered in the current area stay out.
+      const ordered = cart.filter((c) => !serviceIds || serviceIds.includes(c.serviceId));
+      if (ordered.length === 0) return [];
+      const items = ordered.map(({ serviceId, date, time, issue }) => ({ serviceId, date, time, issue }));
       const created = await api.createOrder({
         items,
         address,
@@ -541,7 +550,7 @@ export function AppProvider({ children }) {
         useCredits,
       });
       setBookings((prev) => created.reduce((acc, b) => upsertById(acc, b), prev));
-      setCart([]);
+      setCart((prev) => prev.filter((c) => !ordered.some((o) => o.serviceId === c.serviceId)));
       setAppliedOffer(null);
       if (referralCode || useCredits) refreshReferral();
       showToast(`Order placed! ${created.length} service${created.length > 1 ? "s" : ""} booked`);
@@ -601,6 +610,8 @@ export function AppProvider({ children }) {
       refreshReferral,
       submitRefundClaim,
       saveAddress,
+      removeOfficeAddress,
+      activePincode,
       notifications,
       markNotificationRead,
       markAllNotificationsRead,
@@ -649,6 +660,8 @@ export function AppProvider({ children }) {
       refreshReferral,
       submitRefundClaim,
       saveAddress,
+      removeOfficeAddress,
+      activePincode,
       notifications,
       markNotificationRead,
       markAllNotificationsRead,

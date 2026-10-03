@@ -28,8 +28,12 @@ export default function CartScreen() {
     location,
     locationStatus,
     detectLocation,
+    customer,
+    activePincode,
   } = useApp();
   const [submitting, setSubmitting] = useState(false);
+  const [placeKey, setPlaceKey] = useState(null);
+  const [availability, setAvailability] = useState(null); // { pin, ids: Set } for the chosen PIN
   const [couponInput, setCouponInput] = useState("");
   const [applyingCoupon, setApplyingCoupon] = useState(false);
   const [referralInput, setReferralInput] = useState("");
@@ -84,17 +88,59 @@ export default function CartScreen() {
     }
   };
 
-  const bookingAddress = location
-    ? { label: location.label, line: location.line, lat: location.lat, lng: location.lng }
+  const places = [
+    { key: "home", title: "Home", data: customer?.address || null },
+    { key: "office", title: "Office", data: customer?.address?.office || null },
+    { key: "current", title: "Current location", data: location || null },
+  ];
+  const chosenKey = placeKey || (location ? "current" : customer?.address ? "home" : "current");
+  const chosen = places.find((p) => p.key === chosenKey);
+  const bookingAddress = chosen?.data
+    ? {
+        label: chosen.key === "current" ? chosen.data.label || "Current location" : chosen.title,
+        line: chosen.data.line,
+        lat: chosen.data.lat,
+        lng: chosen.data.lng,
+        pincode: chosen.data.pincode || "",
+      }
     : null;
+  const bookingPin = bookingAddress?.pincode || "";
+
+  // Which cart items can actually be booked at the chosen PIN. The catalog on
+  // screen follows the live location; a Home/Office pick in another PIN needs
+  // its own check (the server re-checks on order either way).
+  useEffect(() => {
+    if (!bookingPin || bookingPin === activePincode) {
+      setAvailability(null);
+      return undefined;
+    }
+    let cancelled = false;
+    api
+      .bootstrap(bookingPin)
+      .then((boot) => {
+        if (!cancelled) setAvailability({ pin: bookingPin, ids: new Set(boot.services.map((s) => s.id)) });
+      })
+      .catch(() => {
+        if (!cancelled) setAvailability(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingPin, activePincode]);
+
+  const checkingAvailability = !!bookingPin && bookingPin !== activePincode && availability?.pin !== bookingPin;
+  const unavailable =
+    availability && availability.pin === bookingPin ? lines.filter((l) => !availability.ids.has(l.service.id)) : [];
+  const unavailableIds = new Set(unavailable.map((l) => l.service.id));
 
   const handleCheckout = async () => {
-    if (submitting || lines.length === 0 || !bookingAddress) return;
+    if (submitting || lines.length === 0 || !bookingAddress || unavailable.length > 0 || checkingAvailability) return;
     setSubmitting(true);
     try {
       const created = await checkout(bookingAddress, {
         referralCode: appliedReferral?.code,
         useCredits: creditDiscount > 0,
+        serviceIds: lines.map((l) => l.service.id),
       });
       navigate("/bookings", { replace: true, state: { orderId: created[0]?.orderId } });
     } catch (e) {
@@ -128,7 +174,10 @@ export default function CartScreen() {
 
       <div className="flex-1 space-y-3 px-4 pb-6 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-10">
         {lines.map(({ item, service }) => (
-          <div key={item.serviceId} className="rounded-2xl border border-gray-100 p-3 shadow-card">
+          <div
+            key={item.serviceId}
+            className={`rounded-2xl border p-3 shadow-card ${unavailableIds.has(service.id) ? "border-amber-300" : "border-gray-100"}`}
+          >
             <div className="flex items-start gap-3">
               <CategoryIcon categoryId={service.categoryId} imageUrl={service.imageUrl} size={48} />
               <div className="min-w-0 flex-1">
@@ -187,29 +236,80 @@ export default function CartScreen() {
         ))}
 
         <div>
-          <div className="mb-1.5 flex items-center justify-between">
-            <h2 className="text-[13px] font-semibold text-gray-900">Delivery Address</h2>
-            <button onClick={detectLocation} className="text-xs font-semibold text-brand">
-              {locationStatus === "detecting" ? "Detecting…" : "Use current location"}
-            </button>
+          <h2 className="mb-1.5 text-[13px] font-semibold text-gray-900">Where do you need the service?</h2>
+          <div className="space-y-2">
+            {places.map((p) => {
+              const selected = chosenKey === p.key && !!p.data;
+              const isCurrent = p.key === "current";
+              return (
+                <div
+                  key={p.key}
+                  className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 ${
+                    selected ? "border-brand bg-brand-light/30" : "border-gray-200"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => (p.data ? setPlaceKey(p.key) : isCurrent ? detectLocation() : navigate(`/address?slot=${p.key}`))}
+                    className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
+                    aria-pressed={selected}
+                  >
+                    <span
+                      className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border ${
+                        selected ? "border-brand" : "border-gray-300"
+                      }`}
+                    >
+                      {selected && <span className="h-2 w-2 rounded-full bg-brand" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-800">
+                        <MapPinIcon width={13} height={13} className="flex-shrink-0 text-gray-400" />
+                        {p.title}
+                        {p.data?.pincode && (
+                          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">
+                            PIN {p.data.pincode}
+                          </span>
+                        )}
+                      </span>
+                      {p.data ? (
+                        <span className="mt-0.5 block text-[11.5px] leading-snug text-gray-500">{p.data.line}</span>
+                      ) : isCurrent ? (
+                        <span className="mt-0.5 block text-[11.5px] font-medium text-amber-600">
+                          {locationStatus === "detecting"
+                            ? "Detecting…"
+                            : locationStatus === "denied"
+                              ? "Location access denied — enable it in your device settings, then tap here."
+                              : "Tap to detect where you are now"}
+                        </span>
+                      ) : (
+                        <span className="mt-0.5 block text-[11.5px] font-medium text-brand">+ Add {p.title} address</span>
+                      )}
+                    </span>
+                  </button>
+                  {isCurrent && p.data && (
+                    <button type="button" onClick={detectLocation} className="flex-shrink-0 text-[11.5px] font-semibold text-brand">
+                      {locationStatus === "detecting" ? "Detecting…" : "Refresh"}
+                    </button>
+                  )}
+                  {!isCurrent && p.data && (
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/address?slot=${p.key}`)}
+                      className="flex-shrink-0 text-[11.5px] font-semibold text-gray-400"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
-          <div className="flex items-start gap-2 rounded-xl border border-gray-200 px-3 py-2.5">
-            <MapPinIcon width={16} height={16} className="mt-0.5 flex-shrink-0 text-gray-400" />
-            {bookingAddress ? (
-              <div>
-                <p className="text-[13px] font-semibold text-gray-800">{bookingAddress.label}</p>
-                <p className="text-[11.5px] leading-snug text-gray-500">{bookingAddress.line}</p>
-              </div>
-            ) : (
-              <div>
-                <p className="text-[13px] font-medium text-amber-600">
-                  {locationStatus === "denied"
-                    ? "Location access denied — enable it in your browser/device settings, then tap \"Use current location\"."
-                    : "No address set yet — tap \"Use current location\" above to continue."}
-                </p>
-              </div>
-            )}
-          </div>
+          {unavailable.length > 0 && (
+            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11.5px] font-medium text-amber-700">
+              {unavailable.map((l) => l.service.name).join(", ")} {unavailable.length > 1 ? "aren't" : "isn't"} available at PIN{" "}
+              {bookingPin}. Choose another location or remove {unavailable.length > 1 ? "them" : "it"} from your cart.
+            </p>
+          )}
         </div>
 
         <div>
@@ -335,10 +435,18 @@ export default function CartScreen() {
         )}
         <button
           onClick={handleCheckout}
-          disabled={submitting || !bookingAddress}
+          disabled={submitting || !bookingAddress || unavailable.length > 0 || checkingAvailability}
           className="w-full rounded-xl bg-brand py-3.5 text-sm font-semibold text-white shadow-card hover:bg-brand-dark active:scale-[0.98] disabled:opacity-60"
         >
-          {submitting ? "Placing order..." : !bookingAddress ? "Set your location to continue" : `Checkout · ₹${payable}`}
+          {submitting
+            ? "Placing order..."
+            : !bookingAddress
+              ? "Choose a location to continue"
+              : checkingAvailability
+                ? "Checking availability…"
+                : unavailable.length > 0
+                  ? "Not available at this location"
+                  : `Checkout · ₹${payable}`}
         </button>
         <p className="mt-2 text-center text-[10.5px] text-gray-400">
           You won't be charged now. Payment after service completion.
