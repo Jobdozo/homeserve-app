@@ -101,11 +101,45 @@ export function AppProvider({ children }) {
     }
   }, []);
 
-  // Ask for location once per login if we don't already have one saved.
+  // Re-detect the real current location on every app open, and again when the
+  // app returns to the foreground after a while, so the provider list always
+  // follows where the customer actually is. Guests are only auto-detected if
+  // they've already granted permission (no surprise prompt on a public page).
+  const lastDetectAt = useRef(0);
+  const runDetect = useCallback(async () => {
+    lastDetectAt.current = Date.now();
+    await detectLocation();
+  }, [detectLocation]);
+
   useEffect(() => {
-    if (customer && !location) detectLocation();
+    let cancelled = false;
+    (async () => {
+      let allowed = !!customer;
+      if (!allowed) {
+        try {
+          const perm = await navigator.permissions?.query({ name: "geolocation" });
+          allowed = perm?.state === "granted";
+        } catch (e) {
+          allowed = false;
+        }
+      }
+      if (allowed && !cancelled) runDetect();
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer?.id]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastDetectAt.current < 5 * 60 * 1000) return;
+      if (customer || locationStatus === "ready") runDetect();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [customer, locationStatus, runDetect]);
 
   // Register for push once logged in, so an admin broadcast or booking
   // update can reach this device even while the app is backgrounded/closed.
@@ -211,9 +245,12 @@ export function AppProvider({ children }) {
   // pre-login. Re-callable with a pincode once the customer's registered
   // address is known, so the catalog can be re-filtered to their area
   // without a full page reload.
+  const catalogReq = useRef(0);
   const loadCatalog = useCallback(async (pincode) => {
+    const reqId = ++catalogReq.current;
     try {
       const [boot, layout] = await Promise.all([api.bootstrap(pincode), api.getHomeLayout().catch(() => null)]);
+      if (reqId !== catalogReq.current) return; // a newer PIN's request superseded this one
       setProviders(Object.fromEntries(boot.providers.map((p) => [p.id, p])));
       setCategories(boot.categories);
       setServices(boot.services);
@@ -226,17 +263,18 @@ export function AppProvider({ children }) {
     }
   }, []);
 
-  useEffect(() => {
-    loadCatalog();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Filter the catalog to wherever the customer actually is. The live
+  // (or last-known) GPS PIN wins; the saved profile address is only the
+  // fallback when location is denied/unavailable or gave no PIN.
+  const gpsUsable = locationStatus !== "denied" && locationStatus !== "error";
+  const savedPincode = customer?.address?.pincode || "";
+  const gpsPincode = location?.pincode || "";
+  const activePincode = (gpsUsable ? gpsPincode || savedPincode : savedPincode || gpsPincode) || "";
 
-  // Re-filter the catalog to the customer's registered area as soon as it's
-  // known (right after login, or right after they save/change their address).
   useEffect(() => {
-    if (customer?.address?.pincode) loadCatalog(customer.address.pincode);
+    loadCatalog(activePincode || undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customer?.address?.pincode]);
+  }, [activePincode]);
 
   // Per-customer data — only once logged in.
   useEffect(() => {
