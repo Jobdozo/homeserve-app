@@ -2839,6 +2839,11 @@ const DEFAULT_SETTINGS = {
   staleRequestDays: 5,
   visibilityRequireOnline: false, // hide providers who haven't been seen recently
   visibilityOnlineGraceMinutes: 30,
+  // Forced app updates: Android builds older than these version codes see a
+  // blocking "Update required" screen. 0 = off.
+  minVersionCodeCustomer: 0,
+  minVersionCodeProvider: 0,
+  updateMessage: "",
   ...rules.DEFAULTS, // the other business rules (see rules.js)
 };
 
@@ -3020,6 +3025,18 @@ function updateSettings(patch) {
     if (max > 0 && min > max) {
       throw Object.assign(new Error("Minimum fee can't be higher than the maximum fee"), { status: 400 });
     }
+  }
+  for (const key of ["minVersionCodeCustomer", "minVersionCodeProvider"]) {
+    if (patch[key] !== undefined) {
+      const code = Number(patch[key] === "" ? 0 : patch[key]);
+      if (!Number.isInteger(code) || code < 0 || code > 1000000) {
+        throw Object.assign(new Error("Minimum version must be a whole number (0 turns it off)"), { status: 400 });
+      }
+      patch = { ...patch, [key]: code };
+    }
+  }
+  if (patch.updateMessage !== undefined) {
+    patch = { ...patch, updateMessage: String(patch.updateMessage || "").trim().slice(0, 300) };
   }
   for (const key of ["referralFriendDiscount", "referralReward", "cpcRate", "defaultMaxOpenRequests", "staleRequestDays"]) {
     if (patch[key] !== undefined) {

@@ -18,6 +18,7 @@ const TABS = [
   ["comms", "Communication"],
   ["staff", "Staff & permissions"],
   ["complaints", "Complaints"],
+  ["updates", "App updates"],
 ];
 
 export default function SettingsHubPage() {
@@ -78,6 +79,8 @@ export default function SettingsHubPage() {
         <CommsTab data={data} save={save} />
       ) : tab === "staff" ? (
         <StaffTab data={data} save={save} />
+      ) : tab === "updates" ? (
+        <UpdatesTab data={data} save={save} />
       ) : (
         <ComplaintsTab data={data} save={save} />
       )}
@@ -436,6 +439,61 @@ function StaffTab({ data, save }) {
             </button>
           )}
         </div>
+      </Card>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------- app updates
+
+function UpdatesTab({ data, save }) {
+  const keys = useMemo(() => ["minVersionCodeCustomer", "minVersionCodeProvider", "updateMessage"], []);
+  const form = useDraft(data.settings, keys);
+  const armed = Number(form.draft.minVersionCodeCustomer) > 0 || Number(form.draft.minVersionCodeProvider) > 0;
+
+  return (
+    <div className="space-y-4">
+      <div className="max-w-2xl rounded-2xl bg-amber-50 p-4 text-[12.5px] leading-relaxed text-amber-900">
+        <p className="font-semibold">Read before turning this on</p>
+        <ul className="mt-1 list-disc space-y-1 pl-4">
+          <li>Set the minimum only after the new version is <b>live on Google Play</b>. Otherwise people are told to update to something they can't download yet.</li>
+          <li>It only applies to app versions that already contain this feature (Tikdum version code 19 or higher, Tikdum Pro 18 or higher). Older installs can't be forced.</li>
+          <li>Anyone below the minimum sees a screen they can't get past until they update. The website and installed web app update on their own.</li>
+        </ul>
+      </div>
+
+      <Card
+        title="Force an app update"
+        desc="The version code is the build number shown in Play Console (Tikdum 2.16 = 18, Tikdum Pro 3.14 = 17). Enter the lowest build still allowed. 0 turns it off."
+        form={form}
+        save={save}
+      >
+        <Num
+          label="Minimum version code — Tikdum (customer app)"
+          hint="Builds below this must update."
+          value={form.draft.minVersionCodeCustomer}
+          onChange={(v) => form.set("minVersionCodeCustomer", v)}
+        />
+        <Num
+          label="Minimum version code — Tikdum Pro (provider app)"
+          hint="Builds below this must update."
+          value={form.draft.minVersionCodeProvider}
+          onChange={(v) => form.set("minVersionCodeProvider", v)}
+        />
+        <div>
+          <label className={labelCls}>Message shown on the update screen (optional)</label>
+          <textarea
+            rows={2}
+            maxLength={300}
+            className={inputCls}
+            placeholder="We've made the app faster and fixed some bugs. Please update to continue."
+            value={form.draft.updateMessage ?? ""}
+            onChange={(e) => form.set("updateMessage", e.target.value)}
+          />
+        </div>
+        <p className={`rounded-lg px-3 py-2 text-[12px] font-medium ${armed ? "bg-red-50 text-red-700" : "bg-gray-50 text-gray-500"}`}>
+          {armed ? "Forced update is ON for at least one app." : "Forced update is off — nobody is blocked."}
+        </p>
       </Card>
     </div>
   );

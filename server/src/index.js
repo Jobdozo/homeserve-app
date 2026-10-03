@@ -327,6 +327,14 @@ app.get("/api/auth/me", auth.requireAuth(), ah(async (req, res) => {
   res.json({ role: "admin", user: adminProfile(req.admin) });
 }));
 
+// ---- forced app updates: the Android apps ask this on open and when resumed ----
+app.get("/api/app-version", (req, res) => {
+  const s = store.getSettings();
+  const min = req.query.app === "provider" ? s.minVersionCodeProvider : s.minVersionCodeCustomer;
+  res.set("Cache-Control", "no-store");
+  res.json({ minVersionCode: Number(min) || 0, message: s.updateMessage || "" });
+});
+
 // ---- bootstrap (public catalog only — per-user data comes from auth) ----
 app.get("/api/bootstrap", ah(async (req, res) => {
   const pincode = typeof req.query.pincode === "string" ? req.query.pincode.trim() : undefined;
