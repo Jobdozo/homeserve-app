@@ -34,6 +34,11 @@ function requestOtp(role, phone) {
   return code;
 }
 
+// Forget a code that never reached the person (so it can't be guessed or used).
+function clearOtp(role, phone) {
+  otpStore.delete(`${role}:${normalizePhone(phone)}`);
+}
+
 function verifyOtp(role, phone, code) {
   const key = `${role}:${normalizePhone(phone)}`;
   const entry = otpStore.get(key);
@@ -116,6 +121,7 @@ module.exports = {
   setRevocationCheck,
   setProviderGuard,
   requestOtp,
+  clearOtp,
   verifyOtp,
   signToken,
   verifyToken,

@@ -21,7 +21,8 @@ const auth = require("./auth");
 auth.setAdminGuard(access.guard);
 auth.setProviderGuard(staff.guard);
 auth.setRevocationCheck(accountDeletion.isDeleted);
-const { sendOtpViaWhatsApp } = require("./whatsapp");
+const { sendOtpViaWhatsApp, isConfigured: whatsappConfigured } = require("./whatsapp");
+const otpGuard = require("./otpGuard");
 const liveLocation = require("./liveLocation");
 const push = require("./push");
 const fcm = require("./fcm");
@@ -247,12 +248,42 @@ app.post("/api/auth/otp/request", ah(async (req, res) => {
   if (role === "admin" && !access.resolveByPhone(phone)) {
     return res.status(403).json({ error: "This number is not registered as an admin" });
   }
+  const ip = otpGuard.clientIp(req);
+  const gate = otpGuard.check(phone, ip);
+  if (!gate.ok) {
+    otpGuard.log({ phone, role, ip, result: "blocked" });
+    res.set("Retry-After", String(gate.retryAfterSec));
+    return res.status(429).json({ error: gate.error, retryAfterSec: gate.retryAfterSec });
+  }
+  otpGuard.record(phone, ip);
+
   const code = auth.requestOtp(role, phone);
-  const delivered = await sendOtpViaWhatsApp(phone, code);
-  // Only echo the code back when it wasn't actually delivered (no provider
-  // configured, or the send failed) — otherwise it stays WhatsApp-only.
-  res.json({ sent: true, ...(delivered ? {} : { devOtp: code }) });
+  const delivered = await sendOtpViaWhatsApp(phone, code).catch((e) => {
+    console.error("OTP send threw:", e);
+    return false;
+  });
+  if (delivered) {
+    otpGuard.log({ phone, role, ip, result: "sent" });
+    return res.json({ sent: true });
+  }
+  // The code is only ever shown on screen when no WhatsApp provider is set up
+  // at all (local development). With a provider configured, a failed send must
+  // not hand the code to whoever asked — that would let anyone log in as a
+  // number whose delivery fails.
+  if (!whatsappConfigured) {
+    otpGuard.log({ phone, role, ip, result: "dev-code" });
+    return res.json({ sent: true, devOtp: code });
+  }
+  auth.clearOtp(role, phone);
+  otpGuard.log({ phone, role, ip, result: "send-failed" });
+  res.status(502).json({
+    error: "We couldn't send the code on WhatsApp. Make sure this number has WhatsApp, then try again in a minute.",
+  });
 }));
+
+app.get("/api/admin/otp-requests", auth.requireAuth("admin"), (req, res) => {
+  res.json(otpGuard.recentRequests());
+});
 
 app.post("/api/auth/otp/verify", ah(async (req, res) => {
   const { phone, code, role, name } = req.body || {};
