@@ -22,7 +22,7 @@ export async function detectCurrentLocation() {
   let res;
   try {
     res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&lat=${latitude}&lon=${longitude}`,
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&accept-language=en&lat=${latitude}&lon=${longitude}`,
       { headers: { Accept: "application/json" }, signal: controller.signal }
     );
   } finally {
@@ -36,11 +36,40 @@ export async function detectCurrentLocation() {
   const city = addr.city || addr.town || addr.state_district || addr.state;
   const label = [area, city].filter(Boolean).join(", ") || "Current location";
 
+  // A short, readable address (most specific first, no repeated names, no
+  // country) instead of OpenStreetMap's long display_name, which repeats the
+  // same place several times and can mix scripts.
+  const seen = new Set();
+  const line =
+    [
+      addr.house_number && addr.road ? `${addr.house_number} ${addr.road}` : addr.road,
+      addr.neighbourhood,
+      addr.suburb,
+      addr.hamlet,
+      addr.village,
+      addr.town,
+      addr.city,
+      addr.county,
+      addr.state_district,
+      addr.state,
+      addr.postcode,
+    ]
+      .filter(Boolean)
+      .filter((part) => {
+        const key = String(part).toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .join(", ") ||
+    data.display_name ||
+    label;
+
   return {
     lat: latitude,
     lng: longitude,
     label,
     pincode: addr.postcode || "",
-    line: data.display_name || label,
+    line,
   };
 }

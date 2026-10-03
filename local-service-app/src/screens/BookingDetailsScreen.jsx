@@ -113,7 +113,13 @@ export default function BookingDetailsScreen() {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] font-semibold text-gray-900">{provider?.name}</p>
                 <div className="flex items-center gap-1 text-[11px] text-gray-500">
-                  <StarIcon filled width={12} height={12} /> {provider?.rating} ({provider?.reviews}+)
+                  {provider?.reviews > 0 ? (
+                    <>
+                      <StarIcon filled width={12} height={12} /> {provider.rating} ({provider.reviews}+)
+                    </>
+                  ) : (
+                    "New provider"
+                  )}
                 </div>
               </div>
             </button>
