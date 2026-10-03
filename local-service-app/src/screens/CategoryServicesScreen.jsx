@@ -7,11 +7,12 @@ import { formatCount, discountPct, dedupeByName } from "../utils/format";
 import CategoryIcon from "../components/CategoryIcon";
 import CartBar from "../components/CartBar";
 import Seo from "../components/Seo";
+import ComingSoon from "../components/ComingSoon";
 
 export default function CategoryServicesScreen() {
   const { categoryId } = useParams();
   const navigate = useNavigate();
-  const { categories, services, showToast } = useApp();
+  const { categories, services, catalogReady } = useApp();
 
   const category = categories.find((c) => c.id === categoryId);
   // Ratings/reviews stay computed from every provider's listing (real
@@ -69,16 +70,11 @@ export default function CategoryServicesScreen() {
         </div>
 
         {inCategory.length === 0 ? (
-          <div className="mt-10 flex flex-col items-center gap-2 text-center">
-            <span className="text-3xl">🛠️</span>
-            <p className="text-sm text-gray-500">No providers in {category.name} yet.</p>
-            <button
-              onClick={() => showToast("Thanks! We'll notify you when it's available.")}
-              className="mt-1 text-xs font-semibold text-brand"
-            >
-              Notify me when available
-            </button>
-          </div>
+          catalogReady ? (
+            <ComingSoon categoryName={category.name} />
+          ) : (
+            <p className="mt-10 text-center text-xs text-gray-400">Loading…</p>
+          )
         ) : (
           <div className="mt-4 space-y-3 lg:mt-6 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
             {displayList.map((s) => {

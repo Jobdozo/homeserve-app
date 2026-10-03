@@ -246,6 +246,10 @@ export function AppProvider({ children }) {
   // address is known, so the catalog can be re-filtered to their area
   // without a full page reload.
   const catalogReq = useRef(0);
+  // The PIN the on-screen catalog was last successfully loaded for — lets the
+  // "coming soon to your area" message wait for a real answer instead of
+  // flashing while a new PIN's catalog (or a failed request) is pending.
+  const [catalogPin, setCatalogPin] = useState(null);
   const loadCatalog = useCallback(async (pincode) => {
     const reqId = ++catalogReq.current;
     try {
@@ -254,6 +258,7 @@ export function AppProvider({ children }) {
       setProviders(Object.fromEntries(boot.providers.map((p) => [p.id, p])));
       setCategories(boot.categories);
       setServices(boot.services);
+      setCatalogPin(pincode || "");
       if (layout) {
         setBanners(layout.banners || []);
         setHomeLayout({ sections: layout.sections || [], bookingCounts: layout.bookingCounts || {} });
@@ -275,6 +280,11 @@ export function AppProvider({ children }) {
     loadCatalog(activePincode || undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePincode]);
+
+  const reloadCatalog = useCallback(() => loadCatalog(activePincode || undefined), [loadCatalog, activePincode]);
+  // No providers at all in the customer's area (only once we really know).
+  const catalogReady = catalogPin !== null && catalogPin === (activePincode || "");
+  const noCoverage = !!activePincode && catalogReady && services.length === 0;
 
   // Per-customer data — only once logged in.
   useEffect(() => {
@@ -612,6 +622,9 @@ export function AppProvider({ children }) {
       saveAddress,
       removeOfficeAddress,
       activePincode,
+      noCoverage,
+      catalogReady,
+      reloadCatalog,
       notifications,
       markNotificationRead,
       markAllNotificationsRead,
@@ -662,6 +675,9 @@ export function AppProvider({ children }) {
       saveAddress,
       removeOfficeAddress,
       activePincode,
+      noCoverage,
+      catalogReady,
+      reloadCatalog,
       notifications,
       markNotificationRead,
       markAllNotificationsRead,

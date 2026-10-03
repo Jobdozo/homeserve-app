@@ -7,6 +7,7 @@ import { formatCount, discountPct, dedupeByName } from "../utils/format";
 import CategoryPhoto from "../components/CategoryPhoto";
 import CartBar from "../components/CartBar";
 import Seo from "../components/Seo";
+import ComingSoon from "../components/ComingSoon";
 
 const SORTS = [
   { id: "popular", label: "Popular" },
@@ -34,7 +35,7 @@ function sortServices(services, sort) {
 
 export default function AllServicesScreen() {
   const navigate = useNavigate();
-  const { services } = useApp();
+  const { services, noCoverage } = useApp();
   const [sort, setSort] = useState("popular");
 
   const sorted = useMemo(() => dedupeByName(sortServices(services, sort)), [services, sort]);
@@ -48,7 +49,8 @@ export default function AllServicesScreen() {
       />
       <ScreenHeader title="All Services" subtitle={`${services.length} services available`} maxWidth="lg:max-w-4xl" />
 
-      <div className="flex-1 px-4 pb-6 lg:mx-auto lg:w-full lg:max-w-4xl lg:px-8 lg:pb-16">
+      {noCoverage && <ComingSoon />}
+      <div className={`flex-1 px-4 pb-6 lg:mx-auto lg:w-full lg:max-w-4xl lg:px-8 lg:pb-16 ${noCoverage ? "hidden" : ""}`}>
         <div className="flex gap-2 overflow-x-auto pb-1">
           {SORTS.map((s) => (
             <button

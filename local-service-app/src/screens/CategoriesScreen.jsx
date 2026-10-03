@@ -4,10 +4,11 @@ import { useApp } from "../context/AppContext";
 import CategoryIcon from "../components/CategoryIcon";
 import CartBar from "../components/CartBar";
 import Seo from "../components/Seo";
+import ComingSoon from "../components/ComingSoon";
 
 export default function CategoriesScreen() {
   const navigate = useNavigate();
-  const { categories, showToast } = useApp();
+  const { categories, showToast, noCoverage } = useApp();
 
   return (
     <div className="flex flex-col pb-4 lg:px-8 lg:py-8">
@@ -26,6 +27,10 @@ export default function CategoriesScreen() {
         </button>
       </div>
 
+      {noCoverage ? (
+        <ComingSoon />
+      ) : (
+        <>
       <div className="mt-3 px-4 lg:mt-5 lg:px-0">
         <button className="rounded-full bg-brand px-4 py-1.5 text-xs font-semibold text-white lg:px-5 lg:py-2 lg:text-sm">
           All Categories
@@ -57,6 +62,8 @@ export default function CategoriesScreen() {
           Request a Service
         </span>
       </button>
+        </>
+      )}
       <CartBar />
     </div>
   );

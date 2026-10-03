@@ -7,6 +7,7 @@ import CategoryIcon from "../components/CategoryIcon";
 import CartBar from "../components/CartBar";
 import HomeSections, { HeroBanners } from "../components/HomeSections";
 import Seo, { SITE_URL } from "../components/Seo";
+import ComingSoon from "../components/ComingSoon";
 
 const HOME_JSON_LD = {
   "@context": "https://schema.org",
@@ -19,7 +20,7 @@ const HOME_JSON_LD = {
 
 export default function HomeScreen() {
   const navigate = useNavigate();
-  const { categories, services, banners, homeLayout, cart, notifications, location, locationStatus, detectLocation } = useApp();
+  const { categories, services, banners, homeLayout, cart, notifications, location, locationStatus, detectLocation, noCoverage } = useApp();
   const unreadCount = notifications.filter((n) => !n.read).length;
   // Banner placements are set in the Super Admin CMS; banners saved before
   // placements existed have none and stay in the small chip strip.
@@ -79,6 +80,10 @@ export default function HomeScreen() {
       </div>
       {location?.pincode && <p className="px-4 pb-3 text-xs text-gray-400 lg:hidden">{location.pincode}</p>}
 
+      {noCoverage ? (
+        <ComingSoon />
+      ) : (
+        <>
       {/* Search */}
       <div className="px-4 lg:hidden">
         <button
@@ -177,6 +182,8 @@ export default function HomeScreen() {
         </div>
         <ChevronRightIcon width={18} height={18} className="text-brand" />
       </button>
+        </>
+      )}
       <CartBar />
     </div>
   );
