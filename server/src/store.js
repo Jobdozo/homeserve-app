@@ -1349,39 +1349,54 @@ async function listBookingsUncached({ customerId, providerId } = {}) {
     : `query {
         bookings(orderBy: { createdAt: DESC }) { ${BOOKING_FIELDS} }
       }`;
-  const { bookings } = await query(gql, hasFilter ? { id: customerId || providerId } : {});
-  const serviceCache = new Map();
-  const results = [];
-  for (const b of bookings) {
-    let service = null;
-    if (b.service?.id) {
-      if (!serviceCache.has(b.service.id)) serviceCache.set(b.service.id, await getService(b.service.id));
-      const s = serviceCache.get(b.service.id);
-      service = s ? { id: s.id, name: s.name, icon: s.icon, categoryId: s.categoryId, price: s.price } : null;
-    }
-    results.push(mapBooking(b, b.customer, service));
+  // Every query here is a round trip to a database in another continent
+  // (~0.3–1s each), so how many run one after another is what decides how long
+  // this takes. It used to look services up one at a time — a provider with 20
+  // different services paid for 20 in a row, ~10s whenever the 30s cache had
+  // expired, which is what delayed the new-request popup. Now the bookings and
+  // the whole service list (one cached query) load together, then the message
+  // previews: two round trips in total, however many services there are.
+  const [{ bookings }, allServices] = await Promise.all([
+    query(gql, hasFilter ? { id: customerId || providerId } : {}),
+    listServices(),
+  ]);
+  const serviceById = new Map(allServices.map((s) => [s.id, s]));
+  // A service missing from the list (just created, cache not refreshed yet)
+  // is looked up on its own so a booking never loses its service.
+  const missing = [...new Set(bookings.map((b) => b.service?.id).filter((id) => id && !serviceById.has(id)))];
+  if (missing.length) {
+    const found = await Promise.all(missing.map((id) => getService(id)));
+    missing.forEach((id, i) => found[i] && serviceById.set(id, found[i]));
   }
 
   // One batched query for a message preview per booking, instead of the
   // apps eagerly fetching every full thread individually on every load —
   // the Messages tab only needs the last line, not the whole conversation.
-  if (results.length > 0) {
-    const { messages } = await query(
-      `query($ids: [UUID!]) {
-        messages(where: { booking: { id: { in: $ids } } }, orderBy: { sentAt: ASC }) {
-          booking { id }
-          sender
-          text
-          sentAt
-        }
-      }`,
-      { ids: results.map((b) => b.id) }
-    );
-    const lastByBooking = {};
-    for (const m of messages) lastByBooking[m.booking.id] = { from: m.sender, text: m.text, time: m.sentAt };
-    for (const b of results) {
-      if (lastByBooking[b.id]) b.lastMessage = lastByBooking[b.id];
-    }
+  const messagesResult =
+    bookings.length > 0
+      ? await query(
+          `query($ids: [UUID!]) {
+            messages(where: { booking: { id: { in: $ids } } }, orderBy: { sentAt: ASC }) {
+              booking { id }
+              sender
+              text
+              sentAt
+            }
+          }`,
+          { ids: bookings.map((b) => b.id) }
+        )
+      : { messages: [] };
+
+  const results = bookings.map((b) => {
+    const s = b.service?.id ? serviceById.get(b.service.id) : null;
+    const service = s ? { id: s.id, name: s.name, icon: s.icon, categoryId: s.categoryId, price: s.price } : null;
+    return mapBooking(b, b.customer, service);
+  });
+
+  const lastByBooking = {};
+  for (const m of messagesResult.messages) lastByBooking[m.booking.id] = { from: m.sender, text: m.text, time: m.sentAt };
+  for (const b of results) {
+    if (lastByBooking[b.id]) b.lastMessage = lastByBooking[b.id];
   }
 
   return results;

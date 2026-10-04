@@ -135,6 +135,14 @@ export function AppProvider({ children }) {
       }
       setAuthToken(initialAuth.token);
       setSocketToken(initialAuth.token);
+      // A provider who was already logged in doesn't need to stare at a
+      // splash screen while we re-check the token — show the app from the
+      // saved session right away (the new-request popup included) and
+      // verify in the background. A rejected token still logs out below.
+      if (initialAuth.user) {
+        setStaffSession(initialAuth.staff || null);
+        setAuthLoading(false);
+      }
       try {
         const { user, staff } = await api.me();
         if (cancelled) return;
@@ -172,38 +180,35 @@ export function AppProvider({ children }) {
     let cancelled = false;
     async function load() {
       setLoading(true);
-      try {
-        const [requestData, serviceData, earningsData, walletData, notificationData, categoryData] = await Promise.all([
-          api.listBookings(),
-          api.listProviderServices(provider.id),
-          api.getEarnings(provider.id),
-          api.getWallet(),
-          api.listNotifications(),
-          api.listCategories(),
-        ]);
-        if (cancelled) return;
-        setRequests(requestData);
-        setServices(serviceData);
-        setEarnings(earningsData);
-        setWallet(walletData);
-        setNotifications(notificationData);
-        setCategories(categoryData);
-
-        // Reopening the app (e.g. tapping a push notification) should show
-        // the ringing overlay for a request that's still waiting on this
-        // provider, not just list it — ringingRequest otherwise only gets
-        // set from the live "booking:created" socket event.
-        const stillPending = requestData.find((r) => r.status === "Pending");
-        if (stillPending) setRingingRequest(stillPending);
-
-        // Chat threads load lazily per-request (see loadMessages, used by
-        // ChatScreen) — prefetching all of them here used to mean one extra
-        // network round trip per request on every app open.
-      } catch (e) {
-        console.error("Failed to load provider data", e);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      // The bookings are what the new-request popup needs, so they must not
+      // wait for the other five calls (earnings, wallet, …): the popup used to
+      // appear only once the slowest of all six had answered. Each piece now
+      // lands on screen as soon as it arrives.
+      const bookingsDone = api
+        .listBookings()
+        .then((requestData) => {
+          if (cancelled) return;
+          setRequests(requestData);
+          // Reopening the app (e.g. tapping a push notification) should show
+          // the ringing overlay for a request that's still waiting on this
+          // provider, not just list it — ringingRequest otherwise only gets
+          // set from the live "booking:created" socket event.
+          const stillPending = requestData.find((r) => r.status === "Pending");
+          if (stillPending) setRingingRequest(stillPending);
+        })
+        .catch((e) => console.error("Failed to load bookings", e));
+      const rest = [
+        api.listProviderServices(provider.id).then((d) => !cancelled && setServices(d)),
+        api.getEarnings(provider.id).then((d) => !cancelled && setEarnings(d)),
+        api.getWallet().then((d) => !cancelled && setWallet(d)),
+        api.listNotifications().then((d) => !cancelled && setNotifications(d)),
+        api.listCategories().then((d) => !cancelled && setCategories(d)),
+      ].map((p) => p.catch((e) => console.error("Failed to load provider data", e)));
+      // Chat threads load lazily per-request (see loadMessages, used by
+      // ChatScreen) — prefetching all of them here used to mean one extra
+      // network round trip per request on every app open.
+      await Promise.all([bookingsDone, ...rest]);
+      if (!cancelled) setLoading(false);
     }
     load();
     return () => {
@@ -226,19 +231,42 @@ export function AppProvider({ children }) {
   // Native only: the full-screen ringing notification (TikdumMessagingService)
   // launches/resumes the app and fires this the same way the live socket
   // "booking:created" event does, for whichever booking triggered it.
+  // Ring for one specific booking as fast as possible. The popup only needs
+  // that one booking, so fetch just it (one small query) instead of waiting
+  // for the whole list, which is much slower and can come back from the
+  // offline cache without the new booking in it. The full list still refreshes
+  // in the background, and never drops the booking we're ringing for.
+  const ringForBooking = useCallback((bookingId) => {
+    // Pushes that aren't about one booking (wallet reminders, …) just refresh.
+    const single = bookingId
+      ? api
+          .getBooking(bookingId)
+          .then((booking) => {
+            if (booking?.status === "Pending") {
+              setRequests((prev) => upsertById(prev, booking));
+              setRingingRequest(booking);
+            }
+            return booking;
+          })
+          .catch(() => null)
+      : Promise.resolve(null);
+    api
+      .listBookings()
+      .then(async (data) => {
+        const booking = await single;
+        setRequests(booking && !data.some((r) => r.id === booking.id) ? [booking, ...data] : data);
+        if (!ringingRequestRef.current) {
+          const fromList = data.find((r) => r.id === bookingId);
+          if (fromList && fromList.status === "Pending") setRingingRequest(fromList);
+        }
+      })
+      .catch((e) => console.error("Failed to refresh bookings for ring", e));
+  }, []);
+
   useEffect(() => {
     if (!provider) return () => {};
-    return onNativeRing((bookingId) => {
-      api
-        .listBookings()
-        .then((data) => {
-          setRequests(data);
-          const booking = data.find((r) => r.id === bookingId);
-          if (booking && booking.status === "Pending") setRingingRequest(booking);
-        })
-        .catch((e) => console.error("Failed to load booking for native ring", e));
-    });
-  }, [provider]);
+    return onNativeRing((bookingId) => ringForBooking(bookingId));
+  }, [provider, ringForBooking]);
 
   // The service worker's push handler postMessages every open tab the
   // moment a booking comes in — this tab may have been backgrounded with a
@@ -248,18 +276,11 @@ export function AppProvider({ children }) {
     if (!provider || !("serviceWorker" in navigator)) return;
     const onMessage = (event) => {
       if (event.data?.type !== "tikdum-push") return;
-      api
-        .listBookings()
-        .then((data) => {
-          setRequests(data);
-          const booking = data.find((r) => r.id === event.data.bookingId);
-          if (booking && booking.status === "Pending") setRingingRequest(booking);
-        })
-        .catch((e) => console.error("Failed to refresh after push", e));
+      ringForBooking(event.data.bookingId);
     };
     navigator.serviceWorker.addEventListener("message", onMessage);
     return () => navigator.serviceWorker.removeEventListener("message", onMessage);
-  }, [provider]);
+  }, [provider, ringForBooking]);
 
   // Background safety net: the live socket connection is what's supposed to
   // keep everything current, but mobile browsers frequently suspend/drop
