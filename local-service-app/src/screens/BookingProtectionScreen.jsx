@@ -6,7 +6,7 @@ import Seo from "../components/Seo";
 
 const BADGES = [
   { icon: "🛡️", label: "Genuine service guarantee" },
-  { icon: "👍", label: "Damage protection up to ₹10,000" },
+  { icon: "👍", label: "Damage protection up to ₹1,000" },
   { icon: "🏷️", label: "Fair price guarantee" },
   { icon: "🚨", label: "SOS & emergency help" },
   { icon: "🔒", label: "Confidentiality of all private details" },
@@ -43,7 +43,7 @@ export default function BookingProtectionScreen() {
     <div className="flex flex-1 flex-col">
       <Seo
         title="Booking Protection"
-        description="Every booking on Tikdum is covered by our genuine service guarantee, damage protection up to ₹10,000, fair price guarantee, and SOS emergency help."
+        description="Every booking on Tikdum is covered by our genuine service guarantee, damage protection up to ₹1,000, fair price guarantee, and SOS emergency help."
         path="/booking-protection"
       />
       <ScreenHeader title="Booking Protection" maxWidth="lg:max-w-2xl" />

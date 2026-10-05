@@ -6,7 +6,7 @@ import CategoryPhoto from "./CategoryPhoto";
 
 const PROTECTION = [
   "Genuine service guarantee",
-  "Damage protection up to ₹10,000",
+  "Damage protection up to ₹1,000",
   "Fair price guarantee",
   "SOS & emergency help",
 ];

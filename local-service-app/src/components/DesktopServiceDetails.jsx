@@ -51,7 +51,7 @@ export default function DesktopServiceDetails({ service, provider, category, pct
           <section className="mt-10 rounded-2xl bg-brand-light/60 p-6">
             <p className="text-[16px] font-bold text-brand-dark">Booking through Tikdum is protected</p>
             <p className="mt-1.5 text-[14px] leading-relaxed text-brand-dark/75">
-              Genuine service guarantee, damage protection up to ₹10,000, fair price guarantee and SOS help — only for bookings made in the app.
+              Genuine service guarantee, damage protection up to ₹1,000, fair price guarantee and SOS help — only for bookings made in the app.
             </p>
             <Link to="/booking-protection" className="mt-3 inline-block text-[13.5px] font-semibold text-brand hover:underline">
               Learn more
