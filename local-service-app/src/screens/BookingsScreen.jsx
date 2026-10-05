@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import CategoryIcon from "../components/CategoryIcon";
+import DesktopBookings from "../components/DesktopBookings";
 
 const TABS = ["All", "Pending", "Accepted", "In Progress", "Completed"];
 
@@ -49,7 +50,12 @@ export default function BookingsScreen() {
   }, [filtered]);
 
   return (
-    <div className="flex flex-1 flex-col lg:px-8 lg:py-8">
+    <>
+    {/* Desktop gets its own full-width page (components/DesktopBookings). */}
+    <div className="hidden lg:block">
+      <DesktopBookings />
+    </div>
+    <div className="flex flex-1 flex-col lg:hidden">
       <h1 className="px-4 pt-1 text-lg font-bold text-gray-900 lg:px-0 lg:pt-0 lg:text-2xl">My Bookings</h1>
 
       <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto px-4 pb-1 lg:mt-5 lg:flex-wrap lg:px-0">
@@ -117,6 +123,7 @@ export default function BookingsScreen() {
         )}
       </div>
     </div>
+    </>
   );
 }
 
