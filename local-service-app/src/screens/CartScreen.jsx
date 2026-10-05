@@ -155,7 +155,7 @@ export default function CartScreen() {
   if (lines.length === 0) {
     return (
       <div className="flex flex-1 flex-col">
-        <ScreenHeader title="Your Cart" maxWidth="lg:max-w-2xl" />
+        <ScreenHeader title="Your Cart" maxWidth="lg:max-w-6xl" />
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
           <span className="text-4xl">🛒</span>
           <p className="text-sm font-medium text-gray-700">Your cart is empty</p>
@@ -172,14 +172,16 @@ export default function CartScreen() {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
-      <ScreenHeader title="Your Cart" subtitle={`${lines.length} service${lines.length > 1 ? "s" : ""}`} maxWidth="lg:max-w-2xl" />
+    <div className="flex flex-1 flex-col lg:pt-4">
+      <ScreenHeader title="Your Cart" subtitle={`${lines.length} service${lines.length > 1 ? "s" : ""}`} maxWidth="lg:max-w-6xl" />
 
-      <div className="flex-1 space-y-3 px-4 pb-6 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-10">
+      {/* Desktop: items and checkout details on the left, a sticky order summary on the right. */}
+      <div className="flex flex-1 flex-col lg:mx-auto lg:grid lg:w-full lg:max-w-6xl lg:grid-cols-[1fr_380px] lg:items-start lg:gap-10 lg:px-8 lg:pb-16">
+      <div className="flex-1 space-y-3 px-4 pb-6 lg:space-y-5 lg:px-0 lg:pb-0">
         {lines.map(({ item, service }) => (
           <div
             key={item.serviceId}
-            className={`rounded-2xl border p-3 shadow-card ${unavailableIds.has(service.id) ? "border-amber-300" : "border-gray-100"}`}
+            className={`rounded-2xl border p-3 shadow-card lg:bg-white lg:p-5 ${unavailableIds.has(service.id) ? "border-amber-300" : "border-gray-100"}`}
           >
             <div className="flex items-start gap-3">
               <CategoryIcon categoryId={service.categoryId} imageUrl={service.imageUrl} size={48} />
@@ -238,8 +240,8 @@ export default function CartScreen() {
           </div>
         ))}
 
-        <div>
-          <h2 className="mb-1.5 text-[13px] font-semibold text-gray-900">Where do you need the service?</h2>
+        <div className="lg:rounded-2xl lg:bg-white lg:p-5 lg:shadow-card">
+          <h2 className="mb-1.5 text-[13px] font-semibold text-gray-900 lg:mb-3 lg:text-[16px] lg:font-bold">Where do you need the service?</h2>
           <div className="space-y-2">
             {places.map((p) => {
               const selected = chosenKey === p.key && !!p.data;
@@ -328,8 +330,8 @@ export default function CartScreen() {
           )}
         </div>
 
-        <div>
-          <h2 className="mb-1.5 text-[13px] font-semibold text-gray-900">Offer Code</h2>
+        <div className="lg:rounded-2xl lg:bg-white lg:p-5 lg:shadow-card">
+          <h2 className="mb-1.5 text-[13px] font-semibold text-gray-900 lg:mb-3 lg:text-[16px] lg:font-bold">Offer Code</h2>
           {appliedOffer ? (
             <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-3 py-2.5">
               <div>
@@ -365,8 +367,8 @@ export default function CartScreen() {
         </div>
 
         {isFirstOrder && (
-          <div>
-            <h2 className="mb-1.5 text-[13px] font-semibold text-gray-900">Referral Code</h2>
+          <div className="lg:rounded-2xl lg:bg-white lg:p-5 lg:shadow-card">
+            <h2 className="mb-1.5 text-[13px] font-semibold text-gray-900 lg:mb-3 lg:text-[16px] lg:font-bold">Referral Code</h2>
             {appliedReferral ? (
               <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-3 py-2.5">
                 <p className="text-[12.5px] font-semibold text-emerald-700">
@@ -406,7 +408,7 @@ export default function CartScreen() {
         )}
 
         {referral && referral.balance > 0 && (
-          <label className="flex items-center justify-between rounded-xl border border-gray-200 px-3.5 py-3">
+          <label className="flex items-center justify-between rounded-xl border border-gray-200 px-3.5 py-3 lg:bg-white lg:px-5 lg:py-4">
             <span className="text-[12.5px] font-medium text-gray-700">
               Use your ₹{referral.balance} referral credit
             </span>
@@ -420,7 +422,8 @@ export default function CartScreen() {
         )}
       </div>
 
-      <div className="flex-shrink-0 border-t border-gray-100 bg-white px-4 py-3 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:py-4">
+      <div className="flex-shrink-0 border-t border-gray-100 bg-white px-4 py-3 lg:sticky lg:top-6 lg:rounded-2xl lg:border lg:p-6 lg:shadow-card">
+        <h2 className="mb-4 hidden text-[18px] font-extrabold text-gray-900 lg:block">Order summary</h2>
         <div className="mb-2.5 flex items-center justify-between text-[12.5px]">
           <span className="text-gray-500">Subtotal ({lines.length} item{lines.length > 1 ? "s" : ""})</span>
           <span className="font-semibold text-gray-800">₹{total}</span>
@@ -467,6 +470,7 @@ export default function CartScreen() {
         <p className="mt-2 text-center text-[10.5px] text-gray-400">
           You won't be charged now. Payment after service completion.
         </p>
+      </div>
       </div>
     </div>
   );
