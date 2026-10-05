@@ -7,6 +7,7 @@ import { formatCount, discountPct } from "../utils/format";
 import CategoryPhoto from "../components/CategoryPhoto";
 import CartBar from "../components/CartBar";
 import Seo from "../components/Seo";
+import DesktopServiceProviders from "../components/DesktopServiceProviders";
 
 // Same service, every vendor offering it: tapping a service card anywhere in
 // the app lands here first instead of jumping straight into one provider's
@@ -52,12 +53,17 @@ export default function ServiceProvidersScreen() {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
-      <Seo
-        title={`${anchor.name} Providers`}
-        description={`Compare ${vendors.length} trusted provider${vendors.length === 1 ? "" : "s"} for ${anchor.name}${category ? ` in ${category.name}` : ""} on Tikdum. Book instantly over WhatsApp.`}
-        path={`/find-service/${anchor.id}`}
-      />
+    <>
+    <Seo
+      title={`${anchor.name} Providers`}
+      description={`Compare ${vendors.length} trusted provider${vendors.length === 1 ? "" : "s"} for ${anchor.name}${category ? ` in ${category.name}` : ""} on Tikdum. Book instantly over WhatsApp.`}
+      path={`/find-service/${anchor.id}`}
+    />
+    {/* Desktop gets its own full-width page (components/DesktopServiceProviders). */}
+    <div className="hidden lg:block">
+      <DesktopServiceProviders anchor={anchor} category={category} vendors={vendors} />
+    </div>
+    <div className="flex flex-1 flex-col lg:hidden">
       <ScreenHeader title={anchor.name} maxWidth="lg:max-w-3xl" />
 
       <div className="flex-1 px-4 pb-6 lg:mx-auto lg:w-full lg:max-w-3xl lg:px-8 lg:pb-16">
@@ -119,5 +125,6 @@ export default function ServiceProvidersScreen() {
       </div>
       <CartBar />
     </div>
+    </>
   );
 }

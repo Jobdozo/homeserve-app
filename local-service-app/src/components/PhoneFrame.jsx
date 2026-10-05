@@ -30,7 +30,13 @@ function ConnectionBanner() {
 // Desktop pages that are full-width marketing-style pages instead of the
 // narrow centered column.
 function isWidePath(pathname) {
-  return pathname === "/home" || pathname === "/categories" || pathname.startsWith("/category/");
+  return (
+    pathname === "/home" ||
+    pathname === "/categories" ||
+    pathname.startsWith("/category/") ||
+    pathname.startsWith("/find-service/") ||
+    pathname.startsWith("/service/")
+  );
 }
 
 export function MainLayout() {

@@ -7,11 +7,12 @@ import { api } from "../api";
 import { formatCount, discountPct } from "../utils/format";
 import CategoryPhoto from "../components/CategoryPhoto";
 import Seo, { SITE_URL } from "../components/Seo";
+import DesktopServiceDetails from "../components/DesktopServiceDetails";
 
 export default function ServiceDetailsScreen() {
   const { serviceId } = useParams();
   const navigate = useNavigate();
-  const { getService, getProvider, cart, addToCart } = useApp();
+  const { getService, getProvider, cart, addToCart, categories } = useApp();
   const service = getService(serviceId);
   const provider = service ? getProvider(service.providerId) : null;
   const pct = service ? discountPct(service.price, service.originalPrice) : 0;
@@ -59,17 +60,29 @@ export default function ServiceDetailsScreen() {
   };
 
   return (
-    <div className="flex flex-1 flex-col">
-      <Seo
-        title={service.name}
-        description={
-          service.tagline ||
-          `Book ${service.name} near you on Tikdum from ₹${service.price}${provider ? ` with ${provider.name}` : ""}. Compare trusted local providers and book instantly over WhatsApp.`
-        }
-        path={`/service/${service.id}`}
-        image={service.imageUrl}
-        jsonLd={serviceJsonLd}
+    <>
+    <Seo
+      title={service.name}
+      description={
+        service.tagline ||
+        `Book ${service.name} near you on Tikdum from ₹${service.price}${provider ? ` with ${provider.name}` : ""}. Compare trusted local providers and book instantly over WhatsApp.`
+      }
+      path={`/service/${service.id}`}
+      image={service.imageUrl}
+      jsonLd={serviceJsonLd}
+    />
+    {/* Desktop gets its own full-width page (components/DesktopServiceDetails). */}
+    <div className="hidden lg:block">
+      <DesktopServiceDetails
+        service={service}
+        provider={provider}
+        category={categories.find((c) => c.id === service.categoryId)}
+        pct={pct}
+        inCart={inCart}
+        onCart={() => (inCart ? navigate("/cart") : addToCart(service.id))}
       />
+    </div>
+    <div className="flex flex-1 flex-col lg:hidden">
       <ScreenHeader title="Service Details" maxWidth="lg:max-w-5xl" />
 
       <div className="flex flex-1 flex-col lg:mx-auto lg:w-full lg:max-w-5xl lg:flex-row lg:gap-10 lg:px-8 lg:pb-16">
@@ -189,5 +202,6 @@ export default function ServiceDetailsScreen() {
         </button>
       </div>
     </div>
+    </>
   );
 }
