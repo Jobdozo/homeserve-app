@@ -20,8 +20,8 @@ export default defineConfig({
       },
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Tikdum Pro — Provider App',
-        short_name: 'Tikdum Pro',
+        name: 'Tikdum Business — Provider App',
+        short_name: 'Tikdum Business',
         description: 'Manage jobs, requests and earnings on the go.',
         theme_color: '#15803D',
         background_color: '#ffffff',

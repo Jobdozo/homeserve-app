@@ -1512,7 +1512,7 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
   });
   notifyProviderOfBookingByWhatsApp(
     service.providerId,
-    `New Tikdum booking request!\n${bookingMessage}\nOpen the Tikdum Pro app to accept or decline.`
+    `New Tikdum booking request!\n${bookingMessage}\nOpen the Tikdum Business app to accept or decline.`
   ).catch((e) => console.error("WhatsApp booking alert failed", e));
   return fetchBookingWithRelations(bookingId);
 }
@@ -1881,7 +1881,7 @@ async function reassignBooking(bookingId, excludeProviderIds) {
     });
     notifyProviderOfBookingByWhatsApp(
       candidate.providerId,
-      `New Tikdum booking request!\n${bookingMessage}\nOpen the Tikdum Pro app to accept or decline.`
+      `New Tikdum booking request!\n${bookingMessage}\nOpen the Tikdum Business app to accept or decline.`
     ).catch((e) => console.error("WhatsApp booking alert failed", e));
     return { reassigned: true, booking: updated };
   }
@@ -2084,7 +2084,7 @@ async function swapBooking(bookingId, providerId, { reason, note } = {}) {
   });
   notifyProviderOfBookingByWhatsApp(
     candidate.providerId,
-    `New Tikdum booking request!\n${bookingMessage}\nOpen the Tikdum Pro app to accept or decline.`
+    `New Tikdum booking request!\n${bookingMessage}\nOpen the Tikdum Business app to accept or decline.`
   ).catch((e) => console.error("WhatsApp booking alert failed", e));
   await addNotification({
     recipientType: "provider",

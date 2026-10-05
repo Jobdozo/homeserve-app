@@ -23,7 +23,7 @@ export default function DesktopHeader() {
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-white">
             <LogoMark size={19} />
           </span>
-          <span className="text-[17px] font-extrabold text-gray-900">Tikdum Pro</span>
+          <span className="text-[17px] font-extrabold text-gray-900">Tikdum Business</span>
         </button>
 
         <nav className="flex flex-1 items-center gap-1">

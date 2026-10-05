@@ -52,7 +52,7 @@ export default function UpdateGate({ children }) {
       <div>
         <h1 className="text-[20px] font-extrabold text-gray-900">Update required</h1>
         <p className="mx-auto mt-2 max-w-xs text-[13.5px] leading-relaxed text-gray-500">
-          {block.message || "A new version of Tikdum Pro is available. Please update to keep receiving and managing jobs."}
+          {block.message || "A new version of Tikdum Business is available. Please update to keep receiving and managing jobs."}
         </p>
       </div>
       <a

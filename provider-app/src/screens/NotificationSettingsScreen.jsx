@@ -136,8 +136,8 @@ export default function NotificationSettingsScreen() {
           </div>
           <p className="px-1 text-[11px] text-gray-400">
             {Capacitor.isNativePlatform()
-              ? "New requests ring like an incoming call — full-screen with sound and vibration — even when Tikdum Pro is fully closed."
-              : "Ringing only works while Tikdum Pro is open or was recently in the background. When the app is fully closed, new requests still arrive as a phone notification with sound and vibration."}
+              ? "New requests ring like an incoming call — full-screen with sound and vibration — even when Tikdum Business is fully closed."
+              : "Ringing only works while Tikdum Business is open or was recently in the background. When the app is fully closed, new requests still arrive as a phone notification with sound and vibration."}
           </p>
         </div>
 

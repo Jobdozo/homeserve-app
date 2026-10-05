@@ -60,7 +60,7 @@ export default function LoginScreen() {
               <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-white">
                 <LogoMark size={30} />
               </span>
-              <h1 className="text-xl font-extrabold text-gray-900">Tikdum Pro</h1>
+              <h1 className="text-xl font-extrabold text-gray-900">Tikdum Business</h1>
               <p className="text-[13px] text-gray-400">Log in or register as a provider with WhatsApp</p>
             </div>
 

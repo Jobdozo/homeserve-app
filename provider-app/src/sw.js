@@ -46,7 +46,7 @@ self.addEventListener("push", (event) => {
   try {
     data = event.data ? event.data.json() : {};
   } catch (e) {
-    data = { title: "Tikdum Pro", body: event.data ? event.data.text() : "" };
+    data = { title: "Tikdum Business", body: event.data ? event.data.text() : "" };
   }
 
   event.waitUntil(

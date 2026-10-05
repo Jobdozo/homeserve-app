@@ -2,7 +2,7 @@ apply plugin: 'com.android.application'
 
 // Loads the existing Play Store upload key (not checked into git — see
 // .gitignore) so a release build here signs as an update to the same
-// "Tikdum Pro" listing already live in Play Console, instead of a new app.
+// "Tikdum Business" listing already live in Play Console, instead of a new app.
 def keystorePropertiesFile = rootProject.file("keystore.properties")
 def keystoreProperties = new Properties()
 def hasKeystoreProperties = keystorePropertiesFile.exists()

@@ -484,14 +484,14 @@ function UpdatesTab({ data, save }) {
         <p className="font-semibold">Read before turning this on</p>
         <ul className="mt-1 list-disc space-y-1 pl-4">
           <li>Set the minimum only after the new version is <b>live on Google Play</b>. Otherwise people are told to update to something they can't download yet.</li>
-          <li>It only applies to app versions that already contain this feature (Tikdum version code 19 or higher, Tikdum Pro 18 or higher). Older installs can't be forced.</li>
+          <li>It only applies to app versions that already contain this feature (Tikdum version code 19 or higher, Tikdum Business 18 or higher, Tikdum Admin 1 or higher). Older installs can't be forced.</li>
           <li>Anyone below the minimum sees a screen they can't get past until they update. The website and installed web app update on their own.</li>
         </ul>
       </div>
 
       <Card
         title="Force an app update"
-        desc="The version code is the build number shown in Play Console (Tikdum 2.16 = 18, Tikdum Pro 3.14 = 17). Enter the lowest build still allowed. 0 turns it off."
+        desc="The version code is the build number shown in Play Console (Tikdum 2.18 = 20, Tikdum Business 3.16 = 19). Enter the lowest build still allowed. 0 turns it off."
         form={form}
         save={save}
       >
@@ -502,7 +502,7 @@ function UpdatesTab({ data, save }) {
           onChange={(v) => form.set("minVersionCodeCustomer", v)}
         />
         <Num
-          label="Minimum version code — Tikdum Pro (provider app)"
+          label="Minimum version code — Tikdum Business (provider app)"
           hint="Builds below this must update."
           value={form.draft.minVersionCodeProvider}
           onChange={(v) => form.set("minVersionCodeProvider", v)}

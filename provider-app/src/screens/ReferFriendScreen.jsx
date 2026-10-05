@@ -6,7 +6,7 @@ const APP_LINK = "https://play.google.com/store/apps/details?id=com.tikdum.provi
 
 function inviteMessage(name) {
   const greeting = name ? `Hi ${name}, ` : "";
-  return `${greeting}I'm using Tikdum Pro to get more service bookings and manage my jobs — thought you'd find it useful too. Download it here: ${APP_LINK}`;
+  return `${greeting}I'm using Tikdum Business to get more service bookings and manage my jobs — thought you'd find it useful too. Download it here: ${APP_LINK}`;
 }
 
 // The Contact Picker API only exists on Chrome for Android (which is what
@@ -59,7 +59,7 @@ export default function ReferFriendScreen() {
           <p className="text-2xl">🎁</p>
           <p className="mt-2 text-[15px] font-bold">Know another service provider?</p>
           <p className="mt-1 text-[12.5px] text-white/85">
-            Invite them to join Tikdum Pro and grow their business too.
+            Invite them to join Tikdum Business and grow their business too.
           </p>
         </div>
 

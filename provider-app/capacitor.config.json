@@ -1,6 +1,6 @@
 {
   "appId": "com.tikdum.provider",
-  "appName": "Tikdum Pro",
+  "appName": "Tikdum Business",
   "webDir": "dist",
   "server": {
     "androidScheme": "https",
