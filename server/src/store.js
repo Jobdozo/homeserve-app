@@ -455,8 +455,8 @@ async function updateCategory(slug, patch, actor) {
   }
   if (patch.icon !== undefined) fields.icon = String(patch.icon).trim() || null;
   if (Object.keys(fields).length > 0) {
-    const defs = Object.keys(fields).map((k) => `${k}: String`).join(", ");
-    const data = Object.keys(fields).map((k) => `${k}: ${k}`).join(", ");
+    const defs = Object.keys(fields).map((k) => `$${k}: String`).join(", ");
+    const data = Object.keys(fields).map((k) => `${k}: $${k}`).join(", ");
     await mutate(`mutation($id: UUID!, ${defs}) { category_update(id: $id, data: { ${data} }) }`, {
       id: categoryId,
       ...fields,
@@ -552,6 +552,30 @@ async function getCustomerById(id) {
   const { customer } = await query(`query($id: UUID!) { customer(id: $id) { id name avatar phone email } }`, { id });
   if (!customer) return undefined;
   return { ...customer, address: getCustomerAddress(id) };
+}
+
+// Customer-editable profile: display name and avatar emoji only. The phone
+// number is the login identity, so it can't be changed here.
+async function updateCustomerProfile(id, patch) {
+  const fields = {};
+  if (patch.name !== undefined) {
+    const name = String(patch.name).trim().replace(/s+/g, " ");
+    if (!name) throw Object.assign(new Error("Name can't be empty"), { status: 400 });
+    if (name.length > 60) throw Object.assign(new Error("Name is too long (60 characters max)"), { status: 400 });
+    fields.name = name;
+  }
+  if (patch.avatar !== undefined) {
+    const avatar = String(patch.avatar).trim();
+    if (!avatar || avatar.length > 8) throw Object.assign(new Error("Pick an avatar from the list"), { status: 400 });
+    fields.avatar = avatar;
+  }
+  if (Object.keys(fields).length > 0) {
+    const defs = Object.keys(fields).map((k) => `$${k}: String`).join(", ");
+    const data = Object.keys(fields).map((k) => `${k}: $${k}`).join(", ");
+    await mutate(`mutation($id: UUID!, ${defs}) { customer_update(id: $id, data: { ${data} }) }`, { id, ...fields });
+    cacheClear("customers");
+  }
+  return getCustomerById(id);
 }
 
 // ---- registered customer address (jsonStore-backed — a single primary
@@ -4010,6 +4034,7 @@ module.exports = {
   createCategory,
   updateCategory,
   setCategoryBanner,
+  updateCustomerProfile,
   deleteCategory,
   listServices,
   getService,

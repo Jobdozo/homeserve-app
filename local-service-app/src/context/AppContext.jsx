@@ -427,6 +427,24 @@ export function AppProvider({ children }) {
 
   const showToast = useCallback((message) => setToast(message), []);
 
+  // Name / avatar. The login session keeps a copy of the customer in
+  // localStorage, so refresh that too or the old name returns on reload.
+  const updateProfile = useCallback(
+    async (patch) => {
+      const updated = await api.updateMyProfile(patch);
+      setCustomer((prev) => (prev ? { ...prev, name: updated.name, avatar: updated.avatar } : prev));
+      try {
+        const raw = JSON.parse(localStorage.getItem(AUTH_KEY) || "null");
+        if (raw?.user) localStorage.setItem(AUTH_KEY, JSON.stringify({ ...raw, user: { ...raw.user, name: updated.name, avatar: updated.avatar } }));
+      } catch (e) {
+        console.error("Could not refresh the saved session", e);
+      }
+      showToast("Profile updated");
+      return updated;
+    },
+    [showToast]
+  );
+
   const saveAddress = useCallback(
     async (addressData) => {
       const saved = await api.saveMyAddress(addressData);
@@ -620,6 +638,7 @@ export function AppProvider({ children }) {
       refreshReferral,
       submitRefundClaim,
       saveAddress,
+      updateProfile,
       removeOfficeAddress,
       activePincode,
       noCoverage,
@@ -673,6 +692,7 @@ export function AppProvider({ children }) {
       refreshReferral,
       submitRefundClaim,
       saveAddress,
+      updateProfile,
       removeOfficeAddress,
       activePincode,
       noCoverage,

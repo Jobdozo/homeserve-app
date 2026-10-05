@@ -383,6 +383,13 @@ app.get("/api/customer/address", auth.requireAuth("customer"), ah(async (req, re
   res.json(store.getCustomerAddress(req.user.id));
 }));
 
+app.patch("/api/customer/profile", auth.requireAuth("customer"), ah(async (req, res) => {
+  const { name, avatar } = req.body || {};
+  const customer = await store.updateCustomerProfile(req.user.id, { name, avatar });
+  if (!customer) return res.status(404).json({ error: "Account not found" });
+  res.json(customer);
+}));
+
 app.put("/api/customer/address", auth.requireAuth("customer"), ah(async (req, res) => {
   const address = store.saveCustomerAddress(req.user.id, req.body || {});
   res.json(address);

@@ -37,7 +37,8 @@ function isWidePath(pathname) {
     pathname.startsWith("/find-service/") ||
     pathname.startsWith("/service/") ||
     pathname === "/cart" ||
-    pathname === "/bookings"
+    pathname === "/bookings" ||
+    pathname === "/profile"
   );
 }
 
