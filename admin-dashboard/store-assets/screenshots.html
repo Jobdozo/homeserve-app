@@ -1,0 +1,60 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1920px;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;background:linear-gradient(160deg,#D97706,#78350F)}
+.wrap{padding:90px 64px 0;height:100%;display:flex;flex-direction:column;align-items:center}
+h1{color:#fff;font-size:68px;font-weight:800;line-height:1.08;letter-spacing:-1.5px;text-align:center;max-width:900px}
+h1 span{color:#FDE68A}
+.phone{margin-top:70px;width:800px;flex:1;background:#1c1308;border-radius:80px 80px 0 0;padding:20px 20px 0;box-shadow:0 40px 90px rgba(0,0,0,.45)}
+.screen{height:100%;background:#FFFBF5;border-radius:62px 62px 0 0;padding:64px 44px;overflow:hidden}
+.bar{display:flex;align-items:center;gap:20px;margin-bottom:36px}
+.logo{width:84px;height:84px;border-radius:22px;background:#D97706;display:flex;align-items:center;justify-content:center}
+.logo svg{width:52px;height:52px}
+.bar b{font-size:40px;color:#1c1308;font-weight:800}
+.card{background:#fff;border:2px solid #F3E3CC;border-radius:30px;padding:30px 34px;margin-bottom:22px}
+.row{display:flex;justify-content:space-between;align-items:center}
+.t{font-size:34px;font-weight:800;color:#1c1308}
+.s{font-size:26px;color:#7c6a55;font-weight:600;margin-top:6px}
+.pill{font-size:24px;font-weight:800;padding:8px 20px;border-radius:99px}
+.ok{background:#DCFCE7;color:#15803d}.wait{background:#FEF3C7;color:#B45309}.bad{background:#FEE2E2;color:#b91c1c}
+.btn{margin-top:24px;background:#D97706;color:#fff;text-align:center;border-radius:24px;padding:28px;font-size:34px;font-weight:800}
+.in{border:2px solid #E9D5B5;border-radius:24px;padding:26px 28px;font-size:32px;color:#7c6a55;background:#fff;margin:14px 0 22px}
+.lbl{font-size:28px;font-weight:700;color:#1c1308;margin-top:24px}
+.chips{display:flex;gap:14px;flex-wrap:wrap;margin-top:18px}
+.chip{font-size:30px;font-weight:800;padding:14px 28px;border-radius:99px;background:#FEF3C7;color:#B45309}
+.sec{font-size:26px;font-weight:800;color:#B45309;letter-spacing:2px;text-transform:uppercase;margin:34px 0 18px}
+.bn{display:none}.bn.on{display:block}
+</style></head><body><div class="wrap">
+<div class="bn" data-s="1"><h1>Staff sign-in with <span>WhatsApp</span></h1></div>
+<div class="bn" data-s="2"><h1>Review and approve <span>providers</span></h1></div>
+<div class="bn" data-s="3"><h1>Control where Tikdum <span>serves</span></h1></div>
+<div class="bn" data-s="4"><h1>Push <span>updates</span> to every phone</h1></div>
+<div class="phone"><div class="screen">
+<div class="bar"><div class="logo"><svg viewBox="0 0 100 100" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round"><polyline points="27,52 43,68 75,30" stroke-width="10"/><line x1="43" y1="68" x2="43" y2="80" stroke-width="7"/><circle cx="43" cy="83" r="3.6" fill="#fff" stroke="none"/></svg></div><b>Tikdum Admin</b></div>
+
+<div class="bn" data-s="1">
+<div class="t" style="margin-top:50px;font-size:44px">Welcome back</div><div class="s">Log in with your admin WhatsApp number</div>
+<div class="lbl">WhatsApp number</div><div class="in">🇮🇳 +91 &nbsp; 98XXX XXXXX</div>
+<div class="btn">Send WhatsApp code</div>
+<div class="s" style="margin-top:34px;text-align:center">Only registered Tikdum staff numbers can sign in.</div></div>
+
+<div class="bn" data-s="2"><div class="sec">Awaiting review</div>
+<div class="card"><div class="row"><div><div class="t">Electrician — Sample A</div><div class="s">KYC documents uploaded</div></div><span class="pill wait">Pending</span></div></div>
+<div class="card"><div class="row"><div><div class="t">AC repair — Sample B</div><div class="s">Aadhaar + photo verified</div></div><span class="pill ok">Ready</span></div></div>
+<div class="card"><div class="row"><div><div class="t">Plumber — Sample C</div><div class="s">Documents missing</div></div><span class="pill bad">Incomplete</span></div></div>
+<div class="btn">Approve provider</div></div>
+
+<div class="bn" data-s="3"><div class="sec">Default coverage</div>
+<div class="card"><div class="t">PIN-code prefixes</div><div class="s">Customers and providers are matched by PIN prefix</div>
+<div class="chips"><span class="chip">18</span><span class="chip">19</span></div></div>
+<div class="card"><div class="row"><div><div class="t">Jammu</div><div class="s">PIN 180xxx</div></div><span class="pill ok">Live</span></div></div>
+<div class="card"><div class="row"><div><div class="t">Srinagar</div><div class="s">PIN 190xxx</div></div><span class="pill ok">Live</span></div></div>
+<div class="card"><div class="row"><div><div class="t">New area</div><div class="s">Add a 2–6 digit prefix</div></div><span class="pill wait">Add</span></div></div></div>
+
+<div class="bn" data-s="4"><div class="sec">Minimum app versions</div>
+<div class="card"><div class="row"><div class="t">Tikdum</div><span class="pill ok">Customers</span></div><div class="in">Version code 20</div></div>
+<div class="card"><div class="row"><div class="t">Tikdum Business</div><span class="pill ok">Providers</span></div><div class="in">Version code 20</div></div>
+<div class="card"><div class="row"><div class="t">Tikdum Admin</div><span class="pill ok">Staff</span></div><div class="in">Version code 1</div></div>
+<div class="btn">Save update rules</div></div>
+</div></div></div>
+<script>var s=(location.search.match(/s=(\d)/)||[0,1])[1];document.querySelectorAll('.bn').forEach(function(e){if(e.dataset.s==s)e.classList.add('on')});</script>
+</body></html>

@@ -1,0 +1,33 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1024px;height:500px;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif}
+.banner{width:1024px;height:500px;position:relative;display:flex;align-items:center;overflow:hidden;
+background:linear-gradient(135deg,#D97706 0%,#B45309 55%,#78350F 100%)}
+.glow{position:absolute;width:700px;height:700px;right:-180px;top:-150px;background:radial-gradient(circle,rgba(255,255,255,.16) 0%,rgba(255,255,255,0) 65%)}
+.content{position:relative;z-index:2;padding-left:72px;max-width:600px}
+.icon{width:84px;height:84px;border-radius:22px;background:rgba(255,255,255,.16);border:2px solid rgba(255,255,255,.35);display:flex;align-items:center;justify-content:center;margin-bottom:28px}
+.icon svg{width:50px;height:50px}
+h1{color:#fff;font-size:56px;font-weight:800;line-height:1.05;letter-spacing:-1px}
+h1 span{color:#FDE68A}
+p.tag{color:rgba(255,255,255,.9);font-size:24px;font-weight:500;margin-top:18px;line-height:1.4}
+.phone{position:absolute;right:90px;top:50%;transform:translateY(-50%);width:260px;height:460px;background:#1c1308;border-radius:34px;box-shadow:0 30px 60px rgba(0,0,0,.4);padding:10px;z-index:2}
+.screen{width:100%;height:100%;background:#FFFBF5;border-radius:26px;overflow:hidden;padding:22px 16px}
+.hd{font-size:15px;font-weight:800;color:#1c1308;margin-bottom:14px}
+.row{display:flex;gap:8px;margin-bottom:8px}
+.stat{flex:1;background:#fff;border:1px solid #F3E3CC;border-radius:12px;padding:10px}
+.stat b{display:block;font-size:20px;color:#B45309}
+.stat small{font-size:10px;color:#7c6a55;font-weight:600}
+.item{display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #F3E3CC;border-radius:12px;padding:10px 12px;margin-top:8px;font-size:12px;font-weight:700;color:#1c1308}
+.pill{font-size:10px;font-weight:800;padding:3px 8px;border-radius:99px}
+.ok{background:#DCFCE7;color:#15803d}.wait{background:#FEF3C7;color:#B45309}
+</style></head><body><div class="banner"><div class="glow"></div>
+<div class="content"><div class="icon"><svg viewBox="0 0 100 100" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round"><polyline points="27,52 43,68 75,30" stroke-width="10"/><line x1="43" y1="68" x2="43" y2="80" stroke-width="7"/><circle cx="43" cy="83" r="3.6" fill="#fff" stroke="none"/></svg></div>
+<h1>Run Tikdum from your <span>pocket</span></h1>
+<p class="tag">Bookings, providers and coverage in one app.</p></div>
+<div class="phone"><div class="screen"><div class="hd">Tikdum Admin</div>
+<div class="row"><div class="stat"><b>Live</b><small>Bookings</small></div><div class="stat"><b>KYC</b><small>Reviews</small></div></div>
+<div class="item">Approve providers<span class="pill wait">Pending</span></div>
+<div class="item">Service coverage<span class="pill ok">J&amp;K</span></div>
+<div class="item">Complaints<span class="pill wait">Open</span></div>
+<div class="item">App updates<span class="pill ok">Active</span></div></div></div>
+</div></body></html>

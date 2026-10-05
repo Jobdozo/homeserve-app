@@ -1,0 +1,3 @@
+$e="C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"; $d="D:\Tikdum\admin-dashboard\store-assets"
+foreach($n in 1..4){ Start-Process -Wait -FilePath $e -ArgumentList "--headless=new","--disable-gpu","--hide-scrollbars","--window-size=1080,1920","--screenshot=$d\screenshot-0$n.png","file:///D:/Tikdum/admin-dashboard/store-assets/screenshots.html?s=$n" }
+Start-Process -Wait -FilePath $e -ArgumentList "--headless=new","--disable-gpu","--hide-scrollbars","--window-size=1024,500","--screenshot=$d\feature-graphic.png","file:///D:/Tikdum/admin-dashboard/store-assets/feature-graphic.html"
