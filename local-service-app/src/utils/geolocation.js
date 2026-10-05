@@ -7,12 +7,32 @@ export async function detectCurrentLocation() {
 
   // PIN-code level accuracy doesn't need GPS-grade precision; the coarse
   // network fix is faster, works indoors and on weak connections.
+  // Some desktop browsers (e.g. Windows with location services off) never
+  // call back — not even with an error — so the `timeout` option above is not
+  // enough. Our own timer guarantees the caller always gets an answer instead
+  // of a "Detecting…" label that never clears.
   const position = await new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: false,
-      timeout: 12000,
-      maximumAge: 30000,
-    });
+    let settled = false;
+    const guard = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(Object.assign(new Error("Location lookup timed out"), { code: 3 }));
+    }, 14000);
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(guard);
+        resolve(p);
+      },
+      (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(guard);
+        reject(err);
+      },
+      { enableHighAccuracy: false, timeout: 12000, maximumAge: 30000 }
+    );
   });
 
   const { latitude, longitude } = position.coords;
