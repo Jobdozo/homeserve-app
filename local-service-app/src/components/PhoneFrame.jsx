@@ -27,11 +27,17 @@ function ConnectionBanner() {
   );
 }
 
+// Desktop pages that are full-width marketing-style pages instead of the
+// narrow centered column.
+function isWidePath(pathname) {
+  return pathname === "/home" || pathname === "/categories" || pathname.startsWith("/category/");
+}
+
 export function MainLayout() {
   const { loading } = useApp();
   // On desktop the home page is a full-width marketing page; every other
   // screen stays in the narrow centered column.
-  const wide = ["/home", "/categories"].includes(useLocation().pathname);
+  const wide = isWidePath(useLocation().pathname);
   return (
     <div className="app-shell">
       <DesktopHeader />
@@ -51,11 +57,12 @@ export function MainLayout() {
 
 export function DetailLayout() {
   const { loading } = useApp();
+  const wide = isWidePath(useLocation().pathname);
   return (
     <div className="app-shell">
       <DesktopHeader />
-      <div className="app-body">
-        <div className="phone-frame">
+      <div className={`app-body${wide ? " wide" : ""}`}>
+        <div className={`phone-frame${wide ? " wide" : ""}`}>
           <OfflineBanner />
           <ConnectionBanner />
           <div className="screen no-scrollbar">{loading ? <LoadingState /> : <Outlet />}</div>

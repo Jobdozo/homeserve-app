@@ -8,6 +8,7 @@ import CategoryIcon from "../components/CategoryIcon";
 import CartBar from "../components/CartBar";
 import Seo from "../components/Seo";
 import ComingSoon from "../components/ComingSoon";
+import DesktopCategoryPage from "../components/DesktopCategoryPage";
 
 export default function CategoryServicesScreen() {
   const { categoryId } = useParams();
@@ -42,12 +43,23 @@ export default function CategoryServicesScreen() {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
-      <Seo
-        title={category.name}
-        description={`Book ${category.name} services near you on Tikdum — compare ${displayList.length} trusted local provider${displayList.length === 1 ? "" : "s"} and book instantly over WhatsApp.`}
-        path={`/category/${category.id}`}
+    <>
+    <Seo
+      title={category.name}
+      description={`Book ${category.name} services near you on Tikdum — compare ${displayList.length} trusted local provider${displayList.length === 1 ? "" : "s"} and book instantly over WhatsApp.`}
+      path={`/category/${category.id}`}
+    />
+    {/* Desktop gets its own full-width page (components/DesktopCategoryPage). */}
+    <div className="hidden lg:block">
+      <DesktopCategoryPage
+        category={category}
+        displayList={displayList}
+        aggregate={aggregate}
+        hasAny={inCategory.length > 0}
+        catalogReady={catalogReady}
       />
+    </div>
+    <div className="flex flex-1 flex-col lg:hidden">
       <ScreenHeader title={category.name} maxWidth="lg:max-w-3xl" />
 
       <div className="flex-1 px-4 pb-6 lg:mx-auto lg:w-full lg:max-w-3xl lg:px-8 lg:pb-16">
@@ -59,7 +71,7 @@ export default function CategoryServicesScreen() {
               <div className="mt-0.5 flex items-center gap-1 text-[11.5px] text-gray-500">
                 <StarIcon filled width={12} height={12} />
                 <span className="font-semibold text-gray-700">{aggregate.rating}</span>({formatCount(aggregate.reviews)}{" "}
-                bookings)
+                review{aggregate.reviews === 1 ? "" : "s"})
               </div>
             ) : (
               <p className="mt-0.5 text-[11.5px] text-gray-400">
@@ -118,5 +130,6 @@ export default function CategoryServicesScreen() {
       </div>
       <CartBar />
     </div>
+    </>
   );
 }
