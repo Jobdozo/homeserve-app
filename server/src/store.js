@@ -2884,6 +2884,7 @@ const DEFAULT_SETTINGS = {
   // blocking "Update required" screen. 0 = off.
   minVersionCodeCustomer: 0,
   minVersionCodeProvider: 0,
+  minVersionCodeAdmin: 0,
   updateMessage: "",
   // Region a provider with no PIN codes of their own is visible in (PIN
   // prefixes; 18 and 19 = Jammu & Kashmir and Ladakh). Empty = everywhere.
@@ -3070,7 +3071,7 @@ function updateSettings(patch) {
       throw Object.assign(new Error("Minimum fee can't be higher than the maximum fee"), { status: 400 });
     }
   }
-  for (const key of ["minVersionCodeCustomer", "minVersionCodeProvider"]) {
+  for (const key of ["minVersionCodeCustomer", "minVersionCodeProvider", "minVersionCodeAdmin"]) {
     if (patch[key] !== undefined) {
       const code = Number(patch[key] === "" ? 0 : patch[key]);
       if (!Number.isInteger(code) || code < 0 || code > 1000000) {

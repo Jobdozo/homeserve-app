@@ -34,7 +34,7 @@ export default function ComplaintsPage() {
   const [tab, setTab] = useState("complaints");
   return (
     <div className="space-y-4">
-      <div className="flex w-fit gap-1 rounded-xl bg-white p-1 shadow-card">
+      <div className="no-scrollbar flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-white p-1 shadow-card">
         {[
           ["complaints", "Complaints"],
           ["refunds", "Refund claims"],

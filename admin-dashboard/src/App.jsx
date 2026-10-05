@@ -1,4 +1,5 @@
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useAndroidBackButton } from "./utils/useAndroidBackButton";
 import { AppProvider, useApp } from "./context/AppContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/Layout";
@@ -34,6 +35,10 @@ function NoAccess() {
 
 function AppRoutes() {
   const { admin, authLoading, can } = useApp();
+  const { pathname } = useLocation();
+  // Android back button: one screen back inside the app; on the first screen
+  // (or before login) press twice to exit.
+  useAndroidBackButton({ rootPath: "/dashboard", atRoot: authLoading || !admin || pathname === "/dashboard" || pathname === "/" });
 
   if (authLoading) {
     return (

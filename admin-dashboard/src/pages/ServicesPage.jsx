@@ -72,7 +72,7 @@ function ServicesModule() {
         ))}
       </div>
 
-      <div className="flex w-fit gap-1 rounded-xl bg-white p-1 shadow-card">
+      <div className="no-scrollbar flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-white p-1 shadow-card">
         {[
           ["services", "Services"],
           ["categories", "Categories"],

@@ -1,0 +1,9 @@
+{
+  "appId": "com.tikdum.admin",
+  "appName": "Tikdum Admin",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "hostname": "admin.tikdum.com"
+  }
+}

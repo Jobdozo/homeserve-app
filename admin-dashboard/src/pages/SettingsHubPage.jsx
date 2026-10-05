@@ -473,9 +473,10 @@ function StaffTab({ data, save }) {
 // ------------------------------------------------------------------- app updates
 
 function UpdatesTab({ data, save }) {
-  const keys = useMemo(() => ["minVersionCodeCustomer", "minVersionCodeProvider", "updateMessage"], []);
+  const keys = useMemo(() => ["minVersionCodeCustomer", "minVersionCodeProvider", "minVersionCodeAdmin", "updateMessage"], []);
   const form = useDraft(data.settings, keys);
-  const armed = Number(form.draft.minVersionCodeCustomer) > 0 || Number(form.draft.minVersionCodeProvider) > 0;
+  const armed =
+    Number(form.draft.minVersionCodeCustomer) > 0 || Number(form.draft.minVersionCodeProvider) > 0 || Number(form.draft.minVersionCodeAdmin) > 0;
 
   return (
     <div className="space-y-4">
@@ -505,6 +506,12 @@ function UpdatesTab({ data, save }) {
           hint="Builds below this must update."
           value={form.draft.minVersionCodeProvider}
           onChange={(v) => form.set("minVersionCodeProvider", v)}
+        />
+        <Num
+          label="Minimum version code — Tikdum Admin (staff app)"
+          hint="Builds below this must update."
+          value={form.draft.minVersionCodeAdmin}
+          onChange={(v) => form.set("minVersionCodeAdmin", v)}
         />
         <div>
           <label className={labelCls}>Message shown on the update screen (optional)</label>
