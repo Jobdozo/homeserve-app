@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import useIsDesktop from "../utils/useIsDesktop";
 import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
 import { StarIcon, ChevronRightIcon } from "../components/icons";
@@ -27,6 +28,7 @@ const norm = (s) => String(s || "").trim().toLowerCase();
 export default function ServiceProvidersScreen() {
   const { serviceId } = useParams();
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
   const { services, categories, getProvider } = useApp();
 
   const anchor = useMemo(() => services.find((s) => s.id === serviceId), [services, serviceId]);
@@ -60,9 +62,11 @@ export default function ServiceProvidersScreen() {
       path={`/find-service/${anchor.id}`}
     />
     {/* Desktop gets its own full-width page (components/DesktopServiceProviders). */}
+    {isDesktop && (
     <div className="hidden lg:block">
       <DesktopServiceProviders anchor={anchor} category={category} vendors={vendors} />
     </div>
+    )}
     <div className="flex flex-1 flex-col lg:hidden">
       <ScreenHeader title={anchor.name} maxWidth="lg:max-w-3xl" />
 

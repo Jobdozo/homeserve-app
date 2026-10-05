@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import useIsDesktop from "../utils/useIsDesktop";
 import { BellIcon, SearchIcon, ChevronRightIcon, CartIcon } from "../components/icons";
 import { useApp } from "../context/AppContext";
 import { discountPct } from "../utils/format";
@@ -21,6 +22,7 @@ const HOME_JSON_LD = {
 
 export default function HomeScreen() {
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
   const { categories, services, banners, homeLayout, cart, notifications, location, locationStatus, detectLocation, noCoverage } = useApp();
   const unreadCount = notifications.filter((n) => !n.read).length;
   // Banner placements are set in the Super Admin CMS; banners saved before
@@ -41,9 +43,11 @@ export default function HomeScreen() {
     <>
     <Seo path="/home" jsonLd={HOME_JSON_LD} />
     {/* Desktop gets its own full-width marketing home (components/DesktopHome). */}
+    {isDesktop && (
     <div className="hidden lg:block">
       <DesktopHome />
     </div>
+    )}
     <div className="flex flex-col pb-4 lg:hidden">
       {/* Location + notification */}
       <div className="flex items-center justify-between px-4 pt-1 lg:px-0 lg:pt-0">

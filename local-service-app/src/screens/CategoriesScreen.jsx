@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import useIsDesktop from "../utils/useIsDesktop";
 import { SearchIcon } from "../components/icons";
 import { useApp } from "../context/AppContext";
 import CategoryIcon from "../components/CategoryIcon";
@@ -9,6 +10,7 @@ import DesktopCategories from "../components/DesktopCategories";
 
 export default function CategoriesScreen() {
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
   const { categories, showToast, noCoverage } = useApp();
 
   return (
@@ -19,9 +21,11 @@ export default function CategoriesScreen() {
       path="/categories"
     />
     {/* Desktop gets its own full-width page (components/DesktopCategories). */}
+    {isDesktop && (
     <div className="hidden lg:block">
       <DesktopCategories />
     </div>
+    )}
     <div className="flex flex-col pb-4 lg:hidden">
       <div className="flex items-center justify-between px-4 pt-1 lg:px-0 lg:pt-0">
         <h1 className="text-lg font-bold text-gray-900 lg:text-2xl">Categories</h1>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import useIsDesktop from "../utils/useIsDesktop";
 import { useApp } from "../context/AppContext";
 import CategoryIcon from "../components/CategoryIcon";
 import DesktopBookings from "../components/DesktopBookings";
@@ -17,6 +18,7 @@ const statusStyles = {
 
 export default function BookingsScreen() {
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
   const { bookings, getService } = useApp();
   const [tab, setTab] = useState("All");
 
@@ -52,9 +54,11 @@ export default function BookingsScreen() {
   return (
     <>
     {/* Desktop gets its own full-width page (components/DesktopBookings). */}
+    {isDesktop && (
     <div className="hidden lg:block">
       <DesktopBookings />
     </div>
+    )}
     <div className="flex flex-1 flex-col lg:hidden">
       <h1 className="px-4 pt-1 text-lg font-bold text-gray-900 lg:px-0 lg:pt-0 lg:text-2xl">My Bookings</h1>
 

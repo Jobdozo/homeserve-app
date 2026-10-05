@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import useIsDesktop from "../utils/useIsDesktop";
 import ScreenHeader from "../components/ScreenHeader";
 import { StarIcon, CheckIcon } from "../components/icons";
 import { useApp } from "../context/AppContext";
@@ -12,6 +13,7 @@ import DesktopServiceDetails from "../components/DesktopServiceDetails";
 export default function ServiceDetailsScreen() {
   const { serviceId } = useParams();
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
   const { getService, getProvider, cart, addToCart, categories } = useApp();
   const service = getService(serviceId);
   const provider = service ? getProvider(service.providerId) : null;
@@ -72,6 +74,7 @@ export default function ServiceDetailsScreen() {
       jsonLd={serviceJsonLd}
     />
     {/* Desktop gets its own full-width page (components/DesktopServiceDetails). */}
+    {isDesktop && (
     <div className="hidden lg:block">
       <DesktopServiceDetails
         service={service}
@@ -82,6 +85,7 @@ export default function ServiceDetailsScreen() {
         onCart={() => (inCart ? navigate("/cart") : addToCart(service.id))}
       />
     </div>
+    )}
     <div className="flex flex-1 flex-col lg:hidden">
       <ScreenHeader title="Service Details" maxWidth="lg:max-w-5xl" />
 

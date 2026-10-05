@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import useIsDesktop from "../utils/useIsDesktop";
 import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
 import { StarIcon, ChevronRightIcon } from "../components/icons";
@@ -13,6 +14,7 @@ import DesktopCategoryPage from "../components/DesktopCategoryPage";
 export default function CategoryServicesScreen() {
   const { categoryId } = useParams();
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
   const { categories, services, catalogReady } = useApp();
 
   const category = categories.find((c) => c.id === categoryId);
@@ -50,6 +52,7 @@ export default function CategoryServicesScreen() {
       path={`/category/${category.id}`}
     />
     {/* Desktop gets its own full-width page (components/DesktopCategoryPage). */}
+    {isDesktop && (
     <div className="hidden lg:block">
       <DesktopCategoryPage
         category={category}
@@ -59,6 +62,7 @@ export default function CategoryServicesScreen() {
         catalogReady={catalogReady}
       />
     </div>
+    )}
     <div className="flex flex-1 flex-col lg:hidden">
       <ScreenHeader title={category.name} maxWidth="lg:max-w-3xl" />
 
