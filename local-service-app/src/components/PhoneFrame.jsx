@@ -31,7 +31,7 @@ export function MainLayout() {
   const { loading } = useApp();
   // On desktop the home page is a full-width marketing page; every other
   // screen stays in the narrow centered column.
-  const wide = useLocation().pathname === "/home";
+  const wide = ["/home", "/categories"].includes(useLocation().pathname);
   return (
     <div className="app-shell">
       <DesktopHeader />
