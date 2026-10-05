@@ -49,7 +49,7 @@ export default function Layout() {
   const meta = TITLES[location.pathname] || { title: "Admin" };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F5F6FA]">
+    <div className="flex h-full overflow-hidden bg-[#F5F6FA]">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar title={meta.title} subtitle={meta.subtitle} onMenuClick={() => setSidebarOpen(true)} />

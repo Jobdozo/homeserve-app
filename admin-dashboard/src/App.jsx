@@ -42,7 +42,7 @@ function AppRoutes() {
 
   if (authLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+      <div className="flex min-h-full items-center justify-center bg-gray-50">
         <div className="flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl bg-brand text-white">
           <LogoMark size={34} />
         </div>

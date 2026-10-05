@@ -13,6 +13,15 @@ body,
   height: 100%;
 }
 
+/* Android 15+ draws the app behind the status and navigation bars
+   (edge-to-edge). viewport-fit=cover (index.html) makes these resolve to the
+   real bar heights; they're 0 in a normal browser tab. */
+#root {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: #ffffff;
+}
+
 body {
   font-family: "Inter", system-ui, sans-serif;
   background: #f5f6fa;
