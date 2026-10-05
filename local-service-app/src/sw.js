@@ -14,7 +14,7 @@ precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 // Static pages (privacy policy, account-deletion page) must open as themselves,
 // not fall back to the app shell.
-registerRoute(new NavigationRoute(createHandlerBoundToURL("index.html"), { denylist: [/^\/privacy\.html$/, /^\/delete-account\.html$/] }));
+registerRoute(new NavigationRoute(createHandlerBoundToURL("index.html"), { denylist: [/^\/privacy\.html$/, /^\/delete-account\.html$/, /^\/terms\.html$/, /^\/about\.html$/] }));
 
 registerRoute(
   ({ url, request }) =>

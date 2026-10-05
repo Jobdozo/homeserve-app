@@ -33,10 +33,16 @@ export default function DesktopFooter() {
 
         <Col title="Company">
           <li>
-            <Link to="/booking-protection" className={linkCls}>Booking protection</Link>
+            <a href="/about.html" className={linkCls}>About us</a>
+          </li>
+          <li>
+            <a href="/terms.html" className={linkCls}>Terms &amp; conditions</a>
           </li>
           <li>
             <a href="/privacy.html" className={linkCls}>Privacy policy</a>
+          </li>
+          <li>
+            <Link to="/booking-protection" className={linkCls}>Booking protection</Link>
           </li>
           <li>
             <a href="/delete-account.html" className={linkCls}>Delete account</a>
