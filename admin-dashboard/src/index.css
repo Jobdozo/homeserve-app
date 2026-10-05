@@ -19,7 +19,8 @@ body,
 #root {
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
-  background: #ffffff;
+  /* The strips under the system bars show through as this brand orange. */
+  background: #d97706;
 }
 
 body {

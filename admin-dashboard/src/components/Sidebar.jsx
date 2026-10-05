@@ -65,7 +65,13 @@ export default function Sidebar({ open, onClose }) {
     <>
       {open && <div onClick={onClose} className="fixed inset-0 z-30 bg-black/40 lg:hidden" />}
       <aside
-        style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}
+        style={{
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+          // Same brand-orange strips as the page, so the open menu matches.
+          boxShadow:
+            "inset 0 env(safe-area-inset-top) 0 0 #d97706, inset 0 calc(-1 * env(safe-area-inset-bottom)) 0 0 #d97706",
+        }}
         className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-shrink-0 flex-col bg-ink text-white transition-transform lg:static lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
