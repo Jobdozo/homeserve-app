@@ -1,6 +1,7 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import BottomNav from "./BottomNav";
 import DesktopHeader from "./DesktopHeader";
+import DesktopFooter from "./DesktopFooter";
 import Toast from "../components/Toast";
 import OfflineBanner from "./OfflineBanner";
 import { useApp } from "../context/AppContext";
@@ -28,11 +29,14 @@ function ConnectionBanner() {
 
 export function MainLayout() {
   const { loading } = useApp();
+  // On desktop the home page is a full-width marketing page; every other
+  // screen stays in the narrow centered column.
+  const wide = useLocation().pathname === "/home";
   return (
     <div className="app-shell">
       <DesktopHeader />
-      <div className="app-body">
-        <div className="phone-frame">
+      <div className={`app-body${wide ? " wide" : ""}`}>
+        <div className={`phone-frame${wide ? " wide" : ""}`}>
           <OfflineBanner />
           <ConnectionBanner />
           <div className="screen no-scrollbar">{loading ? <LoadingState /> : <Outlet />}</div>
@@ -40,6 +44,7 @@ export function MainLayout() {
           <Toast />
         </div>
       </div>
+      <DesktopFooter />
     </div>
   );
 }
@@ -57,6 +62,7 @@ export function DetailLayout() {
           <Toast />
         </div>
       </div>
+      <DesktopFooter />
     </div>
   );
 }

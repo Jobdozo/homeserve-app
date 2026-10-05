@@ -8,6 +8,7 @@ import CartBar from "../components/CartBar";
 import HomeSections, { HeroBanners } from "../components/HomeSections";
 import Seo, { SITE_URL } from "../components/Seo";
 import ComingSoon from "../components/ComingSoon";
+import DesktopHome from "../components/DesktopHome";
 
 const HOME_JSON_LD = {
   "@context": "https://schema.org",
@@ -37,8 +38,13 @@ export default function HomeScreen() {
   }, [services]);
 
   return (
-    <div className="flex flex-col pb-4 lg:px-8 lg:py-8">
-      <Seo path="/home" jsonLd={HOME_JSON_LD} />
+    <>
+    <Seo path="/home" jsonLd={HOME_JSON_LD} />
+    {/* Desktop gets its own full-width marketing home (components/DesktopHome). */}
+    <div className="hidden lg:block">
+      <DesktopHome />
+    </div>
+    <div className="flex flex-col pb-4 lg:hidden">
       {/* Location + notification */}
       <div className="flex items-center justify-between px-4 pt-1 lg:px-0 lg:pt-0">
         <button
@@ -186,5 +192,6 @@ export default function HomeScreen() {
       )}
       <CartBar />
     </div>
+    </>
   );
 }

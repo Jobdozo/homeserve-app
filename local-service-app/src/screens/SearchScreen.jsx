@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { BackIcon, SearchIcon, StarIcon, ChevronRightIcon, XIcon } from "../components/icons";
 import { formatCount, discountPct, dedupeByName } from "../utils/format";
@@ -9,7 +9,8 @@ import CartBar from "../components/CartBar";
 export default function SearchScreen() {
   const navigate = useNavigate();
   const { categories, services } = useApp();
-  const [query, setQuery] = useState("");
+  const routeState = useLocation().state;
+  const [query, setQuery] = useState(routeState?.q || "");
   const inputRef = useRef(null);
 
   useEffect(() => {

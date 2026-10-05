@@ -106,6 +106,19 @@ body {
     overflow: visible;
     flex: none;
   }
+
+  /* Home on desktop: full-width marketing page, no phone-style card. */
+  .app-body.wide {
+    padding: 0;
+  }
+  .phone-frame.wide {
+    max-width: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    min-height: 0;
+  }
 }
 
 @keyframes toast-in {

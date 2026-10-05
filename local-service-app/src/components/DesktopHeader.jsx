@@ -31,7 +31,7 @@ export default function DesktopHeader() {
               key={to}
               to={to}
               className={({ isActive }) =>
-                `flex items-center gap-1.5 rounded-lg px-3 py-2 text-[13.5px] font-semibold transition-colors ${
+                `flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-[13.5px] font-semibold transition-colors ${
                   isActive ? "bg-brand-light text-brand-dark" : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
                 }`
               }
