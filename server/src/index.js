@@ -677,6 +677,23 @@ app.patch("/api/admin/categories/:id", auth.requireAuth("admin"), ah(async (req,
   res.json(category);
 }));
 
+// Category banner: upload replaces any previous one; DELETE goes back to the default picture.
+app.post("/api/admin/categories/:id/banner", auth.requireAuth("admin"), upload.single("file"), ah(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Choose a photo to upload" });
+  const category = await store.setCategoryBanner(req.params.id, `/uploads/${req.file.filename}`, actorOf(req));
+  if (!category) {
+    require("fs").unlink(req.file.path, () => {});
+    return res.status(404).json({ error: "Category not found" });
+  }
+  res.json(category);
+}));
+
+app.delete("/api/admin/categories/:id/banner", auth.requireAuth("admin"), ah(async (req, res) => {
+  const category = await store.setCategoryBanner(req.params.id, null, actorOf(req));
+  if (!category) return res.status(404).json({ error: "Category not found" });
+  res.json(category);
+}));
+
 app.delete("/api/admin/categories/:id", auth.requireAuth("admin"), ah(async (req, res) => {
   const deleted = await store.deleteCategory(req.params.id, actorOf(req));
   if (deleted) store.dropFeeOverride("category", req.params.id);

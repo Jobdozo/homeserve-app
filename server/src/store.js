@@ -99,8 +99,15 @@ function inactiveCategorySlugs() {
   return new Set(jsonStore.readAll("categoryStatus").filter((r) => r.active === false).map((r) => r.id));
 }
 
+// Admin-uploaded category banner (the wide picture at the top of the customer's
+// category page). Categories live in the database whose schema we can't extend,
+// so the URL is kept in a small slug -> url table alongside.
+function categoryBannerUrl(slug) {
+  return jsonStore.readAll("categoryBanners").find((r) => r.id === slug)?.url || null;
+}
+
 function mapCategory(c) {
-  return { id: c.slug, name: c.name, icon: c.icon, active: isCategoryActive(c.slug) };
+  return { id: c.slug, name: c.name, icon: c.icon, active: isCategoryActive(c.slug), bannerUrl: categoryBannerUrl(c.slug) };
 }
 
 // Bump this string whenever the Service Provider Agreement's terms actually
@@ -403,6 +410,31 @@ async function listCategories() {
   return cacheSet("categories", categories.map(mapCategory));
 }
 
+// Banner upload replaces any previous one; a null url goes back to the default
+// category picture.
+async function setCategoryBanner(slug, url, actor) {
+  const before = (await listCategories()).find((c) => c.id === slug);
+  if (!before) return undefined;
+  const previous = categoryBannerUrl(slug);
+  if (url) {
+    if (previous) jsonStore.update("categoryBanners", slug, { url, updatedAt: new Date().toISOString() });
+    else jsonStore.insert("categoryBanners", { id: slug, url, updatedAt: new Date().toISOString() });
+  } else if (previous) {
+    jsonStore.remove("categoryBanners", slug);
+  }
+  if (previous && previous !== url) deleteUploadedFile(previous);
+  cacheClear("categories");
+  recordAdminChange({
+    actor,
+    action: "category.update",
+    entityType: "category",
+    entityId: slug,
+    entityName: before.name,
+    changes: [{ field: "banner", from: previous ? "uploaded" : "none", to: url ? "uploaded" : "removed" }],
+  });
+  return (await listCategories()).find((c) => c.id === slug);
+}
+
 // Admin edit: rename / re-icon (the slug, which other records reference, never
 // changes) and switch active on or off. An inactive category and all of its
 // services disappear from the customer catalog.
@@ -472,6 +504,11 @@ async function deleteCategory(slug, actor) {
   const name = (await listCategories()).find((c) => c.id === slug)?.name || slug;
   await mutate(`mutation($id: UUID!) { category_delete(id: $id) }`, { id: categoryId });
   jsonStore.remove("categoryStatus", slug);
+  const oldBanner = categoryBannerUrl(slug);
+  if (oldBanner) {
+    jsonStore.remove("categoryBanners", slug);
+    deleteUploadedFile(oldBanner);
+  }
   cacheClear("categories");
   await logActivity("category", `Category "${name}" deleted by admin`);
   recordAdminChange({
@@ -3972,6 +4009,7 @@ module.exports = {
   listCategories,
   createCategory,
   updateCategory,
+  setCategoryBanner,
   deleteCategory,
   listServices,
   getService,

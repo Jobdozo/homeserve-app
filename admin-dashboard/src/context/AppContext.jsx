@@ -319,6 +319,16 @@ export function AppProvider({ children }) {
     [showToast, scheduleRefresh]
   );
 
+  const setCategoryBanner = useCallback(
+    async (id, file) => {
+      const category = file ? await api.uploadCategoryBanner(id, file) : await api.removeCategoryBanner(id);
+      setCategories((prev) => prev.map((x) => (x.id === id ? category : x)));
+      showToast(file ? "Category banner saved" : "Category banner removed");
+      return category;
+    },
+    [showToast]
+  );
+
   const deleteCategory = useCallback(
     async (id) => {
       await api.deleteCategory(id);
@@ -399,6 +409,7 @@ export function AppProvider({ children }) {
       refreshData: scheduleRefresh,
       addCategory,
       updateCategory,
+      setCategoryBanner,
       deleteCategory,
       addProvider,
       addService,
@@ -433,6 +444,7 @@ export function AppProvider({ children }) {
       scheduleRefresh,
       addCategory,
       updateCategory,
+      setCategoryBanner,
       deleteCategory,
       addProvider,
       addService,

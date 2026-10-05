@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { StarIcon, ChevronRightIcon } from "./icons";
 import { formatCount, discountPct } from "../utils/format";
 import CategoryPhoto from "./CategoryPhoto";
+import CategoryBannerImage from "./CategoryBannerImage";
 
 const PROTECTION = [
   "Genuine service guarantee",
@@ -34,7 +35,7 @@ export default function DesktopServiceProviders({ anchor, category, vendors }) {
     <div className="pb-20">
       <section className="relative h-[220px] overflow-hidden bg-gray-900">
         <div className="absolute inset-0">
-          <CategoryPhoto categoryId={anchor.categoryId} imageUrl={anchor.imageUrl} size={240} className="object-[center_45%]" />
+          <CategoryBannerImage category={category} categoryId={anchor.categoryId} imageUrl={anchor.imageUrl} size={240} fallbackClassName="object-[center_45%]" />
         </div>
         <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/55 to-black/20" />
         <div className="relative mx-auto flex h-full max-w-6xl flex-col justify-end px-8 pb-8 text-white">

@@ -4,6 +4,7 @@ import { useApp } from "../context/AppContext";
 import { StarIcon } from "./icons";
 import { formatCount, discountPct } from "../utils/format";
 import CategoryPhoto from "./CategoryPhoto";
+import CategoryBannerImage from "./CategoryBannerImage";
 import CategoryIcon from "./CategoryIcon";
 import ComingSoon from "./ComingSoon";
 
@@ -48,7 +49,7 @@ export default function DesktopCategoryPage({ category, displayList, aggregate, 
       {/* Banner */}
       <section className="relative h-[280px] overflow-hidden bg-gray-900">
         <div className="absolute inset-0">
-          <CategoryPhoto categoryId={category.id} size={300} className="object-[center_62%]" />
+          <CategoryBannerImage category={category} categoryId={category.id} size={300} fallbackClassName="object-[center_62%]" />
         </div>
         <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/45 to-black/10" />
         <div className="relative mx-auto flex h-full max-w-6xl flex-col justify-end px-8 pb-9 text-white">

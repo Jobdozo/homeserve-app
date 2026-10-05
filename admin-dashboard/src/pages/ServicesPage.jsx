@@ -422,6 +422,69 @@ function ServicePhotoField({ service }) {
   );
 }
 
+// The wide picture at the top of this category's page in the customer app.
+function CategoryBannerField({ category }) {
+  const { setCategoryBanner, showToast } = useApp();
+  const [bannerUrl, setBannerUrl] = useState(category.bannerUrl || null);
+  const [busy, setBusy] = useState(false);
+
+  const change = async (file) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("Choose an image file (JPEG, PNG or WebP)");
+      return;
+    }
+    setBusy(true);
+    try {
+      const updated = await setCategoryBanner(category.id, await shrinkImage(file, 1800));
+      setBannerUrl(updated.bannerUrl);
+    } catch (err) {
+      showToast(err.message || "Could not upload the banner");
+    }
+    setBusy(false);
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try {
+      const updated = await setCategoryBanner(category.id, null);
+      setBannerUrl(updated.bannerUrl);
+    } catch (err) {
+      showToast(err.message || "Could not remove the banner");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div>
+      <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Category banner</label>
+      <div className="flex items-center gap-3">
+        <div className="flex h-16 w-28 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+          {bannerUrl ? (
+            <img src={`${SERVER_URL}${bannerUrl}`} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className="px-1 text-center text-[10px] leading-tight text-gray-400">Default picture</span>
+          )}
+        </div>
+        <div className="flex flex-col items-start gap-1.5">
+          <label className={`cursor-pointer rounded-lg border border-gray-200 px-2.5 py-1 text-[11.5px] font-semibold text-gray-600 ${busy ? "pointer-events-none opacity-50" : ""}`}>
+            {busy ? "Working…" : bannerUrl ? "Replace banner" : "Upload banner"}
+            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={busy} onChange={(e) => { change(e.target.files?.[0]); e.target.value = ""; }} />
+          </label>
+          {bannerUrl && (
+            <button onClick={remove} disabled={busy} className="text-[11.5px] font-semibold text-red-500 disabled:opacity-50">
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+      <p className="mt-1 text-[10.5px] text-gray-400">
+        Wide picture at the top of this category's page on the website. Use a landscape photo (about 1800 × 600). Without one, the default category picture is used.
+      </p>
+    </div>
+  );
+}
+
 function EditServiceModal({ editing, onClose }) {
   const { updateService, categories, showToast } = useApp();
   const [form, setForm] = useState(editing);
@@ -750,6 +813,7 @@ function CategoriesPanel({ filter, setFilter }) {
                 className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] outline-none focus:border-brand"
               />
             </div>
+            <CategoryBannerField key={editingCat.id} category={categories.find((c) => c.id === editingCat.id) || editingCat} />
             <button
               onClick={() => {
                 const { id, name, icon } = editingCat;
