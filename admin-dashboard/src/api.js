@@ -261,6 +261,20 @@ export const api = {
   resolveRefundClaim: (id, status, adminNote) =>
     request(`/admin/refund-claims/${id}`, { method: "PATCH", body: JSON.stringify({ status, adminNote }) }),
 
+  getAiConfig: () => request("/admin/ai/config"),
+  setAiConfig: (patch) => request("/admin/ai/config", { method: "PATCH", body: JSON.stringify(patch) }),
+  listAiAgents: () => request("/admin/ai/agents"),
+  createAiAgent: (data) => request("/admin/ai/agents", { method: "POST", body: JSON.stringify(data) }),
+  updateAiAgent: (id, patch) => request(`/admin/ai/agents/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  rotateAiAgentKey: (id) => request(`/admin/ai/agents/${encodeURIComponent(id)}/rotate-key`, { method: "POST" }),
+  deleteAiAgent: (id) => request(`/admin/ai/agents/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  listAiActions: (status) => request(`/admin/ai/actions?${new URLSearchParams(status ? { status } : {})}`),
+  approveAiAction: (id) => request(`/admin/ai/actions/${encodeURIComponent(id)}/approve`, { method: "POST" }),
+  rejectAiAction: (id, note) => request(`/admin/ai/actions/${encodeURIComponent(id)}/reject`, { method: "POST", body: JSON.stringify({ note }) }),
+  listAiFeed: ({ kind, unacked } = {}) =>
+    request(`/admin/ai/feed?${new URLSearchParams({ ...(kind ? { kind } : {}), ...(unacked ? { unacked: "1" } : {}) })}`),
+  ackAiFeed: (id) => request(`/admin/ai/feed/${encodeURIComponent(id)}/ack`, { method: "POST" }),
+
   listOffers: () => request("/admin/offers"),
   createOffer: (data) => request("/admin/offers", { method: "POST", body: JSON.stringify(data) }),
   updateOffer: (id, patch) => request(`/admin/offers/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),

@@ -67,3 +67,24 @@ services:
       - "5177:80"
     depends_on:
       - server
+
+  # AI agents worker (Operations + Reporting). Talks to the API above over
+  # HTTP only, using per-agent keys created in Admin -> AI Agents.
+  agents:
+    build:
+      context: ./agents
+      network: host
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      TIKDUM_API_URL: http://127.0.0.1:4000/api
+      AGENT_KEY_OPERATIONS: ${AGENT_KEY_OPERATIONS}
+      AGENT_KEY_REPORTING: ${AGENT_KEY_REPORTING}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-4-5-20251001}
+      REPORT_HOUR_IST: ${REPORT_HOUR_IST:-9}
+      AGENT_STATE_DIR: /app/state
+    volumes:
+      - /root/tikdum-data/agents-state:/app/state
+    depends_on:
+      - server

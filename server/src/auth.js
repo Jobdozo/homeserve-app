@@ -59,8 +59,8 @@ function verifyOtp(role, phone, code) {
   return { ok: true };
 }
 
-function signToken(payload) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "30d" });
+function signToken(payload, options = {}) {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: "30d", ...options });
 }
 
 function verifyToken(token) {

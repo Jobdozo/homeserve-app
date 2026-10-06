@@ -1,0 +1,14 @@
+{
+  "name": "tikdum-agents",
+  "version": "1.0.0",
+  "description": "Tikdum AI agents worker: runs the Reporting and Operations agents against the Tikdum admin API.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/index.js",
+    "once": "node src/index.js --once",
+    "test": "node --test test/*.test.js"
+  }
+}

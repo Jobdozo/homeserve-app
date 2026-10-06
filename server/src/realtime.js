@@ -32,7 +32,7 @@ function roomsFor(socket) {
   if (!payload) return publicOnly;
 
   if (payload.role === "admin") {
-    const admin = access.resolveByPhone(payload.phone);
+    const admin = access.resolveToken(payload);
     if (!admin) return publicOnly;
     const rooms = ["public", "admin:any", `adminuser:${admin.id}`];
     if (access.adminCan(admin, ADMIN_BOOKING_PERMS)) rooms.push("admin:bookings");

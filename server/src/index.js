@@ -17,6 +17,8 @@ const accountDeletion = require("./accountDeletion");
 const rt = require("./realtime");
 const csvImport = require("./csvImport");
 const auth = require("./auth");
+const agents = require("./agents");
+access.setAgentHooks({ resolve: agents.resolveAgent, policy: agents.policy });
 // Per-request permission checks for staff sign-ins (admin roles, provider staff).
 auth.setAdminGuard(access.guard);
 auth.setProviderGuard(staff.guard);
@@ -226,12 +228,13 @@ function optionalUser(req) {
 }
 
 // Admin ids look like "admin:<phone>"; that's what the change log records.
-const actorOf = (req) => (req.admin ? `${req.admin.name} (${req.admin.phone})` : String(req.user?.id || "admin").replace(/^admin:/, ""));
+const actorOf = (req) =>
+  req.admin?.agent ? `${req.admin.name} [AI agent]` : req.admin ? `${req.admin.name} (${req.admin.phone})` : String(req.user?.id || "admin").replace(/^admin:/, "");
 
 // The signed-in admin/staff account for a request, if any (permissions resolved live).
 function viewerAdmin(req) {
   const u = optionalUser(req);
-  return u?.role === "admin" ? access.resolveByPhone(u.phone) : null;
+  return u?.role === "admin" ? access.resolveToken(u) : null;
 }
 
 function ah(fn) {
@@ -1933,6 +1936,158 @@ app.delete("/api/admin/roles/:id", adminOnly, crm(async (req, res) => {
   if (!access.deleteRole(req.params.id)) return res.status(404).json({ error: "Role not found" });
   audit(req, "role.delete", "role", req.params.id, before?.name);
   res.status(204).end();
+}));
+
+// ---- AI agents (see agents.js for the safety model) ----
+// Agents swap their API key for a 15-minute token, then use the normal admin
+// API under their role. These /api/agents/* routes are for agents only;
+// /api/admin/ai/* is the human side (approvals, alerts, agent accounts).
+const tokenHits = new Map(); // ip -> [timestamps], brute-force brake on /agents/token
+app.post("/api/agents/token", (req, res) => {
+  const ip = otpGuard.clientIp(req) || req.socket.remoteAddress || "?";
+  const now = Date.now();
+  const hits = (tokenHits.get(ip) || []).filter((t) => now - t < 60 * 1000);
+  if (hits.length >= 30) return res.status(429).json({ error: "Too many requests" });
+  hits.push(now);
+  tokenHits.set(ip, hits);
+  const out = agents.issueToken(req.body?.apiKey);
+  if (!out) return res.status(401).json({ error: "Invalid agent key" });
+  if (out.disabled) return res.status(403).json({ error: "This AI agent is switched off" });
+  res.json(out);
+});
+
+const agentOnly = [
+  auth.requireAuth("admin"),
+  (req, res, next) => (req.admin?.agent ? next() : res.status(403).json({ error: "For AI agents only" })),
+];
+
+app.get("/api/agents/self", agentOnly, crm(async (req, res) => {
+  res.json({ agent: { id: req.admin.agentId, name: req.admin.name, roleName: req.admin.roleName, permissions: req.admin.permissions }, ...agents.status(req.admin.agentId) });
+}));
+
+app.post("/api/agents/heartbeat", agentOnly, crm(async (req, res) => res.json(agents.heartbeat(req.admin.agentId, req.body || {}))));
+
+app.post("/api/agents/usage", agentOnly, crm(async (req, res) => res.json(agents.recordUsage(req.admin.agentId, req.body || {}))));
+
+app.post("/api/agents/feed", agentOnly, crm(async (req, res) => {
+  const out = agents.postFeed(req.admin, req.body || {});
+  if (!out.duplicate && out.item.severity === "critical") {
+    await store.logActivity("ai", `${req.admin.name}: ${out.item.title}`).catch(() => {});
+  }
+  res.status(out.duplicate ? 200 : 201).json(out);
+}));
+
+app.post("/api/agents/actions", agentOnly, crm(async (req, res) => {
+  const out = agents.propose(req.admin, req.body || {});
+  if (!out.duplicate) await store.logActivity("ai", `${req.admin.name} proposed: ${out.action.title} (awaiting approval)`).catch(() => {});
+  res.status(out.duplicate ? 200 : 201).json(out);
+}));
+
+// Best effort: free-form WhatsApp only arrives within 24h of the owner last
+// messaging the business number (see whatsapp.js). Capped per agent per day.
+const ownerPings = new Map(); // `${agentId}:${day}` -> count
+app.post("/api/agents/notify-owner", agentOnly, crm(async (req, res) => {
+  const text = String(req.body?.text || "").trim().slice(0, 3000);
+  if (!text) return res.status(400).json({ error: "text is required" });
+  const k = `${req.admin.agentId}:${new Date().toISOString().slice(0, 10)}`;
+  const n = ownerPings.get(k) || 0;
+  if (n >= 10) return res.status(429).json({ error: "Daily owner message limit reached" });
+  ownerPings.set(k, n + 1);
+  const { sendWhatsAppMessage } = require("./whatsapp");
+  const results = [];
+  for (const phone of auth.adminPhones()) {
+    results.push(await sendWhatsAppMessage(phone, `[${req.admin.name}] ${text}`).catch(() => false));
+  }
+  res.json({ delivered: results.filter(Boolean).length, attempted: results.length });
+}));
+
+// -- human side --
+app.get("/api/admin/ai/config", adminOnly, crm(async (req, res) => res.json(agents.getConfig())));
+app.patch("/api/admin/ai/config", adminOnly, crm(async (req, res) => {
+  const before = agents.getConfig();
+  const cfg = agents.setConfig({ enabled: req.body?.enabled }, actorOf(req));
+  if (before.enabled !== cfg.enabled) {
+    audit(req, "ai.config", "ai", "config", "AI agents", [{ field: "enabled", from: before.enabled, to: cfg.enabled }]);
+    await store.logActivity("ai", `All AI agents switched ${cfg.enabled ? "on" : "off"} by ${actorOf(req)}`).catch(() => {});
+  }
+  res.json(cfg);
+}));
+
+app.get("/api/admin/ai/agents", adminOnly, crm(async (req, res) => res.json({ agents: agents.listAgents(), proposableTypes: agents.PROPOSABLE_TYPES })));
+app.post("/api/admin/ai/agents", adminOnly, crm(async (req, res) => {
+  const out = agents.createAgent(req.body || {}, actorOf(req));
+  audit(req, "ai.agent.create", "aiAgent", out.agent.id, out.agent.name, [{ field: "role", from: null, to: out.agent.roleId }]);
+  res.status(201).json(out);
+}));
+app.patch("/api/admin/ai/agents/:id", adminOnly, crm(async (req, res) => {
+  const before = agents.listAgents().find((a) => a.id === req.params.id);
+  const agent = agents.updateAgent(req.params.id, req.body || {});
+  if (!agent) return res.status(404).json({ error: "Agent not found" });
+  const changes = store.diffValues(before || {}, agent, ["name", "roleId", "active", "dailyBudgetUsd"]);
+  if (changes.length) audit(req, "ai.agent.update", "aiAgent", agent.id, agent.name, changes);
+  res.json(agent);
+}));
+app.post("/api/admin/ai/agents/:id/rotate-key", adminOnly, crm(async (req, res) => {
+  const out = agents.rotateKey(req.params.id);
+  if (!out) return res.status(404).json({ error: "Agent not found" });
+  audit(req, "ai.agent.rotate_key", "aiAgent", out.agent.id, out.agent.name);
+  res.json(out);
+}));
+app.delete("/api/admin/ai/agents/:id", adminOnly, crm(async (req, res) => {
+  const before = agents.listAgents().find((a) => a.id === req.params.id);
+  if (!agents.deleteAgent(req.params.id)) return res.status(404).json({ error: "Agent not found" });
+  audit(req, "ai.agent.delete", "aiAgent", req.params.id, before?.name);
+  res.status(204).end();
+}));
+
+app.get("/api/admin/ai/feed", adminOnly, crm(async (req, res) => {
+  res.json(agents.listFeed({ kind: req.query.kind, unacked: req.query.unacked === "1", limit: req.query.limit }));
+}));
+app.post("/api/admin/ai/feed/:id/ack", adminOnly, crm(async (req, res) => {
+  const item = agents.ackFeed(req.params.id, actorOf(req));
+  if (!item) return res.status(404).json({ error: "Not found" });
+  res.json(item);
+}));
+
+app.get("/api/admin/ai/actions", adminOnly, crm(async (req, res) => res.json(agents.listActions({ status: req.query.status, limit: req.query.limit }))));
+
+// Approving runs the proposed request against this same API *as the person
+// approving* (their token, their permissions, their name in the audit log) —
+// approving an AI proposal can never do more than that person could by hand.
+app.post("/api/admin/ai/actions/:id/approve", adminOnly, crm(async (req, res) => {
+  if (req.admin.agent) return res.status(403).json({ error: "AI agents can't approve proposals" });
+  const action = agents.claimForExecution(req.params.id, actorOf(req));
+  const { method, path, body } = action.request;
+  let ok = false;
+  let result = null;
+  let error = null;
+  try {
+    const r = await fetch(`http://127.0.0.1:${PORT}/api${path}`, {
+      method,
+      headers: { "Content-Type": "application/json", Authorization: req.headers.authorization },
+      body: method === "GET" ? undefined : JSON.stringify(body || {}),
+      signal: AbortSignal.timeout(20000),
+    });
+    const data = await r.json().catch(() => null);
+    ok = r.ok;
+    if (ok) result = { status: r.status };
+    else error = data?.error || `Request failed (${r.status})`;
+  } catch (e) {
+    error = e.message;
+  }
+  const updated = agents.finishExecution(action.id, { ok, result, error });
+  audit(req, ok ? "ai.action.approve" : "ai.action.approve_failed", "aiAction", action.id, action.title, [
+    { field: "proposedBy", from: null, to: action.agentName },
+    ...(error ? [{ field: "error", from: null, to: error }] : []),
+  ]);
+  if (!ok) return res.status(422).json({ error: `Approved, but the action failed: ${error}`, action: updated });
+  res.json(updated);
+}));
+app.post("/api/admin/ai/actions/:id/reject", adminOnly, crm(async (req, res) => {
+  if (req.admin.agent) return res.status(403).json({ error: "AI agents can't decide proposals" });
+  const action = agents.rejectAction(req.params.id, req.body?.note, actorOf(req));
+  audit(req, "ai.action.reject", "aiAction", action.id, action.title, [{ field: "proposedBy", from: null, to: action.agentName }]);
+  res.json(action);
 }));
 
 // ---- Live Service Provider Monitoring ----

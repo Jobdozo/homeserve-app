@@ -1,0 +1,482 @@
+import { useEffect, useState } from "react";
+import { api } from "../api";
+import { useApp } from "../context/AppContext";
+import { XIcon } from "../components/icons";
+
+// AI Agents: approve what agents propose, read their alerts and reports, and
+// manage the agent accounts themselves (role, on/off, daily AI budget, key).
+// The server enforces all of this — see server/src/agents.js.
+
+const inputCls = "w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-[12.5px] text-gray-800 outline-none focus:border-brand";
+const labelCls = "mb-1 block text-[11px] font-semibold uppercase tracking-wide text-gray-400";
+const btnCls = "rounded-xl bg-brand px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50";
+const ghostCls = "rounded-xl border border-gray-200 px-3 py-2 text-[12.5px] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50";
+const dangerCls = "rounded-xl border border-red-200 px-3 py-2 text-[12.5px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50";
+const fmt = (iso) => (iso ? new Date(iso).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "numeric", minute: "2-digit" }) : "Never");
+const SEVERITY = {
+  critical: "bg-red-100 text-red-700",
+  warning: "bg-amber-100 text-amber-700",
+  info: "bg-sky-100 text-sky-700",
+};
+const STATUS = {
+  pending: "bg-amber-100 text-amber-700",
+  executing: "bg-sky-100 text-sky-700",
+  approved: "bg-emerald-100 text-emerald-700",
+  rejected: "bg-gray-200 text-gray-600",
+  expired: "bg-gray-100 text-gray-400",
+};
+
+function useRun() {
+  const { showToast } = useApp();
+  return async (fn, ok) => {
+    try {
+      const out = await fn();
+      if (ok) showToast(ok);
+      return out ?? true;
+    } catch (e) {
+      showToast(e.message || "Something went wrong");
+      return null;
+    }
+  };
+}
+
+export default function AiAgentsPage() {
+  const { can } = useApp();
+  const [tab, setTab] = useState("approvals");
+  const [config, setConfig] = useState(null);
+  const run = useRun();
+
+  const loadConfig = () => api.getAiConfig().then(setConfig).catch(() => {});
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  const toggleAll = async () => {
+    const next = !config.enabled;
+    const out = await run(() => api.setAiConfig({ enabled: next }), next ? "AI agents switched on" : "All AI agents stopped");
+    if (out) setConfig(out);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="no-scrollbar flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-white p-1 shadow-card">
+          {[
+            ["approvals", "Approvals"],
+            ["feed", "Alerts & reports"],
+            ["agents", "Agents"],
+          ].map(([key, label]) => (
+            <button key={key} onClick={() => setTab(key)} className={`rounded-lg px-4 py-1.5 text-[12.5px] font-semibold ${tab === key ? "bg-brand text-white" : "text-gray-500"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {config && (
+          <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 shadow-card">
+            <span className={`h-2.5 w-2.5 rounded-full ${config.enabled ? "bg-emerald-500" : "bg-red-500"}`} />
+            <span className="text-[12.5px] font-semibold text-gray-700">{config.enabled ? "AI agents running" : "All AI agents stopped"}</span>
+            {can("ai.manage") && (
+              <button className={config.enabled ? dangerCls : btnCls} onClick={toggleAll}>
+                {config.enabled ? "Stop all" : "Start all"}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      {tab === "approvals" && <ApprovalsPanel canDecide={can("ai.approve")} />}
+      {tab === "feed" && <FeedPanel />}
+      {tab === "agents" && <AgentsPanel canManage={can("ai.manage")} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- approvals
+
+function ApprovalsPanel({ canDecide }) {
+  const [status, setStatus] = useState("pending");
+  const [rows, setRows] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [open, setOpen] = useState(null);
+  const run = useRun();
+
+  const load = () => api.listAiActions(status).then(setRows).catch(() => setRows([]));
+  useEffect(() => {
+    setRows(null);
+    load();
+    const t = setInterval(load, 30000);
+    return () => clearInterval(t);
+  }, [status]);
+
+  const decide = async (a, approve) => {
+    let note;
+    if (!approve) {
+      note = window.prompt("Reason for rejecting (optional)") ?? null;
+      if (note === null) return;
+    }
+    setBusy(a.id);
+    await run(() => (approve ? api.approveAiAction(a.id) : api.rejectAiAction(a.id, note)), approve ? "Approved and done" : "Proposal rejected");
+    setBusy(null);
+    load();
+  };
+
+  return (
+    <div className="overflow-hidden rounded-2xl bg-white shadow-card">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+        <div>
+          <h2 className="text-[14px] font-bold text-gray-900">Waiting for a person</h2>
+          <p className="text-[12px] text-gray-500">Agents can't approve providers, decide refunds, close complaints or message everyone. They propose it here; approving runs it as you, with your permissions.</p>
+        </div>
+        <select className={`${inputCls} w-auto`} value={status} onChange={(e) => setStatus(e.target.value)}>
+          {["pending", "approved", "rejected", "expired"].map((s) => (
+            <option key={s} value={s}>
+              {s[0].toUpperCase() + s.slice(1)}
+            </option>
+          ))}
+        </select>
+      </div>
+      {!rows ? (
+        <p className="px-4 py-10 text-center text-[12.5px] text-gray-400">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="px-4 py-10 text-center text-[12.5px] text-gray-400">Nothing {status} right now.</p>
+      ) : (
+        <ul className="divide-y divide-gray-50">
+          {rows.map((a) => (
+            <li key={a.id} className="px-4 py-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-gray-800">{a.title}</p>
+                  <p className="text-[11.5px] text-gray-400">
+                    {a.agentName} · {fmt(a.createdAt)} · <span className="font-mono">{a.type}</span>
+                    {a.decidedBy && ` · ${a.status} by ${a.decidedBy}`}
+                  </p>
+                  {a.summary && <p className="mt-1 whitespace-pre-line text-[12.5px] text-gray-600">{a.summary}</p>}
+                  {a.lastError && <p className="mt-1 text-[12px] text-red-600">Last attempt failed: {a.lastError}</p>}
+                  {a.note && <p className="mt-1 text-[12px] text-gray-500">Note: {a.note}</p>}
+                  <button className="mt-1 text-[11.5px] font-semibold text-brand" onClick={() => setOpen(open === a.id ? null : a.id)}>
+                    {open === a.id ? "Hide details" : "Why, and exactly what will run"}
+                  </button>
+                  {open === a.id && (
+                    <div className="mt-2 space-y-2 rounded-xl bg-gray-50 p-3 text-[12px] text-gray-600">
+                      {a.reasoning && <p className="whitespace-pre-line">{a.reasoning}</p>}
+                      <pre className="overflow-x-auto whitespace-pre-wrap break-all font-mono text-[11px] text-gray-500">
+                        {a.request.method} /api{a.request.path}
+                        {"\n"}
+                        {JSON.stringify(a.request.body, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold ${STATUS[a.status] || STATUS.pending}`}>{a.status}</span>
+                  {canDecide && a.status === "pending" && (
+                    <>
+                      <button className={ghostCls} disabled={busy === a.id} onClick={() => decide(a, false)}>
+                        Reject
+                      </button>
+                      <button className={btnCls} disabled={busy === a.id} onClick={() => decide(a, true)}>
+                        Approve
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// --------------------------------------------------------------------- feed
+
+function FeedPanel() {
+  const [kind, setKind] = useState("");
+  const [unacked, setUnacked] = useState(true);
+  const [rows, setRows] = useState(null);
+  const [open, setOpen] = useState(null);
+  const run = useRun();
+
+  const load = () => api.listAiFeed({ kind, unacked }).then(setRows).catch(() => setRows([]));
+  useEffect(() => {
+    setRows(null);
+    load();
+    const t = setInterval(load, 30000);
+    return () => clearInterval(t);
+  }, [kind, unacked]);
+
+  const ack = async (id) => {
+    await run(() => api.ackAiFeed(id));
+    load();
+  };
+
+  return (
+    <div className="overflow-hidden rounded-2xl bg-white shadow-card">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+        <div>
+          <h2 className="text-[14px] font-bold text-gray-900">Alerts & reports</h2>
+          <p className="text-[12px] text-gray-500">What the agents noticed and sent you. Mark items as seen to clear them.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select className={`${inputCls} w-auto`} value={kind} onChange={(e) => setKind(e.target.value)}>
+            <option value="">All</option>
+            <option value="alert">Alerts</option>
+            <option value="report">Reports</option>
+          </select>
+          <label className="flex items-center gap-1.5 text-[12px] text-gray-600">
+            <input type="checkbox" checked={unacked} onChange={(e) => setUnacked(e.target.checked)} /> Unseen only
+          </label>
+        </div>
+      </div>
+      {!rows ? (
+        <p className="px-4 py-10 text-center text-[12.5px] text-gray-400">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="px-4 py-10 text-center text-[12.5px] text-gray-400">All clear.</p>
+      ) : (
+        <ul className="divide-y divide-gray-50">
+          {rows.map((f) => (
+            <li key={f.id} className="px-4 py-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${SEVERITY[f.severity] || SEVERITY.info}`}>{f.kind === "report" ? "report" : f.severity}</span>
+                    <p className="text-[13px] font-semibold text-gray-800">{f.title}</p>
+                  </div>
+                  <p className="text-[11.5px] text-gray-400">
+                    {f.agentName} · {fmt(f.createdAt)}
+                    {f.refs?.bookingId && ` · booking ${f.refs.bookingId}`}
+                    {f.ackedBy && ` · seen by ${f.ackedBy}`}
+                  </p>
+                  {f.body && (
+                    <>
+                      <p className={`mt-1 whitespace-pre-line text-[12.5px] text-gray-600 ${open === f.id ? "" : "line-clamp-3"}`}>{f.body}</p>
+                      {f.body.length > 240 && (
+                        <button className="text-[11.5px] font-semibold text-brand" onClick={() => setOpen(open === f.id ? null : f.id)}>
+                          {open === f.id ? "Show less" : "Show all"}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+                {!f.ackedAt && (
+                  <button className={ghostCls} onClick={() => ack(f.id)}>
+                    Mark seen
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------- agents
+
+function AgentsPanel({ canManage }) {
+  const [agents, setAgents] = useState(null);
+  const [roles, setRoles] = useState([]);
+  const [editing, setEditing] = useState(null);
+  const [newKey, setNewKey] = useState(null); // { name, apiKey }
+  const run = useRun();
+
+  const load = () => api.listAiAgents().then((d) => setAgents(d.agents)).catch(() => setAgents([]));
+  useEffect(() => {
+    load();
+    api.listRoles().then((r) => setRoles(r.filter((x) => !["super_admin", "admin"].includes(x.id)))).catch(() => {});
+  }, []);
+
+  const save = async (form) => {
+    const out = await run(
+      () => (form.id ? api.updateAiAgent(form.id, form) : api.createAiAgent(form)),
+      form.id ? "Agent updated" : "Agent created"
+    );
+    if (!out) return;
+    setEditing(null);
+    if (out.apiKey) setNewKey({ name: out.agent.name, apiKey: out.apiKey });
+    load();
+  };
+
+  const rotate = async (a) => {
+    if (!window.confirm(`Make a new key for ${a.name}? The old key stops working immediately, so update the worker's settings right after.`)) return;
+    const out = await run(() => api.rotateAiAgentKey(a.id), "New key created");
+    if (out?.apiKey) setNewKey({ name: a.name, apiKey: out.apiKey });
+  };
+
+  const remove = async (a) => {
+    if (!window.confirm(`Delete ${a.name}? Its key stops working immediately.`)) return;
+    await run(() => api.deleteAiAgent(a.id), "Agent deleted");
+    load();
+  };
+
+  return (
+    <div className="overflow-hidden rounded-2xl bg-white shadow-card">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+        <div>
+          <h2 className="text-[14px] font-bold text-gray-900">Agent accounts {agents ? `(${agents.length})` : ""}</h2>
+          <p className="text-[12px] text-gray-500">Each agent works under one staff role, limited to viewing plus a few safe actions. It never gets Super Admin, Admin, user management or settings.</p>
+        </div>
+        {canManage && (
+          <button className={btnCls} onClick={() => setEditing({ dailyBudgetUsd: 1 })}>
+            + Add agent
+          </button>
+        )}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[820px] text-left text-[12.5px]">
+          <thead>
+            <tr className="border-b border-gray-100 text-[11px] uppercase tracking-wide text-gray-400">
+              <th className="px-4 py-2.5 font-medium">Agent</th>
+              <th className="px-4 py-2.5 font-medium">Role</th>
+              <th className="px-4 py-2.5 font-medium">Status</th>
+              <th className="px-4 py-2.5 font-medium">Last seen</th>
+              <th className="px-4 py-2.5 font-medium">AI spend today</th>
+              <th className="px-4 py-2.5 font-medium" />
+            </tr>
+          </thead>
+          <tbody>
+            {agents?.map((a) => (
+              <tr key={a.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
+                <td className="px-4 py-3">
+                  <p className="font-semibold text-gray-800">{a.name}</p>
+                  <p className="text-[11px] text-gray-400">
+                    {a.description || "—"} · key {a.keyPrefix}…
+                  </p>
+                </td>
+                <td className="px-4 py-3">
+                  <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[10.5px] font-semibold text-violet-700">{a.roleName}</span>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold ${a.active ? "bg-emerald-100 text-emerald-700" : "bg-gray-200 text-gray-500"}`}>{a.active ? "On" : "Off"}</span>
+                  {a.lastStatus && a.lastStatus !== "ok" && <p className="mt-0.5 text-[11px] text-amber-600">{a.lastStatus}: {a.lastNote}</p>}
+                </td>
+                <td className="px-4 py-3 text-[11.5px] text-gray-500">{fmt(a.lastSeenAt)}</td>
+                <td className="px-4 py-3 text-[11.5px] text-gray-600">
+                  ${a.usage.costUsd.toFixed(3)} / ${Number(a.dailyBudgetUsd).toFixed(2)}
+                  <span className="block text-[10.5px] text-gray-400">{a.usage.calls} AI calls</span>
+                </td>
+                <td className="px-4 py-3">
+                  {canManage && (
+                    <div className="flex justify-end gap-1.5">
+                      <button className={ghostCls} onClick={() => run(() => api.updateAiAgent(a.id, { active: !a.active }), a.active ? "Agent switched off" : "Agent switched on").then(load)}>
+                        {a.active ? "Switch off" : "Switch on"}
+                      </button>
+                      <button className={ghostCls} onClick={() => setEditing(a)}>
+                        Edit
+                      </button>
+                      <button className={ghostCls} onClick={() => rotate(a)}>
+                        New key
+                      </button>
+                      <button className={dangerCls} onClick={() => remove(a)}>
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {agents?.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
+                  No agents yet. Add one per job (for example "Reporting Agent" with the Reporting / Management role).
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {editing && <AgentModal agent={editing} roles={roles} onClose={() => setEditing(null)} onSave={save} />}
+      {newKey && <KeyModal {...newKey} onClose={() => setNewKey(null)} />}
+    </div>
+  );
+}
+
+function AgentModal({ agent, roles, onClose, onSave }) {
+  const [form, setForm] = useState({ id: agent.id, name: agent.name || "", description: agent.description || "", roleId: agent.roleId || "", dailyBudgetUsd: agent.dailyBudgetUsd ?? 1 });
+  const [saving, setSaving] = useState(false);
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  const submit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    await onSave({ ...form, dailyBudgetUsd: Number(form.dailyBudgetUsd) });
+    setSaving(false);
+  };
+  return (
+    <Modal title={agent.id ? "Edit agent" : "Add AI agent"} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3">
+        <div>
+          <label className={labelCls}>Name</label>
+          <input className={inputCls} value={form.name} onChange={set("name")} placeholder="Reporting Agent" />
+        </div>
+        <div>
+          <label className={labelCls}>What it does (optional)</label>
+          <input className={inputCls} value={form.description} onChange={set("description")} placeholder="Daily business summary" />
+        </div>
+        <div>
+          <label className={labelCls}>Role</label>
+          <select className={inputCls} value={form.roleId} onChange={set("roleId")}>
+            <option value="">Choose a role…</option>
+            {roles.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Daily AI budget (USD)</label>
+          <input className={inputCls} type="number" min="0" max="100" step="0.1" value={form.dailyBudgetUsd} onChange={set("dailyBudgetUsd")} />
+          <p className="mt-1 text-[11px] text-gray-400">The agent stops calling the AI for the rest of the day (IST) once it reaches this. Rule-based checks keep running.</p>
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" className={ghostCls} onClick={onClose}>
+            Cancel
+          </button>
+          <button className={btnCls} disabled={saving || !form.name || !form.roleId}>
+            {agent.id ? "Save" : "Create agent"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function KeyModal({ name, apiKey, onClose }) {
+  const { showToast } = useApp();
+  const copy = () =>
+    navigator.clipboard
+      ?.writeText(apiKey)
+      .then(() => showToast("Key copied"))
+      .catch(() => showToast("Copy failed — select the key and copy it manually"));
+  return (
+    <Modal title={`API key for ${name}`} onClose={onClose}>
+      <p className="mb-2 text-[12.5px] text-gray-600">Copy this now — it won't be shown again. Put it in the agents worker's settings on the server (never in the app code or Git).</p>
+      <div className="break-all rounded-xl bg-gray-50 p-3 font-mono text-[12px] text-gray-800">{apiKey}</div>
+      <div className="mt-3 flex justify-end gap-2">
+        <button className={ghostCls} onClick={copy}>
+          Copy
+        </button>
+        <button className={btnCls} onClick={onClose}>
+          Done
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function Modal({ title, onClose, children }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 px-3 py-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <h2 className="text-[15px] font-bold text-gray-900">{title}</h2>
+          <button onClick={onClose} className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100">
+            <XIcon width={16} height={16} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}

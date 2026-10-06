@@ -19,6 +19,7 @@ import {
   SupportIcon,
   DownloadIcon,
   RequestIcon,
+  BotIcon,
 } from "./icons";
 
 const sections = [
@@ -48,6 +49,7 @@ const sections = [
       { label: "Home Layout (CMS)", icon: FileIcon, to: "/home-layout", perm: "cms.view" },
       { label: "Import & Export", icon: DownloadIcon, to: "/data", perm: ["data.export", "data.import"] },
       { label: "User Management", icon: UsersIcon, to: "/users", perm: "users.view" },
+      { label: "AI Agents", icon: BotIcon, to: "/ai-agents", perm: "ai.view" },
       { label: "Settings", icon: SettingsIcon, to: "/settings", perm: "settings.view" },
       { label: "Audit Logs", icon: ArchiveIcon, to: "/audit-logs", perm: "audit.view" },
       { label: "Support", icon: SupportIcon, perm: "*" },

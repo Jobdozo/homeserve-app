@@ -33,6 +33,7 @@ const MODULES = [
   { key: "settings", label: "Settings", actions: ["view", "edit", "delete", "manage"] },
   { key: "audit", label: "Audit logs", actions: ["view", "export"] },
   { key: "users", label: "User management", actions: ["view", "add", "edit", "delete", "manage"] },
+  { key: "ai", label: "AI agents (approvals, alerts, agent accounts)", actions: ["view", "approve", "manage"] },
 ];
 
 const all = (module, actions) => actions.map((a) => `${module}.${a}`);
@@ -224,6 +225,7 @@ function deleteUser(id, self) {
 // Returns { id, name, phone, roleId, roleName, permissions, owner } for an
 // active admin/staff phone, or null if that number has no access (any more).
 function resolveByPhone(phone) {
+  if (normPhone(phone).replace(/\D/g, "").length < 10) return null;
   if (auth.isAdminPhone(phone)) {
     return { id: `admin:${normPhone(phone)}`, name: "Owner", phone: normPhone(phone), roleId: "super_admin", roleName: "Super Admin", permissions: ["*"], owner: true };
   }
@@ -253,6 +255,10 @@ const decisionAction = (v) => (v === "approved" || v === "approve" ? "approve" :
 const RULES = [
   // [path regex, (method, body, match) => permission | permission[] | null (any staff) | "super"]
   [/^\/auth\/me$/, () => null],
+  [/^\/admin\/ai\/actions\/[^/]+\/(approve|reject)$/, () => "ai.approve"],
+  [/^\/admin\/ai\/feed\/[^/]+\/ack$/, () => "ai.view"],
+  [/^\/admin\/ai\/(actions|feed)(\/|$)/, () => "ai.view"],
+  [/^\/admin\/ai\//, (m) => (m === "GET" ? "ai.view" : "ai.manage")],
   [/^\/admin\/(users|roles)(\/|$)/, (m) => `users.${byMethod(m)}`],
   [/^\/admin\/permissions/, () => "users.view"],
   [/^\/admin\/providers\/[^/]+\/wallet\/recharge$/, () => "payments.manage"],
@@ -307,18 +313,34 @@ function requiredFor(method, path, body) {
   return path.startsWith("/admin/") ? "super" : null;
 }
 
+// AI agents (agents.js) plug in here rather than being required, to avoid a
+// require cycle: resolve(agentId) -> admin-shaped object | null, and
+// policy(req, admin, path) -> denial | null for agent-specific limits.
+let agentHooks = { resolve: () => null, policy: () => null };
+function setAgentHooks(hooks) {
+  agentHooks = { ...agentHooks, ...hooks };
+}
+
+// Who an admin-role token belongs to right now: a person (by phone) or an AI agent.
+function resolveToken(payload) {
+  if (!payload) return null;
+  if (payload.agentId) return agentHooks.resolve(payload.agentId);
+  return resolveByPhone(payload.phone);
+}
+
 // Installed into auth.requireAuth: runs for every admin-role token.
 function guard(req, payload) {
-  const admin = resolveByPhone(payload.phone);
-  if (!admin) return { status: 401, error: "This admin account no longer has access" };
+  const admin = resolveToken(payload);
+  if (!admin) return { status: 401, error: payload.agentId ? "This AI agent is switched off" : "This admin account no longer has access" };
   req.admin = admin;
   req.user = { ...payload, id: admin.id };
   const path = req.originalUrl.split("?")[0].replace(/^\/api/, "");
   const needed = requiredFor(req.method, path, req.body);
-  if (needed === null) return null;
-  if (needed === "super") return admin.permissions.includes("*") ? null : { status: 403, error: "Only a Super Admin can do that" };
-  if (allowed(admin.permissions, needed)) return null;
-  return { status: 403, error: "Your role doesn't have permission to do that" };
+  let denied = null;
+  if (needed === "super") denied = admin.permissions.includes("*") ? null : { status: 403, error: "Only a Super Admin can do that" };
+  else if (needed !== null && !allowed(admin.permissions, needed)) denied = { status: 403, error: "Your role doesn't have permission to do that" };
+  if (!denied && admin.agent) denied = agentHooks.policy(req, admin, path);
+  return denied;
 }
 
 // For the few public-ish endpoints that show extra data to admins.
@@ -333,5 +355,6 @@ function catalogue() {
 module.exports = {
   catalogue, listRoles, createRole, updateRole, deleteRole,
   listUsers, createUser, updateUser, deleteUser,
-  resolveByPhone, recordLogin, guard, adminCan, requiredFor,
+  resolveByPhone, resolveToken, setAgentHooks, recordLogin, guard, adminCan, requiredFor,
+  permits: allowed,
 };

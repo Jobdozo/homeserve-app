@@ -224,3 +224,14 @@ export const DownloadIcon = (p) => (
     <path d="M5 19h14" />
   </svg>
 );
+
+export const BotIcon = (p) => (
+  <svg {...base} {...p}>
+    <rect x="4" y="8" width="16" height="11" rx="3" />
+    <path d="M12 8V4.5" />
+    <circle cx="12" cy="3.8" r="1" />
+    <circle cx="9" cy="13.5" r="1.2" />
+    <circle cx="15" cy="13.5" r="1.2" />
+    <path d="M2 13v2M22 13v2" />
+  </svg>
+);
