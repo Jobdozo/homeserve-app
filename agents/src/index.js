@@ -50,8 +50,12 @@ async function main() {
   const once = process.argv.includes("--once");
   const active = AGENTS.filter((a) => a.key);
   if (active.length === 0) {
-    log.error("worker", "No agent keys set (AGENT_KEY_OPERATIONS / _REPORTING / _COMPLAINTS / _SUPPORT / _REGISTRATION / _VERIFICATION / _PAYMENTS). Create agents in Admin → AI Agents first.");
-    process.exit(1);
+    // Stay up idle rather than exit: under `restart: unless-stopped` an exit
+    // would crash-loop until keys are added. Add keys and restart the service.
+    log.warn("worker", "No agent keys set (AGENT_KEY_OPERATIONS / _REPORTING / _COMPLAINTS / _SUPPORT / _REGISTRATION / _VERIFICATION / _PAYMENTS). Create agents in Admin → AI Agents, add the keys, then restart this service. Idling.");
+    if (once) process.exit(1);
+    setInterval(() => {}, 1 << 30);
+    return;
   }
   for (const a of AGENTS.filter((x) => !x.key)) log.info("worker", `${a.name} agent not configured — skipped`);
 
