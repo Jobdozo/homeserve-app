@@ -285,6 +285,8 @@ const RULES = [
   [/^\/admin\/ai\/(actions|feed)(\/|$)/, () => "ai.view"],
   [/^\/admin\/ai\//, (m) => (m === "GET" ? "ai.view" : "ai.manage")],
   [/^\/admin\/inbox(\/|$)/, (m) => (m === "GET" ? "inbox.view" : "inbox.add")],
+  [/^\/admin\/verification\/precheck$/, () => "providers.view"],
+  [/^\/admin\/payments\/reconciliation$/, () => "payments.view"],
   [/^\/admin\/(users|roles)(\/|$)/, (m) => `users.${byMethod(m)}`],
   [/^\/admin\/permissions/, () => "users.view"],
   [/^\/admin\/providers\/[^/]+\/wallet\/recharge$/, () => "payments.manage"],

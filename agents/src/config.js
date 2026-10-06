@@ -41,6 +41,26 @@ module.exports = {
     maxPerRun: num(process.env.SUPPORT_MAX_PER_RUN, 10),
   },
 
+  registration: {
+    key: process.env.AGENT_KEY_REGISTRATION || "",
+    everyMs: num(process.env.REGISTRATION_CHECK_EVERY_MIN, 60) * 60000,
+    digestHourIst: num(process.env.REGISTRATION_DIGEST_HOUR_IST, 10),
+    nudgeEveryHours: num(process.env.REGISTRATION_NUDGE_EVERY_HOURS, 48),
+    maxNudges: num(process.env.REGISTRATION_MAX_NUDGES, 3),
+    lookbackDays: num(process.env.REGISTRATION_LOOKBACK_DAYS, 7),
+  },
+
+  verification: {
+    key: process.env.AGENT_KEY_VERIFICATION || "",
+    everyMs: num(process.env.VERIFICATION_CHECK_EVERY_MIN, 15) * 60000,
+  },
+
+  payments: {
+    key: process.env.AGENT_KEY_PAYMENTS || "",
+    everyMs: num(process.env.PAYMENTS_CHECK_EVERY_MIN, 360) * 60000,
+    reportHourIst: num(process.env.PAYMENTS_REPORT_HOUR_IST, 8),
+  },
+
   operations: {
     key: process.env.AGENT_KEY_OPERATIONS || "",
     everyMs: num(process.env.OPS_CHECK_EVERY_SEC, 300) * 1000,

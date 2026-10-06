@@ -19,6 +19,7 @@ export default function PaymentsPage() {
 
   return (
     <div className="space-y-4">
+      <ReconciliationCard />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-2xl bg-white p-4 shadow-card">
           <p className="text-[11px] text-gray-400">Total Revenue</p>
@@ -75,6 +76,62 @@ export default function PaymentsPage() {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Wallet & commission reconciliation (server/src/backoffice.js): read-only.
+// Corrections (recharges) are still made by the Payment Team by hand.
+const SEVERITY = { critical: "bg-red-100 text-red-700", warning: "bg-amber-100 text-amber-700", info: "bg-sky-100 text-sky-700" };
+
+function ReconciliationCard() {
+  const [r, setR] = useState(null);
+  const [error, setError] = useState(null);
+  const [open, setOpen] = useState(false);
+  const load = () => {
+    setError(null);
+    api.getPaymentsReconciliation().then(setR).catch((e) => setError(e.message));
+  };
+  useEffect(load, []);
+  if (error) return null; // no access or not available — the rest of the page still works
+  if (!r) return <div className="rounded-2xl bg-white p-4 text-[12.5px] text-gray-400 shadow-card">Checking wallets…</div>;
+  const ok = r.issueCount === 0;
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-card">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-[13px] font-bold text-gray-900">
+            Wallet & commission check:{" "}
+            <span className={ok ? "text-emerald-600" : "text-red-600"}>{ok ? "all reconciled" : `${r.issueCount} issue(s)`}</span>
+          </p>
+          <p className="text-[11.5px] text-gray-500">
+            {r.totals.wallets} wallets · balance ₹{r.totals.totalBalanceInr.toLocaleString("en-IN")} · commission recorded ₹
+            {r.totals.totalCommissionInr.toLocaleString("en-IN")} · checked {new Date(r.generatedAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          {!ok && (
+            <button onClick={() => setOpen(!open)} className="rounded-xl border border-gray-200 px-3 py-1.5 text-[12px] font-semibold text-gray-600 hover:bg-gray-50">
+              {open ? "Hide" : "Show issues"}
+            </button>
+          )}
+          <button onClick={load} className="rounded-xl border border-gray-200 px-3 py-1.5 text-[12px] font-semibold text-gray-600 hover:bg-gray-50">
+            Re-check
+          </button>
+        </div>
+      </div>
+      {open && (
+        <ul className="mt-3 divide-y divide-gray-50 rounded-xl border border-gray-100">
+          {r.issues.map((i) => (
+            <li key={i.key} className="flex flex-wrap items-start gap-2 px-3 py-2 text-[12px]">
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${SEVERITY[i.severity]}`}>{i.severity}</span>
+              <span className="flex-1 text-gray-700">
+                <b>{i.providerName}</b> — {i.detail}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

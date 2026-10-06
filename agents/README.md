@@ -10,6 +10,9 @@ over HTTP only (never to the data files). Safety model: `server/src/agents.js`.
 | Reporting | Reporting / Management Team | Yes (Claude Haiku) | Daily at 09:00 IST: founder brief for yesterday, posted to Admin → AI Agents and (best effort) WhatsApp |
 | Complaint Triage | Complaint Handling Team | Yes | Every 3 min: new complaints get category, priority, an internal "[AI triage]" note and escalation for safety issues; a first customer reply and refund-claim decisions are **proposed** for approval |
 | Customer Support | Customer Support | Yes | Every 20 s: answers WhatsApp chats in AI mode from the customer's own bookings + your Support knowledge; logs complaints; hands refunds, safety, legal, abuse and anything unsure to a person |
+| Registration | Registration Team | No (rules) | Hourly: reminds providers with incomplete applications what's missing (in-app, max 3×, needs "Notifications → Add" on the role); daily 10:00 IST call list of unfinished sign-ups |
+| Verification Pre-check | Provider Verification Team | No (rules) | Every 15 min: checks pending applications (ID proof, services, areas, agreement, GST format, duplicates); **proposes** approval only when complete — never rejection; documents are not sent to any AI |
+| Payments | Payment Team | No (rules) | Every 6 h: reconciles wallets vs recharge/deduction history, commission charged vs completed jobs, fees on cancelled jobs, negative wallets; alerts + daily 08:00 IST summary; never moves money |
 
 ## What agents can never do
 - Hold Super Admin / Admin, or touch users, settings, data import/export or AI settings.
@@ -38,6 +41,9 @@ over HTTP only (never to the data files). Safety model: `server/src/agents.js`.
    AGENT_KEY_REPORTING=tkag_...
    AGENT_KEY_COMPLAINTS=tkag_...
    AGENT_KEY_SUPPORT=tkag_...
+   AGENT_KEY_REGISTRATION=tkag_...
+   AGENT_KEY_VERIFICATION=tkag_...
+   AGENT_KEY_PAYMENTS=tkag_...
    ANTHROPIC_API_KEY=sk-ant-...
    ```
 4. `mkdir -p /root/tikdum-data/agents-state && chown 1000:1000 /root/tikdum-data/agents-state`
@@ -53,7 +59,7 @@ npm test
 No npm dependencies (Node ≥ 20.6).
 
 ## Costs
-Operations uses no AI. Reporting makes ~1 Claude Haiku call/day (well under $0.01).
+Operations, Registration, Verification and Payments use no AI (free to run). Reporting makes ~1 Claude Haiku call/day (well under $0.01).
 Complaint Triage: ~1 call per complaint/refund claim (~2k tokens ≈ $0.003). Support: ~1 call per customer
 message (~2–4k tokens with knowledge ≈ $0.003–0.006); a busy day of 300 messages ≈ $1–2.
 Each agent has a daily USD budget in Admin; when reached it stops calling the AI and posts plain numbers instead.

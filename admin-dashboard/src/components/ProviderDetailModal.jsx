@@ -584,6 +584,8 @@ export default function ProviderDetailModal({ providerId, onClose }) {
             </div>
           </Section>
 
+          {provider.verificationStatus === "pending" && <PrecheckSection providerId={provider.id} />}
+
           {provider.verificationStatus === "pending" && (
             <div className="flex gap-2">
               <button
@@ -743,5 +745,32 @@ function Section({ title, action, children }) {
       </div>
       <div className="space-y-2">{children}</div>
     </div>
+  );
+}
+
+// Automated application checklist (server/src/backoffice.js). It never reads
+// the documents themselves — those still need a look before approving.
+function PrecheckSection({ providerId }) {
+  const [result, setResult] = useState(undefined);
+  useEffect(() => {
+    api
+      .getVerificationPrecheck()
+      .then((list) => setResult(list.find((p) => p.providerId === providerId) || null))
+      .catch(() => setResult(null));
+  }, [providerId]);
+  if (result === undefined) return <p className="text-[12px] text-gray-400">Checking application…</p>;
+  if (!result) return null;
+  return (
+    <Section title={result.ready ? "Pre-check: complete" : `Pre-check: ${result.missing.length} item(s) missing`}>
+      <ul className="space-y-1 rounded-lg border border-gray-100 p-3 text-[12px]">
+        {result.checks.map((c) => (
+          <li key={c.key} className={c.ok ? "text-gray-600" : c.required ? "font-semibold text-red-600" : "text-amber-600"}>
+            {c.ok ? "✓" : c.required ? "✗" : "–"} {c.label}
+            {c.detail && <span className="font-normal text-gray-400"> · {c.detail}</span>}
+          </li>
+        ))}
+      </ul>
+      <p className="text-[11px] text-gray-400">Automated checks only. Open the documents below and confirm the name and photo before approving.</p>
+    </Section>
   );
 }

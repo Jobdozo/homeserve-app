@@ -280,6 +280,9 @@ export const api = {
   replyInbox: (id, text) => request(`/admin/inbox/${encodeURIComponent(id)}/reply`, { method: "POST", body: JSON.stringify({ text }) }),
   setInboxMode: (id, mode, reason) => request(`/admin/inbox/${encodeURIComponent(id)}/mode`, { method: "POST", body: JSON.stringify({ mode, reason }) }),
 
+  getVerificationPrecheck: () => request("/admin/verification/precheck"),
+  getPaymentsReconciliation: () => request("/admin/payments/reconciliation"),
+
   listOffers: () => request("/admin/offers"),
   createOffer: (data) => request("/admin/offers", { method: "POST", body: JSON.stringify(data) }),
   updateOffer: (id, patch) => request(`/admin/offers/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),

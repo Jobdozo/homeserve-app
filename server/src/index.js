@@ -19,6 +19,7 @@ const csvImport = require("./csvImport");
 const auth = require("./auth");
 const agents = require("./agents");
 const inbox = require("./inbox");
+const backoffice = require("./backoffice");
 access.setAgentHooks({ resolve: agents.resolveAgent, policy: agents.policy });
 // Per-request permission checks for staff sign-ins (admin roles, provider staff).
 auth.setAdminGuard(access.guard);
@@ -2136,6 +2137,11 @@ app.post("/api/admin/inbox/:id/mode", adminOnly, crm(async (req, res) => {
   }
   res.json(conv);
 }));
+
+// ---- Back-office checks (read-only; used by the Registration, Verification
+// and Payments agents and shown to staff — see backoffice.js) ----
+app.get("/api/admin/verification/precheck", adminOnly, crm(async (req, res) => res.json(await backoffice.precheckPending())));
+app.get("/api/admin/payments/reconciliation", adminOnly, crm(async (req, res) => res.json(await backoffice.reconcile())));
 
 // ---- Live Service Provider Monitoring ----
 app.get("/api/admin/monitoring", auth.requireAuth("admin"), ah(async (req, res) => {
