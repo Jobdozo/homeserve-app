@@ -1,6 +1,10 @@
 services:
   server:
-    build: ./server
+    build:
+      context: ./server
+      # Build containers on this VPS time out reaching registry.npmjs.org on Docker's
+      # default network; the host's own network works.
+      network: host
     restart: unless-stopped
     ports:
       - "4000:4000"
@@ -26,6 +30,7 @@ services:
   local-service-app:
     build:
       context: ./local-service-app
+      network: host
       args:
         VITE_SERVER_URL: ${VITE_SERVER_URL}
     restart: unless-stopped
@@ -37,6 +42,7 @@ services:
   provider-app:
     build:
       context: ./provider-app
+      network: host
       args:
         VITE_SERVER_URL: ${VITE_SERVER_URL}
     restart: unless-stopped
@@ -48,6 +54,7 @@ services:
   admin-dashboard:
     build:
       context: ./admin-dashboard
+      network: host
       args:
         VITE_SERVER_URL: ${VITE_SERVER_URL}
     restart: unless-stopped
