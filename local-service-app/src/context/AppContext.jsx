@@ -2,13 +2,15 @@ import { createContext, useContext, useEffect, useMemo, useState, useCallback, u
 import { api, setAuthToken } from "../api";
 import { socket, setSocketToken } from "../socket";
 import { timeSlots } from "../data/mockData";
-import { detectCurrentLocation } from "../utils/geolocation";
+import { detectCurrentLocation, APPROXIMATE_OVER_METERS } from "../utils/geolocation";
 import { ensurePushSubscribed, onNativeNotificationTap } from "../utils/pushNotifications";
 
 const AppContext = createContext(null);
 const CART_KEY = "homeserve-cart-v1";
 const AUTH_KEY = "tikdum-customer-auth-v1";
 const LOCATION_KEY = "tikdum-location-v1";
+// Re-detection must be at least this accurate (metres) to replace a hand-pinned spot.
+const PINNED_KEEP_OVER_METERS = 200;
 
 function loadLocation() {
   try {
@@ -88,18 +90,45 @@ export function AppProvider({ children }) {
     localStorage.setItem(CART_KEY, JSON.stringify(cart));
   }, [cart]);
 
-  const detectLocation = useCallback(async () => {
+  // A spot the customer pinned on the map is more trustworthy than a coarse
+  // automatic guess (a laptop without GPS often reports the wrong city), so
+  // automatic re-detection only replaces it when the new fix is accurate.
+  const locationRef = useRef(location);
+  useEffect(() => {
+    locationRef.current = location;
+  }, [location]);
+
+  const detectLocation = useCallback(async (opts) => {
+    const auto = opts?.auto === true; // true = background re-detect, not a button tap
     setLocationStatus("detecting");
     try {
       const loc = await detectCurrentLocation();
+      if (auto && locationRef.current?.source === "pinned" && (loc.accuracy || 0) > PINNED_KEEP_OVER_METERS) {
+        setLocationStatus("ready");
+        return;
+      }
       setLocation(loc);
       localStorage.setItem(LOCATION_KEY, JSON.stringify(loc));
       setLocationStatus("ready");
     } catch (e) {
       console.error("Failed to detect location", e);
-      setLocationStatus(e.code === 1 ? "denied" : "error");
+      // Keep using the pinned spot rather than falling back to the saved address.
+      if (locationRef.current?.source === "pinned") setLocationStatus("ready");
+      else setLocationStatus(e.code === 1 ? "denied" : "error");
     }
   }, []);
+
+  // The customer chose this exact spot on the map.
+  const setPinnedLocation = useCallback((loc) => {
+    const next = { ...loc, source: "pinned" };
+    setLocation(next);
+    localStorage.setItem(LOCATION_KEY, JSON.stringify(next));
+    setLocationStatus("ready");
+  }, []);
+
+  // City-level guesses (no GPS, e.g. a laptop) are flagged so the app can ask
+  // the customer to set their exact spot.
+  const locationApproximate = !!location && location.source !== "pinned" && (location.accuracy || 0) > APPROXIMATE_OVER_METERS;
 
   // Re-detect the real current location on every app open, and again when the
   // app returns to the foreground after a while, so the provider list always
@@ -108,7 +137,7 @@ export function AppProvider({ children }) {
   const lastDetectAt = useRef(0);
   const runDetect = useCallback(async () => {
     lastDetectAt.current = Date.now();
-    await detectLocation();
+    await detectLocation({ auto: true });
   }, [detectLocation]);
 
   useEffect(() => {
@@ -650,6 +679,8 @@ export function AppProvider({ children }) {
       location,
       locationStatus,
       detectLocation,
+      setPinnedLocation,
+      locationApproximate,
       pendingNotificationBookingId,
       clearPendingNotification,
     }),
@@ -704,6 +735,8 @@ export function AppProvider({ children }) {
       location,
       locationStatus,
       detectLocation,
+      setPinnedLocation,
+      locationApproximate,
       pendingNotificationBookingId,
       clearPendingNotification,
     ]

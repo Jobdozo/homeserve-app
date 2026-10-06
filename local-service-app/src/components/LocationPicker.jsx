@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { detectPreciseLocation, reverseGeocode } from "../utils/geolocation";
+import { detectPreciseLocation, reverseGeocode, searchPlaces, APPROXIMATE_OVER_METERS } from "../utils/geolocation";
 import { useApp } from "../context/AppContext";
 import { XIcon } from "./icons";
 
@@ -30,6 +30,9 @@ export default function LocationPicker({ initial, onConfirm, onClose, title = "P
   const [geocoding, setGeocoding] = useState(true);
   const [pin, setPin] = useState(initial?.pincode || "");
   const [notice, setNotice] = useState("");
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
 
   // ---- map setup (once) ----
   useEffect(() => {
@@ -83,6 +86,39 @@ export default function LocationPicker({ initial, onConfirm, onClose, title = "P
     };
   }, [center.lat, center.lng]);
 
+  // ---- search a place by name (most computers have no GPS) ----
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 3) {
+      setResults([]);
+      setSearching(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const found = await searchPlaces(q, controller.signal);
+        if (!controller.signal.aborted) setResults(found);
+      } catch (e) {
+        if (!controller.signal.aborted) setResults([]);
+      } finally {
+        if (!controller.signal.aborted) setSearching(false);
+      }
+    }, 600);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query]);
+
+  const goTo = (r) => {
+    mapRef.current?.setView([r.lat, r.lng], 18, { animate: true });
+    setQuery("");
+    setResults([]);
+    setNotice("");
+  };
+
   // ---- "My location": the device's best GPS fix ----
   const locate = useCallback(async () => {
     const map = mapRef.current;
@@ -105,6 +141,9 @@ export default function LocationPicker({ initial, onConfirm, onClose, title = "P
         },
       });
       setAccuracy(fix.accuracy);
+      if (fix.accuracy > APPROXIMATE_OVER_METERS) {
+        setNotice("This device can only give a city-level location (it has no GPS). Search for your area above, or drag the map so the pin is on your door.");
+      }
     } catch (e) {
       if (e.code === 0) return; // cancelled
       setNotice(
@@ -163,6 +202,38 @@ export default function LocationPicker({ initial, onConfirm, onClose, title = "P
         <div className="relative min-h-0 flex-1">
           <div ref={mapEl} className="absolute inset-0" />
 
+          {/* Search a place by name */}
+          <div className="absolute left-3 right-14 top-3 z-[700]">
+            <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 shadow-lg ring-1 ring-black/5 focus-within:ring-brand">
+              <span aria-hidden="true" className="text-gray-400">⌕</span>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && results[0] && goTo(results[0])}
+                placeholder="Search your area, e.g. Sunjwan, Jammu"
+                className="w-full bg-transparent text-[13.5px] text-gray-800 outline-none placeholder:text-gray-400"
+              />
+              {query && (
+                <button type="button" onClick={() => { setQuery(""); setResults([]); }} aria-label="Clear search" className="text-gray-400 hover:text-gray-600">
+                  ✕
+                </button>
+              )}
+            </div>
+            {(results.length > 0 || (searching && query.trim().length >= 3)) && (
+              <ul className="mt-1.5 max-h-56 overflow-y-auto rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
+                {searching && results.length === 0 && <li className="px-3 py-2 text-[12.5px] text-gray-400">Searching…</li>}
+                {results.map((r) => (
+                  <li key={r.id}>
+                    <button type="button" onClick={() => goTo(r)} className="block w-full px-3 py-2 text-left hover:bg-gray-50">
+                      <span className="block truncate text-[13px] font-semibold text-gray-800">{r.label}</span>
+                      {r.sub && <span className="block truncate text-[11.5px] text-gray-400">{r.sub}</span>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           {/* Fixed centre pin: its tip is the chosen spot. */}
           <div className="pointer-events-none absolute left-1/2 top-1/2 z-[500] -translate-x-1/2 -translate-y-full">
             <svg width="38" height="50" viewBox="0 0 38 50" fill="none">
@@ -173,7 +244,7 @@ export default function LocationPicker({ initial, onConfirm, onClose, title = "P
           <div className="pointer-events-none absolute left-1/2 top-1/2 z-[400] h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/35" />
 
           {(accuracy != null || locating) && (
-            <div className="absolute left-3 top-3 z-[600] flex flex-col items-start gap-1.5">
+            <div className="absolute left-3 top-[3.9rem] z-[600] flex flex-col items-start gap-1.5">
               <span className={`rounded-full px-3 py-1 text-[12px] font-semibold text-white shadow ${accTone || "bg-gray-700"}`}>
                 {locating && accuracy == null ? "Finding your exact spot…" : `GPS accuracy ±${accuracy} m${locating ? " · improving…" : ""}`}
               </span>

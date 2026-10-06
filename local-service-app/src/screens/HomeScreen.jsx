@@ -10,6 +10,7 @@ import HomeSections, { HeroBanners } from "../components/HomeSections";
 import Seo, { SITE_URL } from "../components/Seo";
 import ComingSoon from "../components/ComingSoon";
 import DesktopHome from "../components/DesktopHome";
+import LocationPill from "../components/LocationPill";
 
 const HOME_JSON_LD = {
   "@context": "https://schema.org",
@@ -23,7 +24,7 @@ const HOME_JSON_LD = {
 export default function HomeScreen() {
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
-  const { categories, services, banners, homeLayout, cart, notifications, location, locationStatus, detectLocation, noCoverage } = useApp();
+  const { categories, services, banners, homeLayout, cart, notifications, location, noCoverage } = useApp();
   const unreadCount = notifications.filter((n) => !n.read).length;
   // Banner placements are set in the Super Admin CMS; banners saved before
   // placements existed have none and stay in the small chip strip.
@@ -51,18 +52,7 @@ export default function HomeScreen() {
     <div className="flex flex-col pb-4 lg:hidden">
       {/* Location + notification */}
       <div className="flex items-center justify-between px-4 pt-1 lg:px-0 lg:pt-0">
-        <button
-          onClick={detectLocation}
-          className="flex items-center gap-1 text-sm font-semibold text-gray-900 lg:text-base"
-        >
-          <span>📍</span>{" "}
-          {locationStatus === "detecting"
-            ? "Detecting…"
-            : locationStatus === "denied"
-              ? "Location off — tap to enable"
-              : location?.label || "Tap to set your location"}
-          <span className="text-gray-400">▾</span>
-        </button>
+        <LocationPill variant="mobile" />
         <div className="flex items-center gap-2 lg:hidden">
           <button
             onClick={() => navigate("/cart")}

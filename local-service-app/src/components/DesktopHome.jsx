@@ -7,6 +7,7 @@ import CategoryIcon from "./CategoryIcon";
 import CategoryPhoto from "./CategoryPhoto";
 import HomeSections, { HeroBanners, PromoBanner } from "./HomeSections";
 import ComingSoon from "./ComingSoon";
+import LocationPill from "./LocationPill";
 
 const PROVIDER_SITE = "https://provider.tikdum.com";
 
@@ -71,7 +72,6 @@ function SectionTitle({ title, sub, action }) {
 
 function Hero({ categories, services }) {
   const navigate = useNavigate();
-  const { location, locationStatus, detectLocation } = useApp();
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
 
@@ -93,27 +93,13 @@ function Hero({ categories, services }) {
     navigate(item.kind === "category" ? `/category/${item.id}` : `/find-service/${item.id}`);
   };
 
-  const locationLabel =
-    locationStatus === "detecting"
-      ? "Detecting your location…"
-      : locationStatus === "denied"
-        ? "Location off — click to enable"
-        : location?.label || "Set your location";
-
   const tiles = categories.slice(0, 6);
 
   return (
     <section className="bg-gradient-to-b from-brand-light/70 via-white to-white">
       <div className="mx-auto grid max-w-6xl grid-cols-[1.05fr_1fr] items-center gap-12 px-8 pb-14 pt-12">
         <div>
-          <button
-            onClick={detectLocation}
-            className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3.5 py-1.5 text-[13.5px] font-semibold text-gray-700 shadow-card hover:border-gray-300"
-          >
-            <span className="text-brand">●</span>
-            {locationLabel}
-            <span className="text-gray-400">▾</span>
-          </button>
+          <LocationPill variant="desktop" />
 
           <h1 className="mt-6 max-w-xl text-[52px] font-extrabold leading-[1.05] tracking-tight text-gray-900">
             Home services,<br />at your doorstep

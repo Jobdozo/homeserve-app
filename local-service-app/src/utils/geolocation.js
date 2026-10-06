@@ -97,9 +97,12 @@ export async function detectCurrentLocation() {
     );
   });
 
-  const { latitude, longitude } = position.coords;
+  const { latitude, longitude, accuracy } = position.coords;
   const place = await reverseGeocode(latitude, longitude);
-  return { lat: latitude, lng: longitude, ...place };
+  // accuracy is the device's own ± radius in metres. A laptop without GPS
+  // reports a guess from its internet connection — often 1,000+ m and sometimes
+  // the wrong city — so callers use this to flag "approximate" locations.
+  return { lat: latitude, lng: longitude, accuracy: Math.round(accuracy || 0), ...place };
 }
 
 // The device's best GPS fix. A single reading is often 30–100 m off, because
@@ -152,3 +155,26 @@ export function detectPreciseLocation({ targetMeters = 10, maxWaitMs = 20000, on
     );
   });
 }
+
+// Find a place by name (for people on a computer, which usually has no GPS).
+// Biased towards Jammu & Kashmir but not limited to it.
+export async function searchPlaces(query, signal) {
+  const q = String(query || "").trim();
+  if (q.length < 3) return [];
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&accept-language=en&countrycodes=in&limit=6&viewbox=73.3,35.0,77.2,32.2&q=${encodeURIComponent(q)}`,
+    { headers: { Accept: "application/json" }, signal }
+  );
+  if (!res.ok) throw new Error("Search failed");
+  const rows = await res.json();
+  return rows.map((r) => ({
+    id: r.place_id,
+    lat: Number(r.lat),
+    lng: Number(r.lon),
+    label: String(r.display_name || "").split(",").slice(0, 3).join(",").trim(),
+    sub: String(r.display_name || "").split(",").slice(3, 6).join(",").trim(),
+  }));
+}
+
+// A location is "approximate" when the device could only guess it (city-level).
+export const APPROXIMATE_OVER_METERS = 1500;
