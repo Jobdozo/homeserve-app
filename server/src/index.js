@@ -18,6 +18,7 @@ const rt = require("./realtime");
 const csvImport = require("./csvImport");
 const auth = require("./auth");
 const agents = require("./agents");
+const inbox = require("./inbox");
 access.setAgentHooks({ resolve: agents.resolveAgent, policy: agents.policy });
 // Per-request permission checks for staff sign-ins (admin roles, provider staff).
 auth.setAdminGuard(access.guard);
@@ -1962,7 +1963,11 @@ const agentOnly = [
 ];
 
 app.get("/api/agents/self", agentOnly, crm(async (req, res) => {
-  res.json({ agent: { id: req.admin.agentId, name: req.admin.name, roleName: req.admin.roleName, permissions: req.admin.permissions }, ...agents.status(req.admin.agentId) });
+  res.json({
+    agent: { id: req.admin.agentId, name: req.admin.name, roleName: req.admin.roleName, permissions: req.admin.permissions },
+    ...agents.status(req.admin.agentId),
+    supportKnowledge: agents.getConfig().supportKnowledge,
+  });
 }));
 
 app.post("/api/agents/heartbeat", agentOnly, crm(async (req, res) => res.json(agents.heartbeat(req.admin.agentId, req.body || {}))));
@@ -2005,10 +2010,13 @@ app.post("/api/agents/notify-owner", agentOnly, crm(async (req, res) => {
 app.get("/api/admin/ai/config", adminOnly, crm(async (req, res) => res.json(agents.getConfig())));
 app.patch("/api/admin/ai/config", adminOnly, crm(async (req, res) => {
   const before = agents.getConfig();
-  const cfg = agents.setConfig({ enabled: req.body?.enabled }, actorOf(req));
+  const cfg = agents.setConfig({ enabled: req.body?.enabled, supportKnowledge: req.body?.supportKnowledge }, actorOf(req));
   if (before.enabled !== cfg.enabled) {
     audit(req, "ai.config", "ai", "config", "AI agents", [{ field: "enabled", from: before.enabled, to: cfg.enabled }]);
     await store.logActivity("ai", `All AI agents switched ${cfg.enabled ? "on" : "off"} by ${actorOf(req)}`).catch(() => {});
+  }
+  if (before.supportKnowledge !== cfg.supportKnowledge) {
+    audit(req, "ai.knowledge", "ai", "config", "Support knowledge", [{ field: "supportKnowledge", from: `${before.supportKnowledge.length} chars`, to: `${cfg.supportKnowledge.length} chars` }]);
   }
   res.json(cfg);
 }));
@@ -2088,6 +2096,45 @@ app.post("/api/admin/ai/actions/:id/reject", adminOnly, crm(async (req, res) => 
   const action = agents.rejectAction(req.params.id, req.body?.note, actorOf(req));
   audit(req, "ai.action.reject", "aiAction", action.id, action.title, [{ field: "proposedBy", from: null, to: action.agentName }]);
   res.json(action);
+}));
+
+// ---- WhatsApp inbox (inbound via MSG91 webhook; see inbox.js) ----
+// Configure in MSG91: WhatsApp -> Webhook (New) -> "On Inbound Request Received",
+// URL https://<api host>/api/webhooks/whatsapp/msg91, and add a header
+// x-webhook-secret: <WHATSAPP_WEBHOOK_SECRET>. Requests without it are refused.
+const WEBHOOK_SECRET = process.env.WHATSAPP_WEBHOOK_SECRET || "";
+const sameSecret = (given) => {
+  const a = Buffer.from(String(given || ""));
+  const b = Buffer.from(WEBHOOK_SECRET);
+  return a.length === b.length && require("crypto").timingSafeEqual(a, b);
+};
+app.post("/api/webhooks/whatsapp/msg91", ah(async (req, res) => {
+  if (!WEBHOOK_SECRET) return res.status(503).json({ error: "Inbound WhatsApp isn't configured" });
+  if (!sameSecret(req.headers["x-webhook-secret"])) return res.status(401).json({ error: "Unauthorized" });
+  const added = await inbox.ingest(req.body, { businessNumber: process.env.MSG91_WHATSAPP_NUMBER });
+  res.json({ received: added.length });
+}));
+
+app.get("/api/admin/inbox", adminOnly, crm(async (req, res) => {
+  res.json(inbox.listConversations({ queue: req.query.queue, mode: req.query.mode, q: req.query.q, limit: req.query.limit }));
+}));
+app.get("/api/admin/inbox/:id", adminOnly, crm(async (req, res) => {
+  const found = inbox.getConversation(req.params.id, { limit: req.query.limit });
+  if (!found) return res.status(404).json({ error: "Conversation not found" });
+  res.json(found);
+}));
+app.post("/api/admin/inbox/:id/reply", adminOnly, crm(async (req, res) => {
+  const msg = await inbox.reply(req.params.id, req.body?.text, actorOf(req), { agent: Boolean(req.admin.agent) });
+  if (!msg) return res.status(404).json({ error: "Conversation not found" });
+  res.status(201).json(msg);
+}));
+app.post("/api/admin/inbox/:id/mode", adminOnly, crm(async (req, res) => {
+  const conv = inbox.setMode(req.params.id, req.body?.mode, req.body?.reason, actorOf(req));
+  if (!conv) return res.status(404).json({ error: "Conversation not found" });
+  if (req.admin.agent && conv.mode === "human") {
+    await store.logActivity("ai", `${req.admin.name} handed a WhatsApp chat (${conv.name || conv.phone}) to the team: ${conv.handoffReason || "needs a person"}`).catch(() => {});
+  }
+  res.json(conv);
 }));
 
 // ---- Live Service Provider Monitoring ----

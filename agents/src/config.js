@@ -26,6 +26,21 @@ module.exports = {
     checkEveryMs: 5 * 60 * 1000,
   },
 
+  complaints: {
+    key: process.env.AGENT_KEY_COMPLAINTS || "",
+    everyMs: num(process.env.COMPLAINTS_CHECK_EVERY_SEC, 180) * 1000,
+    maxPerRun: num(process.env.COMPLAINTS_MAX_PER_RUN, 10),
+    lookbackDays: num(process.env.COMPLAINTS_LOOKBACK_DAYS, 7),
+    proposeReplies: bool(process.env.COMPLAINTS_PROPOSE_REPLIES, true),
+    minConfidence: num(process.env.COMPLAINTS_MIN_CONFIDENCE, 0.6),
+  },
+
+  support: {
+    key: process.env.AGENT_KEY_SUPPORT || "",
+    everyMs: num(process.env.SUPPORT_CHECK_EVERY_SEC, 20) * 1000,
+    maxPerRun: num(process.env.SUPPORT_MAX_PER_RUN, 10),
+  },
+
   operations: {
     key: process.env.AGENT_KEY_OPERATIONS || "",
     everyMs: num(process.env.OPS_CHECK_EVERY_SEC, 300) * 1000,

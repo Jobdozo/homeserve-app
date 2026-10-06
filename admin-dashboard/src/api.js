@@ -275,6 +275,11 @@ export const api = {
     request(`/admin/ai/feed?${new URLSearchParams({ ...(kind ? { kind } : {}), ...(unacked ? { unacked: "1" } : {}) })}`),
   ackAiFeed: (id) => request(`/admin/ai/feed/${encodeURIComponent(id)}/ack`, { method: "POST" }),
 
+  listInbox: (params = {}) => request(`/admin/inbox?${new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v)))}`),
+  getInboxConversation: (id) => request(`/admin/inbox/${encodeURIComponent(id)}?limit=200`),
+  replyInbox: (id, text) => request(`/admin/inbox/${encodeURIComponent(id)}/reply`, { method: "POST", body: JSON.stringify({ text }) }),
+  setInboxMode: (id, mode, reason) => request(`/admin/inbox/${encodeURIComponent(id)}/mode`, { method: "POST", body: JSON.stringify({ mode, reason }) }),
+
   listOffers: () => request("/admin/offers"),
   createOffer: (data) => request("/admin/offers", { method: "POST", body: JSON.stringify(data) }),
   updateOffer: (id, patch) => request(`/admin/offers/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),

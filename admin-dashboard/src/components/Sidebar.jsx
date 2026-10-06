@@ -20,6 +20,7 @@ import {
   DownloadIcon,
   RequestIcon,
   BotIcon,
+  ChatIcon,
 } from "./icons";
 
 const sections = [
@@ -41,6 +42,7 @@ const sections = [
       { label: "Reviews & Ratings", icon: StarIcon, to: "/reviews", perm: "reviews.view" },
       { label: "Complaints & Disputes", icon: AlertIcon, to: "/complaints", perm: "complaints.view" },
       { label: "Notifications", icon: BellIcon, to: "/notifications", perm: "notifications.view" },
+      { label: "WhatsApp Inbox", icon: ChatIcon, to: "/inbox", perm: "inbox.view" },
     ],
   },
   {

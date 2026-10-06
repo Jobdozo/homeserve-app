@@ -44,7 +44,7 @@ const DENY_MODULES = ["users", "settings", "data", "ai"];
 // Read-style actions an agent keeps from its role.
 const READ_ACTIONS = ["view", "export"];
 // The only writes an agent may make directly (if its role has them).
-const AGENT_WRITES = ["complaints.add", "complaints.edit", "notifications.add"];
+const AGENT_WRITES = ["complaints.add", "complaints.edit", "notifications.add", "inbox.add"];
 // Per-agent ceiling on direct notifications (in-app messages to one person).
 const NOTIFY_PER_HOUR = 30;
 
@@ -53,18 +53,33 @@ const PROPOSABLE = [
   ["provider.verification", "PATCH", /^\/providers\/[A-Za-z0-9_-]+\/verification$/],
   ["refund.decision", "PATCH", /^\/admin\/refund-claims\/[A-Za-z0-9_-]+$/],
   ["complaint.status", "POST", /^\/admin\/complaints\/[A-Za-z0-9_-]+\/status$/],
+  ["complaint.message", "POST", /^\/admin\/complaints\/[A-Za-z0-9_-]+\/entries$/],
   ["provider.warn", "POST", /^\/admin\/providers\/[A-Za-z0-9_-]+\/warn$/],
   ["notification.broadcast", "POST", /^\/admin\/notifications\/broadcast$/],
 ];
 
-// ---- config (global kill switch) ----
+// ---- config (global kill switch + what the support agent may tell customers) ----
+const MAX_KNOWLEDGE = 8000;
+
 function getConfig() {
   const row = jsonStore.readAll(CONFIG)[0];
-  return { enabled: row ? row.enabled !== false : true, updatedAt: row?.updatedAt || null, updatedBy: row?.updatedBy || null };
+  return {
+    enabled: row ? row.enabled !== false : true,
+    supportKnowledge: row?.supportKnowledge || "",
+    updatedAt: row?.updatedAt || null,
+    updatedBy: row?.updatedBy || null,
+  };
 }
 
-function setConfig({ enabled }, actor) {
-  const row = { id: "config", enabled: Boolean(enabled), updatedAt: nowIso(), updatedBy: actor };
+function setConfig(patch, actor) {
+  const current = jsonStore.readAll(CONFIG)[0] || { id: "config", enabled: true };
+  const row = { ...current, id: "config", updatedAt: nowIso(), updatedBy: actor };
+  if (patch.enabled !== undefined) row.enabled = Boolean(patch.enabled);
+  if (patch.supportKnowledge !== undefined) {
+    const text = String(patch.supportKnowledge || "");
+    if (text.length > MAX_KNOWLEDGE) throw fail(400, `Support knowledge is limited to ${MAX_KNOWLEDGE} characters`);
+    row.supportKnowledge = text;
+  }
   jsonStore.writeAll(CONFIG, [row]);
   return getConfig();
 }
@@ -231,6 +246,14 @@ function policy(req, admin, path) {
   }
   if (req.method === "POST" && /^\/admin\/complaints\/[^/]+\/status$/.test(path) && ["resolved", "closed"].includes(body.status)) {
     return { status: 403, error: "AI agents can't resolve or close complaints — propose it for approval instead" };
+  }
+  // Internal notes are fine; anything sent to a customer/provider from a complaint is proposed.
+  if (req.method === "POST" && /^\/admin\/complaints\/[^/]+\/entries$/.test(path) && body.type !== "note") {
+    return { status: 403, error: "AI agents can only add internal notes to complaints — propose messages for approval instead" };
+  }
+  // Agents can hand a chat to people, never take one back from them.
+  if (req.method === "POST" && /^\/admin\/inbox\/[^/]+\/mode$/.test(path) && body.mode !== "human") {
+    return { status: 403, error: "Only a person can hand a conversation back to the AI" };
   }
   return null;
 }

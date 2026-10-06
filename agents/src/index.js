@@ -10,10 +10,14 @@ const log = require("./log");
 const { TikdumClient, AgentSwitchedOff } = require("./tikdum");
 const operations = require("./operations");
 const reporting = require("./reporting");
+const complaints = require("./complaints");
+const support = require("./support");
 
 const AGENTS = [
   { name: "operations", key: config.operations.key, everyMs: config.operations.everyMs, run: (c, opts) => operations.tick(c, log, opts) },
   { name: "reporting", key: config.reporting.key, everyMs: config.reporting.checkEveryMs, run: (c, opts) => reporting.tick(c, log, opts) },
+  { name: "complaints", key: config.complaints.key, everyMs: config.complaints.everyMs, run: (c) => complaints.tick(c, log) },
+  { name: "support", key: config.support.key, everyMs: config.support.everyMs, run: (c) => support.tick(c, log) },
 ];
 
 async function runOnce(agent, client, opts) {
@@ -40,7 +44,7 @@ async function main() {
   const once = process.argv.includes("--once");
   const active = AGENTS.filter((a) => a.key);
   if (active.length === 0) {
-    log.error("worker", "No agent keys set (AGENT_KEY_OPERATIONS / AGENT_KEY_REPORTING). Create agents in Admin → AI Agents first.");
+    log.error("worker", "No agent keys set (AGENT_KEY_OPERATIONS / _REPORTING / _COMPLAINTS / _SUPPORT). Create agents in Admin → AI Agents first.");
     process.exit(1);
   }
   for (const a of AGENTS.filter((x) => !x.key)) log.info("worker", `${a.name} agent not configured — skipped`);

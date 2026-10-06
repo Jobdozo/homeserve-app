@@ -235,3 +235,10 @@ export const BotIcon = (p) => (
     <path d="M2 13v2M22 13v2" />
   </svg>
 );
+
+export const ChatIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M20 11.5a7.5 7.5 0 0 1-11.2 6.5L4 19.5l1.5-4.5A7.5 7.5 0 1 1 20 11.5z" />
+    <path d="M9 11.5h.01M12.5 11.5h.01M16 11.5h.01" />
+  </svg>
+);

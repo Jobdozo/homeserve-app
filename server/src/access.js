@@ -34,7 +34,31 @@ const MODULES = [
   { key: "audit", label: "Audit logs", actions: ["view", "export"] },
   { key: "users", label: "User management", actions: ["view", "add", "edit", "delete", "manage"] },
   { key: "ai", label: "AI agents (approvals, alerts, agent accounts)", actions: ["view", "approve", "manage"] },
+  { key: "inbox", label: "WhatsApp inbox (customer chats)", actions: ["view", "add", "manage"] },
 ];
+
+// One-time grants for permissions added after roles were first saved (saved
+// roles don't pick up new modules by themselves). Each runs once, ever.
+const ROLE_MIGRATIONS = [
+  { id: "2026-10-inbox", grant: { support: ["inbox.view", "inbox.add"], admin: ["inbox.view", "inbox.add"] } },
+];
+function runRoleMigrations(roles) {
+  const done = new Set(jsonStore.readAll("accessMigrations").map((m) => m.id));
+  for (const mig of ROLE_MIGRATIONS) {
+    if (done.has(mig.id)) continue;
+    for (const [roleId, perms] of Object.entries(mig.grant)) {
+      const role = roles.find((r) => r.id === roleId);
+      if (!role || role.locked) continue;
+      const next = [...new Set([...(role.permissions || []), ...perms])];
+      if (next.length !== role.permissions.length) {
+        jsonStore.update(ROLES, role.id, { permissions: next });
+        role.permissions = next;
+      }
+    }
+    jsonStore.insert("accessMigrations", { id: mig.id, at: new Date().toISOString() });
+  }
+  return roles;
+}
 
 const all = (module, actions) => actions.map((a) => `${module}.${a}`);
 const everything = MODULES.flatMap((m) => all(m.key, m.actions.filter((a) => a !== "manage")));
@@ -94,6 +118,7 @@ function listRoles() {
       jsonStore.insert(ROLES, { id: r.key, name: r.name, description: r.description, permissions: r.permissions, system: true, locked: Boolean(r.locked), createdAt: new Date().toISOString() })
     );
   }
+  roles = runRoleMigrations(roles);
   const users = jsonStore.readAll(USERS);
   return roles.map((r) => ({ ...r, userCount: users.filter((u) => u.roleId === r.id).length }));
 }
@@ -259,6 +284,7 @@ const RULES = [
   [/^\/admin\/ai\/feed\/[^/]+\/ack$/, () => "ai.view"],
   [/^\/admin\/ai\/(actions|feed)(\/|$)/, () => "ai.view"],
   [/^\/admin\/ai\//, (m) => (m === "GET" ? "ai.view" : "ai.manage")],
+  [/^\/admin\/inbox(\/|$)/, (m) => (m === "GET" ? "inbox.view" : "inbox.add")],
   [/^\/admin\/(users|roles)(\/|$)/, (m) => `users.${byMethod(m)}`],
   [/^\/admin\/permissions/, () => "users.view"],
   [/^\/admin\/providers\/[^/]+\/wallet\/recharge$/, () => "payments.manage"],

@@ -65,6 +65,7 @@ export default function AiAgentsPage() {
             ["approvals", "Approvals"],
             ["feed", "Alerts & reports"],
             ["agents", "Agents"],
+            ["knowledge", "Support knowledge"],
           ].map(([key, label]) => (
             <button key={key} onClick={() => setTab(key)} className={`rounded-lg px-4 py-1.5 text-[12.5px] font-semibold ${tab === key ? "bg-brand text-white" : "text-gray-500"}`}>
               {label}
@@ -86,6 +87,61 @@ export default function AiAgentsPage() {
       {tab === "approvals" && <ApprovalsPanel canDecide={can("ai.approve")} />}
       {tab === "feed" && <FeedPanel />}
       {tab === "agents" && <AgentsPanel canManage={can("ai.manage")} />}
+      {tab === "knowledge" && config && <KnowledgePanel config={config} onSaved={setConfig} canEdit={can("ai.manage")} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- knowledge
+
+const KNOWLEDGE_TEMPLATE = `Support hours: 8 AM – 9 PM, every day.
+Areas we serve: Jammu city (PIN codes ...).
+How to cancel a booking: My Bookings → open the booking → Cancel. Free until the provider accepts.
+How to reschedule: ...
+Payments: customers pay the provider directly after the job (cash/UPI).
+Refunds: never promised by the assistant — a team member reviews every request.
+Becoming a provider: download "Tikdum Business" from the Play Store and sign up with your mobile number.`;
+
+function KnowledgePanel({ config, onSaved, canEdit }) {
+  const [text, setText] = useState(config.supportKnowledge || "");
+  const [saving, setSaving] = useState(false);
+  const run = useRun();
+  const dirty = text !== (config.supportKnowledge || "");
+  const save = async () => {
+    setSaving(true);
+    const out = await run(() => api.setAiConfig({ supportKnowledge: text }), "Support knowledge saved");
+    if (out) onSaved(out);
+    setSaving(false);
+  };
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-card">
+      <h2 className="text-[14px] font-bold text-gray-900">What the WhatsApp support agent may tell customers</h2>
+      <p className="mb-3 text-[12px] text-gray-500">
+        The agent answers only from this text and the customer's own bookings. Anything not covered here goes to your team. Keep it factual: hours, areas, how to cancel or reschedule in the app, payment rules. Don't put phone numbers, passwords or internal notes here.
+      </p>
+      <textarea
+        className={`${inputCls} min-h-[320px] font-mono text-[12px]`}
+        value={text}
+        maxLength={8000}
+        disabled={!canEdit}
+        placeholder={KNOWLEDGE_TEMPLATE}
+        onChange={(e) => setText(e.target.value)}
+      />
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[11px] text-gray-400">{text.length} / 8000 characters</span>
+        {canEdit && (
+          <div className="flex gap-2">
+            {!text && (
+              <button className={ghostCls} onClick={() => setText(KNOWLEDGE_TEMPLATE)}>
+                Start from example
+              </button>
+            )}
+            <button className={btnCls} disabled={!dirty || saving} onClick={save}>
+              Save
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

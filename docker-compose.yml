@@ -21,6 +21,8 @@ services:
       MSG91_OTP_TEMPLATE: ${MSG91_OTP_TEMPLATE}
       MSG91_OTP_TEMPLATE_LANG: ${MSG91_OTP_TEMPLATE_LANG}
       MSG91_OTP_HAS_BUTTON: ${MSG91_OTP_HAS_BUTTON}
+      # Shared secret MSG91 sends as the x-webhook-secret header on inbound WhatsApp.
+      WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
       VAPID_SUBJECT: ${VAPID_SUBJECT}
@@ -83,6 +85,8 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-4-5-20251001}
       REPORT_HOUR_IST: ${REPORT_HOUR_IST:-9}
+      AGENT_KEY_COMPLAINTS: ${AGENT_KEY_COMPLAINTS}
+      AGENT_KEY_SUPPORT: ${AGENT_KEY_SUPPORT}
       AGENT_STATE_DIR: /app/state
     volumes:
       - /root/tikdum-data/agents-state:/app/state

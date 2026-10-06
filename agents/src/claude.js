@@ -42,4 +42,31 @@ async function complete(client, { system, prompt, maxTokens = 600 }) {
   return text;
 }
 
-module.exports = { complete, BudgetExceeded, costOf };
+// Asks for a JSON object and parses the first {...} block in the answer.
+// Returns null when the model didn't produce valid JSON (callers then fall
+// back to handing the item to a person).
+async function completeJson(client, opts) {
+  const text = await complete(client, opts);
+  return parseJsonObject(text);
+}
+
+function parseJsonObject(text) {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end <= start) return null;
+  try {
+    const v = JSON.parse(text.slice(start, end + 1));
+    return v && typeof v === "object" && !Array.isArray(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+// Wraps text written by customers/providers so the model can tell it apart
+// from instructions. Closing tags inside the text are neutralised.
+function untrusted(tag, text) {
+  const clean = String(text ?? "").replace(new RegExp(`</?${tag}[^>]*>`, "gi"), "[removed]").slice(0, 4000);
+  return `<${tag}>\n${clean}\n</${tag}>`;
+}
+
+module.exports = { complete, completeJson, parseJsonObject, untrusted, BudgetExceeded, costOf };
