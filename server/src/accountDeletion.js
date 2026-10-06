@@ -14,6 +14,70 @@ const { UPLOADS_DIR } = require("./uploads");
 const { query, mutate } = require("./dataconnect");
 
 const DELETED = "deletedAccounts";
+const FEEDBACK = "deletionFeedback";
+
+// Why people leave. Shown as a pick-list when deleting; the admin team reads it
+// to see what to fix. Contact details are kept ONLY when the person ticks the box
+// agreeing we may get in touch — otherwise the record has the reason but no name or number.
+const REASONS = {
+  found_better: "Found a better service",
+  not_needed: "Don't need the app any more",
+  bad_service: "Bad experience with a provider",
+  price: "Prices too high",
+  app_issues: "App problems or bugs",
+  notifications: "Too many messages or notifications",
+  privacy: "Privacy concerns",
+  other: "Other",
+};
+
+function cleanFeedback(fb) {
+  const reason = REASONS[fb?.reason] ? fb.reason : "";
+  const note = String(fb?.note || "").trim().slice(0, 500);
+  return { reason, note, contactOk: fb?.contactOk === true };
+}
+
+function recordFeedback({ accountId, role, name, phone, extra, bookings, completed }, fb) {
+  const { reason, note, contactOk } = cleanFeedback(fb);
+  jsonStore.insert(FEEDBACK, {
+    accountId,
+    role,
+    at: new Date().toISOString(),
+    reason,
+    reasonLabel: REASONS[reason] || "No reason given",
+    note,
+    contactOk,
+    // Only with the person's agreement — see REASONS comment above.
+    name: contactOk ? name || null : null,
+    phone: contactOk ? phone || null : null,
+    detail: contactOk ? extra || null : null,
+    bookings: bookings || 0,
+    completed: completed || 0,
+    status: "new",
+    followUpNote: "",
+  });
+}
+
+function listFeedback() {
+  return jsonStore.readAll(FEEDBACK).sort((a, b) => new Date(b.at) - new Date(a.at));
+}
+
+const FOLLOW_UP = ["new", "contacted", "no-contact"];
+
+function updateFeedback(id, { status, followUpNote }, actor) {
+  const r = jsonStore.readAll(FEEDBACK).find((x) => x.id === id);
+  if (!r) return undefined;
+  const patch = {};
+  if (status !== undefined) {
+    if (!FOLLOW_UP.includes(status)) throw fail(400, "Unknown status");
+    patch.status = status;
+    if (status === "contacted") {
+      patch.contactedAt = new Date().toISOString();
+      patch.contactedBy = actor || null;
+    }
+  }
+  if (followUpNote !== undefined) patch.followUpNote = String(followUpNote).slice(0, 1000);
+  return jsonStore.update(FEEDBACK, id, patch);
+}
 const OPEN = ["Pending", "Accepted", "In Progress"];
 let revoked = null; // Set of account ids
 
@@ -57,7 +121,7 @@ async function scrubBookingDetails(bookingIds) {
   }
 }
 
-async function deleteCustomerAccount(customerId) {
+async function deleteCustomerAccount(customerId, feedback) {
   const customer = await store.getCustomerById(customerId);
   if (!customer || isDeleted(customerId)) throw fail(404, "Account not found");
   const bookings = await store.listBookings({ customerId });
@@ -73,13 +137,17 @@ async function deleteCustomerAccount(customerId) {
   jsonStore.readAll("referralRedemptions").filter((r) => r.refereeId === customerId).forEach((r) => jsonStore.remove("referralRedemptions", r.id));
   dropDevices("customer", customerId);
   markDeleted(customerId, "customer");
+  recordFeedback(
+    { accountId: customerId, role: "customer", name: customer.name, phone: customer.phone, bookings: bookings.length, completed: bookings.filter((b) => b.status === "Completed").length },
+    feedback
+  );
   store.clearCache("customers");
   store.clearCache("providers");
   await store.logActivity("customer", "A customer deleted their account");
   return true;
 }
 
-async function deleteProviderAccount(providerId) {
+async function deleteProviderAccount(providerId, feedback) {
   const provider = await store.getProvider(providerId);
   if (!provider || isDeleted(providerId)) throw fail(404, "Account not found");
   const bookings = await store.listBookings({ providerId });
@@ -109,10 +177,22 @@ async function deleteProviderAccount(providerId) {
   jsonStore.readAll("providerAds").filter((a) => a.providerId === providerId && a.status !== "stopped").forEach((a) => jsonStore.update("providerAds", a.id, { status: "stopped" }));
   dropDevices("provider", providerId);
   markDeleted(providerId, "provider");
+  recordFeedback(
+    {
+      accountId: providerId,
+      role: "provider",
+      name: provider.name,
+      phone: provider.phone,
+      extra: [provider.businessName, provider.category].filter(Boolean).join(" · ") || null,
+      bookings: bookings.length,
+      completed: bookings.filter((b) => b.status === "Completed").length,
+    },
+    feedback
+  );
   store.clearCache("providers");
   store.clearCache("service");
   await store.logActivity("provider", `A provider deleted their account (${provider.name})`);
   return true;
 }
 
-module.exports = { isDeleted, deleteCustomerAccount, deleteProviderAccount };
+module.exports = { isDeleted, deleteCustomerAccount, deleteProviderAccount, listFeedback, updateFeedback, REASONS };

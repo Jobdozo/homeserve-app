@@ -23,6 +23,7 @@ auth.setProviderGuard(staff.guard);
 auth.setRevocationCheck(accountDeletion.isDeleted);
 const { sendOtpViaWhatsApp, isConfigured: whatsappConfigured } = require("./whatsapp");
 const otpGuard = require("./otpGuard");
+const loginAttempts = require("./loginAttempts");
 const liveLocation = require("./liveLocation");
 const push = require("./push");
 const fcm = require("./fcm");
@@ -246,6 +247,7 @@ app.post("/api/auth/otp/request", ah(async (req, res) => {
     return res.status(400).json({ error: "phone and a valid role are required" });
   }
   if (role === "admin" && !access.resolveByPhone(phone)) {
+    loginAttempts.recordRequest({ phone, role, ip: otpGuard.clientIp(req), outcome: "not-admin" });
     return res.status(403).json({ error: "This number is not registered as an admin" });
   }
   const ip = otpGuard.clientIp(req);
@@ -264,6 +266,7 @@ app.post("/api/auth/otp/request", ah(async (req, res) => {
   });
   if (delivered) {
     otpGuard.log({ phone, role, ip, result: "sent" });
+    loginAttempts.recordRequest({ phone, role, ip, outcome: "sent" });
     return res.json({ sent: true });
   }
   // The code is only ever shown on screen when no WhatsApp provider is set up
@@ -272,10 +275,12 @@ app.post("/api/auth/otp/request", ah(async (req, res) => {
   // number whose delivery fails.
   if (!whatsappConfigured) {
     otpGuard.log({ phone, role, ip, result: "dev-code" });
+    loginAttempts.recordRequest({ phone, role, ip, outcome: "dev-code" });
     return res.json({ sent: true, devOtp: code });
   }
   auth.clearOtp(role, phone);
   otpGuard.log({ phone, role, ip, result: "send-failed" });
+  loginAttempts.recordRequest({ phone, role, ip, outcome: "send-failed" });
   res.status(502).json({
     error: "We couldn't send the code on WhatsApp. Make sure this number has WhatsApp, then try again in a minute.",
   });
@@ -291,7 +296,11 @@ app.post("/api/auth/otp/verify", ah(async (req, res) => {
     return res.status(400).json({ error: "phone, code and a valid role are required" });
   }
   const result = auth.verifyOtp(role, phone, code);
-  if (!result.ok) return res.status(400).json({ error: result.error });
+  if (!result.ok) {
+    loginAttempts.recordWrongCode(role, phone);
+    return res.status(400).json({ error: result.error });
+  }
+  loginAttempts.recordVerified(role, phone);
 
   if (role === "admin") {
     const admin = access.resolveByPhone(phone);
@@ -1615,6 +1624,34 @@ app.get("/api/admin/overview", auth.requireAuth("admin"), ah(async (req, res) =>
   res.json(await store.getAdminOverview());
 }));
 
+// People who asked for a login code but never got an account (and numbers poking
+// at the admin login), so the team can follow up.
+app.get("/api/admin/customers/login-attempts", auth.requireAuth("admin"), ah(async (req, res) => {
+  const hasAccount = async (role, phone) => {
+    if (role === "admin") return Boolean(access.resolveByPhone(phone));
+    if (role === "provider") return Boolean(await store.getProviderByPhone(phone));
+    return Boolean(await store.getCustomerByPhone(phone));
+  };
+  res.json(await loginAttempts.listUnregistered(hasAccount));
+}));
+
+app.patch("/api/admin/customers/login-attempts/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const row = loginAttempts.update(req.params.id, { status: req.body?.status, note: req.body?.note }, actorOf(req));
+  if (!row) return res.status(404).json({ error: "Record not found" });
+  res.json(row);
+}));
+
+// Accounts people deleted: why they left, and — only if they agreed — how to reach them.
+app.get("/api/admin/customers/deleted-accounts", auth.requireAuth("admin"), ah(async (req, res) => {
+  res.json(accountDeletion.listFeedback());
+}));
+
+app.patch("/api/admin/customers/deleted-accounts/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const row = accountDeletion.updateFeedback(req.params.id, { status: req.body?.status, followUpNote: req.body?.followUpNote }, actorOf(req));
+  if (!row) return res.status(404).json({ error: "Record not found" });
+  res.json(row);
+}));
+
 app.get("/api/admin/customers", auth.requireAuth("admin"), ah(async (req, res) => {
   res.json(await store.listCustomers());
 }));
@@ -1784,15 +1821,19 @@ const deleteAccountRoute = (fn) =>
   ah(async (req, res) => {
     if (req.body?.confirm !== "DELETE") return res.status(400).json({ error: 'Send confirm: "DELETE" to delete your account' });
     try {
-      await fn(req.user.id);
+      await fn(req.user.id, {
+        reason: req.body?.reason,
+        note: req.body?.note,
+        contactOk: req.body?.contactOk === true,
+      });
     } catch (e) {
       if (e.status) return res.status(e.status).json({ error: e.message });
       throw e;
     }
     res.status(204).end();
   });
-app.delete("/api/customer/account", auth.requireAuth("customer"), deleteAccountRoute(async (id) => { await accountDeletion.deleteCustomerAccount(id); rt.kick(`customer:${id}`); }));
-app.delete("/api/provider/account", auth.requireAuth("provider"), deleteAccountRoute(async (id) => { await accountDeletion.deleteProviderAccount(id); rt.kick(`provider:${id}`); }));
+app.delete("/api/customer/account", auth.requireAuth("customer"), deleteAccountRoute(async (id, fb) => { await accountDeletion.deleteCustomerAccount(id, fb); rt.kick(`customer:${id}`); }));
+app.delete("/api/provider/account", auth.requireAuth("provider"), deleteAccountRoute(async (id, fb) => { await accountDeletion.deleteProviderAccount(id, fb); rt.kick(`provider:${id}`); }));
 
 // ---- Service provider staff management (the company's own employees) ----
 const staffActor = (req) => (req.staff ? { staff: req.staff, name: req.staff.name } : { owner: true, name: "Owner" });

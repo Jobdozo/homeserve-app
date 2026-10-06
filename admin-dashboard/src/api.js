@@ -128,6 +128,10 @@ export const api = {
 
   getOverview: () => request("/admin/overview"),
   listCustomers: () => request("/admin/customers"),
+  listLoginAttempts: () => request("/admin/customers/login-attempts"),
+  updateLoginAttempt: (id, patch) => request(`/admin/customers/login-attempts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  listDeletedAccounts: () => request("/admin/customers/deleted-accounts"),
+  updateDeletedAccount: (id, patch) => request(`/admin/customers/deleted-accounts/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   getSettings: () => request("/admin/settings"),
   updateSettings: (patch) => request("/admin/settings", { method: "PATCH", body: JSON.stringify(patch) }),
   listActivities: (limit = 20, type) => request(`/activities?limit=${limit}${type ? `&type=${type}` : ""}`),
