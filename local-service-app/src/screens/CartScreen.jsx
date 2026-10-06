@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { api } from "../api";
@@ -7,6 +7,9 @@ import ScreenHeader from "../components/ScreenHeader";
 import { CalendarIcon, ClockIcon, MapPinIcon, XIcon } from "../components/icons";
 import { discountPct } from "../utils/format";
 import CategoryIcon from "../components/CategoryIcon";
+
+// The map (Leaflet) is only needed when a customer opens it, so it loads on demand.
+const LocationPicker = lazy(() => import("../components/LocationPicker"));
 
 export default function CartScreen() {
   const navigate = useNavigate();
@@ -34,6 +37,8 @@ export default function CartScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [placeKey, setPlaceKey] = useState(null);
   const [landmark, setLandmark] = useState("");
+  const [pinned, setPinned] = useState(null); // an exact spot chosen on the map
+  const [picking, setPicking] = useState(false);
   const [availability, setAvailability] = useState(null); // { pin, ids: Set } for the chosen PIN
   const [couponInput, setCouponInput] = useState("");
   const [applyingCoupon, setApplyingCoupon] = useState(false);
@@ -92,6 +97,7 @@ export default function CartScreen() {
   const places = [
     { key: "home", title: "Home", data: customer?.address || null },
     { key: "office", title: "Office", data: customer?.address?.office || null },
+    ...(pinned ? [{ key: "pinned", title: "Pinned on map", data: pinned }] : []),
     { key: "current", title: "Current location", data: location || null },
   ];
   const chosenKey = placeKey || (location ? "current" : customer?.address ? "home" : "current");
@@ -299,16 +305,23 @@ export default function CartScreen() {
                   {!isCurrent && p.data && (
                     <button
                       type="button"
-                      onClick={() => navigate(`/address?slot=${p.key}`)}
+                      onClick={() => (p.key === "pinned" ? setPicking(true) : navigate(`/address?slot=${p.key}`))}
                       className="flex-shrink-0 text-[11.5px] font-semibold text-gray-400"
                     >
-                      Edit
+                      {p.key === "pinned" ? "Adjust" : "Edit"}
                     </button>
                   )}
                 </div>
               );
             })}
           </div>
+          <button
+            type="button"
+            onClick={() => setPicking(true)}
+            className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-brand/50 bg-brand-light/30 py-2.5 text-[12.5px] font-semibold text-brand hover:bg-brand-light/60"
+          >
+            <MapPinIcon width={14} height={14} /> Pin exact location on map
+          </button>
           <div className="mt-2.5">
             <label className="mb-1 block text-[12px] font-semibold text-gray-700">
               House / flat / landmark <span className="font-normal text-gray-400">(optional)</span>
@@ -472,6 +485,19 @@ export default function CartScreen() {
         </p>
       </div>
       </div>
+      {picking && (
+        <Suspense fallback={null}>
+          <LocationPicker
+            initial={pinned}
+            onClose={() => setPicking(false)}
+            onConfirm={(loc) => {
+              setPinned(loc);
+              setPlaceKey("pinned");
+              setPicking(false);
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
 import { MapPinIcon } from "../components/icons";
-import { detectCurrentLocation } from "../utils/geolocation";
+
+// The map (Leaflet) is only needed when a customer opens it, so it loads on demand.
+const LocationPicker = lazy(() => import("../components/LocationPicker"));
 
 const SLOTS = [
   { key: "home", label: "Home" },
@@ -20,7 +22,7 @@ export default function SavedAddressScreen() {
   const [line, setLine] = useState(existing?.line || "");
   const [pincode, setPincode] = useState(existing?.pincode || "");
   const [coords, setCoords] = useState(existing ? { lat: existing.lat, lng: existing.lng } : null);
-  const [detecting, setDetecting] = useState(false);
+  const [picking, setPicking] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -32,22 +34,6 @@ export default function SavedAddressScreen() {
     setPincode(target?.pincode || "");
     setCoords(target ? { lat: target.lat, lng: target.lng } : null);
     setError("");
-  };
-
-  const handleDetect = async () => {
-    setDetecting(true);
-    setError("");
-    try {
-      const loc = await detectCurrentLocation();
-      setLine(loc.line);
-      if (loc.pincode) setPincode(loc.pincode);
-      setCoords({ lat: loc.lat, lng: loc.lng });
-      showToast("Location detected — review and save below");
-    } catch (e) {
-      setError(e.message || "Couldn't detect your location");
-    } finally {
-      setDetecting(false);
-    }
   };
 
   const valid = line.trim().length > 0 && /^\d{4,10}$/.test(pincode.trim());
@@ -113,12 +99,11 @@ export default function SavedAddressScreen() {
 
         <button
           type="button"
-          onClick={handleDetect}
-          disabled={detecting}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-brand/40 bg-brand-light/40 py-3 text-[13px] font-semibold text-brand-dark disabled:opacity-50"
+          onClick={() => setPicking(true)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-brand/40 bg-brand-light/40 py-3 text-[13px] font-semibold text-brand-dark"
         >
           <MapPinIcon width={16} height={16} />
-          {detecting ? "Detecting…" : "Use current location to fill this in"}
+          {coords ? "Adjust the pin on the map" : "Pin exact location on the map"}
         </button>
 
         <div>
@@ -164,6 +149,22 @@ export default function SavedAddressScreen() {
           </button>
         )}
       </form>
+      {picking && (
+        <Suspense fallback={null}>
+          <LocationPicker
+            initial={coords ? { lat: coords.lat, lng: coords.lng, pincode } : null}
+            title={`Pin your ${slot === "office" ? "office" : "home"}`}
+            onClose={() => setPicking(false)}
+            onConfirm={(loc) => {
+              setLine(loc.line);
+              setPincode(loc.pincode);
+              setCoords({ lat: loc.lat, lng: loc.lng });
+              setPicking(false);
+              showToast("Pinned — review and save below");
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
