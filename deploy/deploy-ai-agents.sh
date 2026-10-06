@@ -34,17 +34,17 @@ for k in AGENT_KEY_OPERATIONS AGENT_KEY_REPORTING AGENT_KEY_COMPLAINTS AGENT_KEY
 done
 
 echo "== 3/4 Build & restart (server, admin-dashboard, agents)"
-docker compose up -d --build server admin-dashboard agents
+docker compose -p homeserve up -d --build server admin-dashboard agents
 
 echo "== 4/4 Health check"
 for i in $(seq 1 30); do
   if curl -fsS http://127.0.0.1:4000/api/app-version >/dev/null 2>&1; then break; fi
   sleep 2
 done
-curl -fsS http://127.0.0.1:4000/api/app-version >/dev/null && echo "API: up" || { echo "API: NOT responding — check: docker compose logs --tail=100 server"; exit 1; }
+curl -fsS http://127.0.0.1:4000/api/app-version >/dev/null && echo "API: up" || { echo "API: NOT responding — check: docker compose -p homeserve logs --tail=100 server"; exit 1; }
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"apiKey":"tkag_check"}' http://127.0.0.1:4000/api/agents/token)
 [ "$code" = 401 ] && echo "AI agents API: up" || echo "AI agents API: unexpected status $code"
-docker compose ps
+docker compose -p homeserve ps
 echo
 echo "Done. Next: open admin.tikdum.com -> AI Agents, create the agents, put their keys in .env, then:"
-echo "  docker compose up -d agents && docker compose logs -f agents"
+echo "  docker compose -p homeserve up -d agents && docker compose -p homeserve logs -f agents"
