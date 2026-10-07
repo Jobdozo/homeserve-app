@@ -264,6 +264,7 @@ export const api = {
   getAiConfig: () => request("/admin/ai/config"),
   setAiConfig: (patch) => request("/admin/ai/config", { method: "PATCH", body: JSON.stringify(patch) }),
   listAiAgents: () => request("/admin/ai/agents"),
+  getAiCatalog: () => request("/admin/ai/catalog"),
   createAiAgent: (data) => request("/admin/ai/agents", { method: "POST", body: JSON.stringify(data) }),
   updateAiAgent: (id, patch) => request(`/admin/ai/agents/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
   rotateAiAgentKey: (id) => request(`/admin/ai/agents/${encodeURIComponent(id)}/rotate-key`, { method: "POST" }),

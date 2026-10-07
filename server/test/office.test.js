@@ -76,3 +76,17 @@ test("CEO thread: pending owner messages and WhatsApp reply target", async () =>
   assert.equal(office.whatsappReplyTarget(), "+919876543210");
   assert.equal(inbox.listConversations({}).length, 0);
 });
+
+test("specialist agents: created from a catalog template with team + default instructions", () => {
+  const { TEAMS } = require("../src/agentCatalog");
+  assert.ok(TEAMS.find((t) => t.key === "marketing").roles.some((r) => r.how === "specialist"));
+  const m = agents.createAgent({ name: "Marketing Agent", roleId: "management", kind: "specialist", template: "marketing" }, "t").agent;
+  assert.equal(m.kind, "specialist");
+  assert.equal(m.team, "marketing");
+  assert.match(m.instructions, /Marketing/);
+  const r = agents.resolveAgent(m.id);
+  assert.equal(r.kind, "specialist");
+  assert.equal(r.ceo, false);
+  // still no direct writes beyond the role's safe list
+  assert.ok(!r.permissions.some((p) => /approve|delete|manage/.test(p)));
+});

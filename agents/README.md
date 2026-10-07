@@ -76,3 +76,10 @@ Each agent has a daily USD budget in Admin; when reached it stops calling the AI
 - **Tasks:** Proposed (by the CEO) → To do → In progress → Review → Done. Only people approve proposals and mark tasks done; agents can move their own tasks to In progress/Review.
 - **CEO chat:** one thread between you and the CEO agent. Messages from the owner number(s) in `ADMIN_PHONES` to the business WhatsApp number land here instead of the customer inbox, and the CEO's answer goes back on WhatsApp (within WhatsApp's 24h window).
 - **No agent-to-agent chat:** everything goes through task threads people can see. Daily caps: CEO 10 task proposals, 40 replies; other agents 60 messages; 5 goal proposals per week.
+
+## Teams and specialist agents
+Admin → AI Agents → **Teams** shows the whole organisation (Leadership, Operations, Marketing, Planning, R&D, Engineering), what's running, and an **Add** button for each available role. Role definitions live in `server/src/agentCatalog.js`.
+
+**Specialists** (Marketing, SEO, Business Analyst, Research & Product) are one generic AI worker with different instructions. They only work on tasks assigned to them in **Tasks**: a new task gets a draft and moves to **Review**; move it back to **In progress** with a comment and they revise. They never publish, send or change anything. Put each specialist's key in `AGENT_KEYS_SPECIALISTS` (comma-separated) and restart the agents service.
+
+Not built yet (shown as "Not built yet"): Dispatch, Provider quality, Retention, Fraud (need code), Reviews & reputation (needs Google Business Profile access), and the Engineering team (needs GitHub branch protection + a repo-only token first).

@@ -91,6 +91,7 @@ services:
       AGENT_KEY_VERIFICATION: ${AGENT_KEY_VERIFICATION}
       AGENT_KEY_PAYMENTS: ${AGENT_KEY_PAYMENTS}
       AGENT_KEY_CEO: ${AGENT_KEY_CEO}
+      AGENT_KEYS_SPECIALISTS: ${AGENT_KEYS_SPECIALISTS}
       AGENT_STATE_DIR: /app/state
     volumes:
       - /root/tikdum-data/agents-state:/app/state

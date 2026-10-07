@@ -1969,6 +1969,8 @@ app.get("/api/agents/self", agentOnly, crm(async (req, res) => {
     agent: { id: req.admin.agentId, name: req.admin.name, roleName: req.admin.roleName, permissions: req.admin.permissions },
     ...agents.status(req.admin.agentId),
     supportKnowledge: agents.getConfig().supportKnowledge,
+    kind: req.admin.kind,
+    instructions: req.admin.kind === "specialist" ? req.admin.instructions : undefined,
   });
 }));
 
@@ -2023,6 +2025,7 @@ app.patch("/api/admin/ai/config", adminOnly, crm(async (req, res) => {
   res.json(cfg);
 }));
 
+app.get("/api/admin/ai/catalog", adminOnly, crm(async (req, res) => res.json({ teams: require("./agentCatalog").TEAMS })));
 app.get("/api/admin/ai/agents", adminOnly, crm(async (req, res) => res.json({ agents: agents.listAgents(), proposableTypes: agents.PROPOSABLE_TYPES })));
 app.post("/api/admin/ai/agents", adminOnly, crm(async (req, res) => {
   const out = agents.createAgent(req.body || {}, actorOf(req));
@@ -2188,7 +2191,13 @@ function ceoContext() {
 app.get("/api/agents/office", agentOnly, crm(async (req, res) => {
   if (req.admin.ceo) return res.json({ role: "ceo", ...ceoContext() });
   const mine = office.listTasks({ assigneeType: "agent", assigneeId: req.admin.agentId }).filter((t) => ["open", "in_progress"].includes(t.status));
-  res.json({ role: "agent", tasks: mine.map((t) => ({ ...t, messages: office.listMessages(t.id, { limit: 30 }) })) });
+  const out = { role: "agent", tasks: mine.map((t) => ({ ...t, messages: office.listMessages(t.id, { limit: 30 }) })) };
+  // Specialists draft from the same phone-free company summary the CEO reads.
+  if (req.admin.kind === "specialist" && mine.length) {
+    const c = ceoContext();
+    out.context = { now: c.now, week: c.week, reports: c.reports, alerts: c.alerts, goals: c.goals };
+  }
+  res.json(out);
 }));
 app.post("/api/agents/office/tasks", agentOnly, crm(async (req, res) => {
   const b = req.body || {};

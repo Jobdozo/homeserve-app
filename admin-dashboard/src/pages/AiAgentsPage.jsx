@@ -71,6 +71,7 @@ export default function AiAgentsPage() {
             ["tasks", "Tasks"],
             ["ceo", "CEO chat"],
             ["feed", "Alerts & reports"],
+            ["teams", "Teams"],
             ["agents", "Agents"],
             ["knowledge", "Support knowledge"],
           ].map(([key, label]) => (
@@ -96,6 +97,7 @@ export default function AiAgentsPage() {
       {tab === "ceo" && <CeoChatPanel hasCeo={hasCeo} />}
       {tab === "feed" && <FeedPanel />}
       {tab === "agents" && <AgentsPanel canManage={can("ai.manage")} />}
+      {tab === "teams" && <AgentsPanel canManage={can("ai.manage")} view="teams" />}
       {tab === "knowledge" && config && <KnowledgePanel config={config} onSaved={setConfig} canEdit={can("ai.manage")} />}
     </div>
   );
@@ -339,8 +341,9 @@ function FeedPanel() {
 
 // ------------------------------------------------------------------- agents
 
-function AgentsPanel({ canManage }) {
+function AgentsPanel({ canManage, view = "list" }) {
   const [agents, setAgents] = useState(null);
+  const [catalog, setCatalog] = useState(null);
   const [roles, setRoles] = useState([]);
   const [editing, setEditing] = useState(null);
   const [newKey, setNewKey] = useState(null); // { name, apiKey }
@@ -350,6 +353,7 @@ function AgentsPanel({ canManage }) {
   useEffect(() => {
     load();
     api.listRoles().then((r) => setRoles(r.filter((x) => !["super_admin", "admin"].includes(x.id)))).catch(() => {});
+    api.getAiCatalog().then((d) => setCatalog(d.teams)).catch(() => setCatalog([]));
   }, []);
 
   const save = async (form) => {
@@ -374,6 +378,23 @@ function AgentsPanel({ canManage }) {
     await run(() => api.deleteAiAgent(a.id), "Agent deleted");
     load();
   };
+
+  const addFromRole = (role, team) =>
+    setEditing({
+      name: role.name, description: role.description, roleId: role.role, template: role.key, team,
+      kind: role.how === "ceo" ? "ceo" : role.how === "specialist" ? "specialist" : "standard",
+      instructions: role.instructions || "", dailyBudgetUsd: role.how === "rules" ? 0 : 1,
+    });
+
+  if (view === "teams") {
+    return (
+      <>
+        <TeamsView catalog={catalog} agents={agents} canManage={canManage} onAdd={addFromRole} onEdit={setEditing} />
+        {editing && <AgentModal agent={editing} roles={roles} onClose={() => setEditing(null)} onSave={save} />}
+        {newKey && <KeyModal {...newKey} onClose={() => setNewKey(null)} />}
+      </>
+    );
+  }
 
   return (
     <div className="overflow-hidden rounded-2xl bg-white shadow-card">
@@ -460,7 +481,10 @@ function AgentsPanel({ canManage }) {
 }
 
 function AgentModal({ agent, roles, onClose, onSave }) {
-  const [form, setForm] = useState({ id: agent.id, name: agent.name || "", description: agent.description || "", roleId: agent.roleId || "", dailyBudgetUsd: agent.dailyBudgetUsd ?? 1, kind: agent.kind || "standard" });
+  const [form, setForm] = useState({
+    id: agent.id, name: agent.name || "", description: agent.description || "", roleId: agent.roleId || "", dailyBudgetUsd: agent.dailyBudgetUsd ?? 1,
+    kind: agent.kind || "standard", team: agent.team || "", template: agent.template || undefined, instructions: agent.instructions || "",
+  });
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const submit = async (e) => {
@@ -496,8 +520,25 @@ function AgentModal({ agent, roles, onClose, onSave }) {
           <select className={inputCls} value={form.kind} onChange={set("kind")}>
             <option value="standard">Standard agent</option>
             <option value="ceo">CEO (chief of staff) — reads all reports, proposes tasks, chats with you</option>
+            <option value="specialist">Specialist — drafts work for tasks you assign it (Marketing, SEO, Analyst…)</option>
           </select>
         </div>
+        <div>
+          <label className={labelCls}>Team</label>
+          <select className={inputCls} value={form.team} onChange={set("team")}>
+            <option value="">—</option>
+            {TEAM_OPTIONS.map(([k, l]) => (
+              <option key={k} value={k}>{l}</option>
+            ))}
+          </select>
+        </div>
+        {form.kind === "specialist" && (
+          <div>
+            <label className={labelCls}>Instructions (what this specialist does and how)</label>
+            <textarea className={`${inputCls} min-h-[160px] font-mono text-[11.5px]`} maxLength={6000} value={form.instructions} onChange={set("instructions")} />
+            <p className="mt-1 text-[11px] text-gray-400">It only works on tasks assigned to it in the Tasks tab, and only writes drafts for you to review — it can't publish or send anything.</p>
+          </div>
+        )}
         <div>
           <label className={labelCls}>Daily AI budget (USD)</label>
           <input className={inputCls} type="number" min="0" max="100" step="0.1" value={form.dailyBudgetUsd} onChange={set("dailyBudgetUsd")} />
@@ -551,6 +592,70 @@ function Modal({ title, onClose, children }) {
         </div>
         {children}
       </div>
+    </div>
+  );
+}
+
+const TEAM_OPTIONS = [
+  ["leadership", "Leadership"],
+  ["operations", "Operations"],
+  ["marketing", "Marketing"],
+  ["planning", "Planning"],
+  ["rnd", "R&D"],
+  ["engineering", "Engineering"],
+];
+const HOW = {
+  rules: ["Rules, no AI", "bg-gray-100 text-gray-600"],
+  ai: ["AI", "bg-violet-100 text-violet-700"],
+  ceo: ["CEO", "bg-violet-100 text-violet-700"],
+  specialist: ["Specialist (AI)", "bg-sky-100 text-sky-700"],
+  planned: ["Not built yet", "bg-amber-100 text-amber-700"],
+};
+
+// The org chart: every planned role per team, which ones are running, and
+// one-click "Add" for roles that are available. Agents created before teams
+// existed are matched by name.
+function TeamsView({ catalog, agents, canManage, onAdd, onEdit }) {
+  if (!catalog || !agents) return <p className="rounded-2xl bg-white p-10 text-center text-[12.5px] text-gray-400 shadow-card">Loading…</p>;
+  const findAgent = (role) => agents.find((a) => a.template === role.key) || agents.find((a) => a.name.toLowerCase() === role.name.toLowerCase());
+  return (
+    <div className="space-y-4">
+      <p className="text-[12px] text-gray-500">
+        Your AI organisation. Green = running. "Add" creates the agent (you then put its key on the server). Specialists work on tasks you or the CEO assign in the Tasks tab and only write drafts for review.
+      </p>
+      {catalog.map((team) => {
+        const running = team.roles.filter((r) => findAgent(r)).length;
+        return (
+          <div key={team.key} className="overflow-hidden rounded-2xl bg-white shadow-card">
+            <div className="border-b border-gray-100 px-4 py-3">
+              <p className="text-[14px] font-bold text-gray-900">
+                {team.name} <span className="text-[12px] font-normal text-gray-400">· {running}/{team.roles.length} agents</span>
+              </p>
+              <p className="text-[12px] text-gray-500">{team.description}</p>
+            </div>
+            <ul className="divide-y divide-gray-50">
+              {team.roles.map((r) => {
+                const a = findAgent(r);
+                const [label, cls] = HOW[r.how] || HOW.planned;
+                return (
+                  <li key={r.key} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+                    <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${a ? (a.active ? "bg-emerald-500" : "bg-gray-300") : "bg-gray-200"}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12.5px] font-semibold text-gray-800">
+                        {r.name} <span className={`ml-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>{label}</span>
+                      </p>
+                      <p className="text-[11.5px] text-gray-500">{r.description}</p>
+                      {a && <p className="text-[11px] text-gray-400">{a.active ? "On" : "Off"} · last seen {a.lastSeenAt ? new Date(a.lastSeenAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "numeric", minute: "2-digit" }) : "never (key not on server yet?)"}</p>}
+                    </div>
+                    {canManage && a && <button className={ghostCls} onClick={() => onEdit(a)}>Edit</button>}
+                    {canManage && !a && r.how !== "planned" && <button className={btnCls} onClick={() => onAdd(r, team.key)}>Add</button>}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
     </div>
   );
 }

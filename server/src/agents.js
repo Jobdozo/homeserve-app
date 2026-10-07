@@ -142,7 +142,12 @@ function newKey() {
 // Returns the agent plus its API key — the only time the key is ever visible.
 // kind: "standard", or "ceo" — the one agent that reads every team's reports
 // and proposes tasks/goals on the task board (see office.js). At most one.
-const KINDS_ALLOWED = ["standard", "ceo"];
+// specialist: a generic AI worker that drafts deliverables for tasks assigned
+// to it on the task board (see agents/src/specialist.js and agentCatalog.js).
+const KINDS_ALLOWED = ["standard", "ceo", "specialist"];
+const TEAM_KEYS = ["leadership", "operations", "marketing", "planning", "rnd", "engineering"];
+const cleanTeam = (t) => (TEAM_KEYS.includes(t) ? t : null);
+const cleanInstructions = (v) => String(v || "").slice(0, 6000);
 function cleanKind(kind, exceptId) {
   const k = kind || "standard";
   if (!KINDS_ALLOWED.includes(k)) throw fail(400, "Unknown agent type");
@@ -150,12 +155,13 @@ function cleanKind(kind, exceptId) {
   return k;
 }
 
-function createAgent({ name, roleId, description, dailyBudgetUsd, kind }, actor) {
+function createAgent({ name, roleId, description, dailyBudgetUsd, kind, team, template, instructions }, actor) {
   const clean = String(name || "").trim().slice(0, 50);
   if (!clean) throw fail(400, "Agent name is required");
   if (jsonStore.readAll(AGENTS).some((a) => a.name.toLowerCase() === clean.toLowerCase())) throw fail(409, "An agent with that name already exists");
   cleanRole(roleId);
   const agentKind = cleanKind(kind);
+  const tpl = template ? require("./agentCatalog").roleByKey(String(template)) : null;
   const apiKey = newKey();
   const agent = jsonStore.insert(AGENTS, {
     id: `agt_${crypto.randomBytes(6).toString("hex")}`,
@@ -163,6 +169,9 @@ function createAgent({ name, roleId, description, dailyBudgetUsd, kind }, actor)
     description: String(description || "").trim().slice(0, 200),
     roleId,
     kind: agentKind,
+    team: cleanTeam(team) || tpl?.team || null,
+    template: tpl?.key || null,
+    instructions: cleanInstructions(instructions !== undefined ? instructions : tpl?.instructions),
     active: true,
     dailyBudgetUsd: dailyBudgetUsd === undefined ? DEFAULT_DAILY_BUDGET_USD : cleanBudget(dailyBudgetUsd),
     keyHash: sha256(apiKey),
@@ -188,6 +197,8 @@ function updateAgent(id, input) {
   if (input.active !== undefined) patch.active = Boolean(input.active);
   if (input.dailyBudgetUsd !== undefined) patch.dailyBudgetUsd = cleanBudget(input.dailyBudgetUsd);
   if (input.kind !== undefined) patch.kind = cleanKind(input.kind, id);
+  if (input.team !== undefined) patch.team = cleanTeam(input.team);
+  if (input.instructions !== undefined) patch.instructions = cleanInstructions(input.instructions);
   return publicAgent(jsonStore.update(AGENTS, id, patch));
 }
 
@@ -225,6 +236,8 @@ function resolveAgent(agentId) {
     agent: true,
     agentId: agent.id,
     ceo: agent.kind === "ceo",
+    kind: agent.kind || "standard",
+    instructions: agent.instructions || "",
   };
 }
 

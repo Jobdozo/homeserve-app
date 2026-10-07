@@ -68,6 +68,12 @@ module.exports = {
     maxTasksPerPlan: num(process.env.CEO_MAX_TASKS_PER_PLAN, 5),
   },
 
+  // Specialist agents (Marketing, SEO, Analyst, Research …): one key per agent, comma-separated.
+  specialists: {
+    keys: (process.env.AGENT_KEYS_SPECIALISTS || "").split(",").map((k) => k.trim()).filter(Boolean),
+    everyMs: num(process.env.SPECIALIST_CHECK_EVERY_SEC, 120) * 1000,
+  },
+
   operations: {
     key: process.env.AGENT_KEY_OPERATIONS || "",
     everyMs: num(process.env.OPS_CHECK_EVERY_SEC, 300) * 1000,
