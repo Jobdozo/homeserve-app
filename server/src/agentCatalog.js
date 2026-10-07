@@ -10,6 +10,9 @@
 //   specialist — generic AI worker: picks up tasks assigned to it on the task
 //                board, drafts the deliverable, and moves the task to Review.
 //                It never publishes, sends or changes anything itself.
+//   engineer   — Engineering team on GitHub (agents/src/engineering.js): pull
+//                requests, reviews and issues through the worker's GitHub App.
+//                Never merges or deploys; branch protection enforces it.
 //   planned    — not available yet (needs code or outside access first)
 const SPECIALIST_RULES = `You are an AI specialist at Tikdum, a home-services marketplace in Jammu & Kashmir, India (customers book local providers: plumbers, electricians, cleaners and more, via the Tikdum app and tikdum.com).
 You work on ONE task at a time from the task board and produce a written deliverable for a person to review.
@@ -77,12 +80,12 @@ Deliverables: themes from customer complaints and feedback, feature proposals wi
     ],
   },
   {
-    key: "engineering", name: "Engineering", description: "Bug triage, fixes as pull requests, tests and review. Needs GitHub safety setup first.",
+    key: "engineering", name: "Engineering", description: "Bug triage, fixes as pull requests, tests and review on GitHub. Pull requests only — you approve and merge; deploys stay manual.",
     roles: [
-      { key: "bug_triage", name: "Bug Triage Agent", how: "planned", role: "management", description: "Groups bug reports, finds duplicates, writes reproduction steps." },
-      { key: "developer", name: "Developer Agent", how: "planned", role: "management", description: "Writes fixes as pull requests only — never deploys. Needs branch protection + a repo-only GitHub token." },
-      { key: "reviewer", name: "Code Reviewer Agent", how: "planned", role: "management", description: "Reviews pull requests for bugs and security issues." },
-      { key: "tester", name: "Tester Agent", how: "planned", role: "management", description: "Writes and runs tests on pull requests (GitHub Actions)." },
+      { key: "bug_triage", name: "Bug Triage Agent", how: "engineer", role: "management", description: "Turns app-related complaints into GitHub issues (no customer details), spots duplicates, proposes fix tasks for the Developer." },
+      { key: "developer", name: "Developer Agent", how: "engineer", role: "management", description: "Works on tasks you approve: writes the fix as a pull request, fixes its own failing CI. Never merges or deploys." },
+      { key: "reviewer", name: "Code Reviewer Agent", how: "engineer", role: "management", description: "Reviews every pull request for bugs, security and Tikdum conventions. Comments only — you approve." },
+      { key: "tester", name: "Tester Agent", how: "engineer", role: "management", description: "Adds tests to the Developer's pull requests and explains CI failures." },
     ],
   },
 ];

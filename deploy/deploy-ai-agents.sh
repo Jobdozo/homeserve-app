@@ -31,12 +31,21 @@ fi
 echo "== 2/4 Config"
 mkdir -p /root/tikdum-data/agents-state
 chown 1000:1000 /root/tikdum-data/agents-state
+# GitHub App private key for the Engineering agents (optional): put it at
+# /root/tikdum-data/agents-secrets/github-app.pem — readable only by the agents container user.
+mkdir -p /root/tikdum-data/agents-secrets
+chmod 700 /root/tikdum-data/agents-secrets
+chown 1000:1000 /root/tikdum-data/agents-secrets
+if [ -f /root/tikdum-data/agents-secrets/github-app.pem ]; then
+  chown 1000:1000 /root/tikdum-data/agents-secrets/github-app.pem
+  chmod 400 /root/tikdum-data/agents-secrets/github-app.pem
+fi
 touch .env
 if ! grep -q '^WHATSAPP_WEBHOOK_SECRET=' .env; then
   echo "WHATSAPP_WEBHOOK_SECRET=$(openssl rand -hex 32)" >> .env
   echo "Added WHATSAPP_WEBHOOK_SECRET to .env (use it as the x-webhook-secret header in MSG91)"
 fi
-for k in AGENT_KEY_OPERATIONS AGENT_KEY_REPORTING AGENT_KEY_COMPLAINTS AGENT_KEY_SUPPORT AGENT_KEY_REGISTRATION AGENT_KEY_VERIFICATION AGENT_KEY_PAYMENTS AGENT_KEY_CEO AGENT_KEYS_SPECIALISTS ANTHROPIC_API_KEY; do
+for k in AGENT_KEY_OPERATIONS AGENT_KEY_REPORTING AGENT_KEY_COMPLAINTS AGENT_KEY_SUPPORT AGENT_KEY_REGISTRATION AGENT_KEY_VERIFICATION AGENT_KEY_PAYMENTS AGENT_KEY_CEO AGENT_KEYS_SPECIALISTS AGENT_KEYS_ENGINEERING GITHUB_APP_ID ANTHROPIC_API_KEY; do
   grep -q "^$k=" .env || echo "$k=" >> .env
 done
 

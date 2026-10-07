@@ -425,7 +425,7 @@ function AgentsPanel({ canManage, view = "list" }) {
   const addFromRole = (role, team) =>
     setEditing({
       name: role.name, description: role.description, roleId: role.role, template: role.key, team,
-      kind: role.how === "ceo" ? "ceo" : role.how === "specialist" ? "specialist" : "standard",
+      kind: role.how === "ceo" ? "ceo" : role.how === "specialist" ? "specialist" : role.how === "engineer" ? "engineer" : "standard",
       instructions: role.instructions || "", dailyBudgetUsd: role.how === "rules" ? 0 : 1,
     });
 
@@ -564,8 +564,21 @@ function AgentModal({ agent, roles, onClose, onSave }) {
             <option value="standard">Standard agent</option>
             <option value="ceo">CEO (chief of staff) — reads all reports, proposes tasks, chats with you</option>
             <option value="specialist">Specialist — drafts work for tasks you assign it (Marketing, SEO, Analyst…)</option>
+            <option value="engineer">Engineering — works on GitHub through pull requests only</option>
           </select>
         </div>
+        {form.kind === "engineer" && (
+          <div>
+            <label className={labelCls}>Engineering role</label>
+            <select className={inputCls} value={form.template || ""} onChange={set("template")}>
+              <option value="">Choose…</option>
+              {ENGINEER_ROLES.map(([k, l]) => (
+                <option key={k} value={k}>{l}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-gray-400">Needs the GitHub App set up on the server (see agents/README.md). It can open pull requests and comment; only you can approve and merge, and deploys stay manual.</p>
+          </div>
+        )}
         <div>
           <label className={labelCls}>Team</label>
           <select className={inputCls} value={form.team} onChange={set("team")}>
@@ -575,6 +588,12 @@ function AgentModal({ agent, roles, onClose, onSave }) {
             ))}
           </select>
         </div>
+        {form.kind === "engineer" && (
+          <div>
+            <label className={labelCls}>Team notes (optional — coding conventions, areas to avoid)</label>
+            <textarea className={`${inputCls} min-h-[90px] font-mono text-[11.5px]`} maxLength={6000} value={form.instructions} onChange={set("instructions")} />
+          </div>
+        )}
         {form.kind === "specialist" && (
           <div>
             <label className={labelCls}>Instructions (what this specialist does and how)</label>
@@ -591,7 +610,7 @@ function AgentModal({ agent, roles, onClose, onSave }) {
           <button type="button" className={ghostCls} onClick={onClose}>
             Cancel
           </button>
-          <button className={btnCls} disabled={saving || !form.name || !form.roleId}>
+          <button className={btnCls} disabled={saving || !form.name || !form.roleId || (form.kind === "engineer" && !form.template)}>
             {agent.id ? "Save" : "Create agent"}
           </button>
         </div>
@@ -647,11 +666,18 @@ const TEAM_OPTIONS = [
   ["rnd", "R&D"],
   ["engineering", "Engineering"],
 ];
+const ENGINEER_ROLES = [
+  ["bug_triage", "Bug Triage — complaints → GitHub issues + proposed fix tasks"],
+  ["developer", "Developer — writes fixes as pull requests"],
+  ["reviewer", "Code Reviewer — comments on every pull request"],
+  ["tester", "Tester — adds tests, explains CI failures"],
+];
 const HOW = {
   rules: ["Rules, no AI", "bg-gray-100 text-gray-600"],
   ai: ["AI", "bg-violet-100 text-violet-700"],
   ceo: ["CEO", "bg-violet-100 text-violet-700"],
   specialist: ["Specialist (AI)", "bg-sky-100 text-sky-700"],
+  engineer: ["Engineering (AI · GitHub)", "bg-indigo-100 text-indigo-700"],
   planned: ["Not built yet", "bg-amber-100 text-amber-700"],
 };
 

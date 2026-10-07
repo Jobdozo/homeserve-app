@@ -90,3 +90,19 @@ test("specialist agents: created from a catalog template with team + default ins
   // still no direct writes beyond the role's safe list
   assert.ok(!r.permissions.some((p) => /approve|delete|manage/.test(p)));
 });
+
+test("engineering agents: need a role; Bug Triage may only propose (capped); others can't", () => {
+  assert.throws(() => agents.createAgent({ name: "Eng", roleId: "management", kind: "engineer" }, "t"), /Engineering role/);
+  const dev = agents.createAgent({ name: "Dev", roleId: "management", kind: "engineer", template: "developer" }, "t").agent;
+  assert.equal(dev.team, "engineering");
+  assert.equal(agents.resolveAgent(dev.id).template, "developer");
+  assert.throws(() => agents.updateAgent(dev.id, { template: "" }), /Engineering role/);
+
+  const triage = { type: "agent", id: "agt_tri", name: "Bug Triage", bugTriage: true };
+  const t = office.createTask({ title: "Fix: booking screen crash", assignee: { type: "agent", id: dev.id, name: "Dev" } }, triage);
+  assert.equal(t.task.status, "proposed");
+  for (let i = 0; i < office.LIMITS.bugTasksPerDay - 1; i++) office.createTask({ title: `Fix bug ${i}` }, triage);
+  assert.throws(() => office.createTask({ title: "Fix one more" }, triage), /limit/);
+  const devActor = { type: "agent", id: dev.id, name: "Dev" };
+  assert.throws(() => office.createTask({ title: "Self-assigned work" }, devActor), /Only the CEO and Bug Triage/);
+});

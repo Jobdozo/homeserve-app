@@ -74,6 +74,32 @@ module.exports = {
     everyMs: num(process.env.SPECIALIST_CHECK_EVERY_SEC, 120) * 1000,
   },
 
+  // Engineering team (Bug triage, Developer, Reviewer, Tester): one key per
+  // agent, comma-separated; each agent's job comes from its role in Admin.
+  // They work on GitHub as a GitHub App (preferred) or a machine-user token.
+  engineering: {
+    keys: (process.env.AGENT_KEYS_ENGINEERING || "").split(",").map((k) => k.trim()).filter(Boolean),
+    everyMs: num(process.env.ENGINEERING_CHECK_EVERY_SEC, 120) * 1000,
+    bugTriageEveryMs: num(process.env.BUG_TRIAGE_EVERY_MIN, 120) * 60000,
+    // Code needs a stronger model than summaries. Prices: Sonnet 5.5 list
+    // prices (platform.claude.com, Oct 2026) — update with the model.
+    model: {
+      id: process.env.ENGINEERING_MODEL || "claude-sonnet-5-5",
+      inputPerMTok: num(process.env.ENGINEERING_INPUT_USD_PER_MTOK, 2),
+      outputPerMTok: num(process.env.ENGINEERING_OUTPUT_USD_PER_MTOK, 10),
+    },
+    timeoutMs: num(process.env.ENGINEERING_TIMEOUT_MS, 240000),
+    autoFixesPerPr: num(process.env.DEVELOPER_CI_AUTOFIXES, 2),
+  },
+
+  github: {
+    repo: process.env.GITHUB_REPO || "", // owner/name, e.g. Jobdozo/homeserve-app
+    base: process.env.GITHUB_BASE_BRANCH || "master",
+    appId: process.env.GITHUB_APP_ID || "",
+    privateKeyFile: process.env.GITHUB_APP_PRIVATE_KEY_FILE || "",
+    token: process.env.GITHUB_TOKEN || "", // fallback: classic token of a machine user (repo scope, NOT workflow)
+  },
+
   operations: {
     key: process.env.AGENT_KEY_OPERATIONS || "",
     everyMs: num(process.env.OPS_CHECK_EVERY_SEC, 300) * 1000,

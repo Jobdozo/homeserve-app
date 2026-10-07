@@ -92,8 +92,16 @@ services:
       AGENT_KEY_PAYMENTS: ${AGENT_KEY_PAYMENTS}
       AGENT_KEY_CEO: ${AGENT_KEY_CEO}
       AGENT_KEYS_SPECIALISTS: ${AGENT_KEYS_SPECIALISTS}
+      # Engineering team (GitHub): App id + private key file (see agents/README.md)
+      AGENT_KEYS_ENGINEERING: ${AGENT_KEYS_ENGINEERING}
+      GITHUB_REPO: ${GITHUB_REPO:-Jobdozo/homeserve-app}
+      GITHUB_APP_ID: ${GITHUB_APP_ID}
+      GITHUB_APP_PRIVATE_KEY_FILE: /app/secrets/github-app.pem
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      ENGINEERING_MODEL: ${ENGINEERING_MODEL:-claude-sonnet-5-5}
       AGENT_STATE_DIR: /app/state
     volumes:
       - /root/tikdum-data/agents-state:/app/state
+      - /root/tikdum-data/agents-secrets:/app/secrets:ro
     depends_on:
       - server

@@ -88,3 +88,51 @@ Admin → AI Agents → **Teams** shows the whole organisation (Leadership, Oper
 **Specialists** (Marketing, SEO, Business Analyst, Research & Product) are one generic AI worker with different instructions. They only work on tasks assigned to them in **Tasks**: a new task gets a draft and moves to **Review**; move it back to **In progress** with a comment and they revise. They never publish, send or change anything. Put each specialist's key in `AGENT_KEYS_SPECIALISTS` (comma-separated) and restart the agents service.
 
 Not built yet (shown as "Not built yet"): Dispatch, Provider quality, Retention, Fraud (need code), Reviews & reputation (needs Google Business Profile access), and the Engineering team (needs GitHub branch protection + a repo-only token first).
+
+## Engineering team (GitHub): Bug Triage, Developer, Code Reviewer, Tester
+All four work only through GitHub pull requests, comments and issues. They can't merge, approve,
+push to `master`, edit CI/deploy/Docker/env files or dependencies, or touch the auth/permission/
+agent code (`auth.js`, `access.js`, `agents.js`, `office.js`, …) — enforced in `src/engineering.js`
+and again by the `protect-master` ruleset (PR + 1 approval from someone other than the pusher + green `test` check).
+
+| Agent | What it does | Trigger |
+|---|---|---|
+| Bug Triage | App-related complaints → GitHub issue (no customer details) + a **proposed** "Fix: …" task for the Developer | every 2 h |
+| Developer | Approved task → reads code → commits to `ai/<task id>` → opens a PR → task to Review. Revises when you comment on the task; tries to fix its own failing CI (2× per PR) | every 2 min |
+| Code Reviewer | Comments on every open PR at each new commit (bugs, security, conventions). Never approves | every 2 min |
+| Tester | Adds tests (new files in `server/test/` only) to Developer PRs; posts where CI failed | every 2 min |
+
+Model: `claude-sonnet-5-5` ($2 in / $10 out per MTok). A Developer task costs roughly $0.10–0.40;
+a review $0.02–0.10. Each agent's daily budget (Admin) caps it.
+
+### 1. Create a GitHub App (identity for the agents) — do this yourself
+GitHub → Settings → Developer settings → GitHub Apps → **New GitHub App**
+- Name: `tikdum-agents` · Homepage: `https://tikdum.com` · **Webhook: uncheck Active**
+- Repository permissions: **Contents: Read and write**, **Pull requests: Read and write**,
+  **Issues: Read and write**, **Checks: Read-only**, **Actions: Read-only**, Metadata: Read-only.
+  Leave **Workflows: No access** (so it can never change CI).
+- "Where can this app be installed?": Only on this account → Create.
+- Note the **App ID**. Generate a **private key** (.pem downloads).
+- **Install App** → only select repository `homeserve-app`.
+- Don't add the App to the `protect-master` bypass list.
+
+Why not a personal token: fine-grained tokens can't act on another user's repo as a collaborator,
+and your own token would let an agent bypass branch protection (you're on the bypass list).
+
+### 2. Put it on the server
+```
+mkdir -p /root/tikdum-data/agents-secrets
+# copy the .pem there as github-app.pem (e.g. scp from your PC), then:
+chown 1000:1000 /root/tikdum-data/agents-secrets/github-app.pem && chmod 400 /root/tikdum-data/agents-secrets/github-app.pem
+```
+In `/tmp/homeserve-deploy/.env`: `GITHUB_APP_ID=<id>` and the agents' keys:
+`AGENT_KEYS_ENGINEERING=tkag_dev...,tkag_rev...,tkag_test...,tkag_bug...`
+
+### 3. Create the agents
+Admin → AI Agents → Teams → Engineering → **Add** on each role (type Engineering, role pre-picked).
+Suggested daily budgets: Developer $2, Reviewer $1, Tester $1, Bug Triage $0.5.
+
+### 4. Use it
+Assign a task to the Developer in AI Agents → Tasks (or approve one proposed by Bug Triage / the CEO).
+Watch the PR on GitHub: CI runs, the Reviewer and Tester comment. Comment on the **task** to ask for
+changes. When you're happy: approve + merge on GitHub, then deploy as usual.

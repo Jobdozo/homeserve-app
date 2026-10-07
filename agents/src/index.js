@@ -17,6 +17,7 @@ const verification = require("./verification");
 const payments = require("./payments");
 const ceo = require("./ceo");
 const specialist = require("./specialist");
+const engineering = require("./engineering");
 
 const AGENTS = [
   { name: "operations", key: config.operations.key, everyMs: config.operations.everyMs, run: (c, opts) => operations.tick(c, log, opts) },
@@ -28,6 +29,7 @@ const AGENTS = [
   { name: "payments", key: config.payments.key, everyMs: config.payments.everyMs, run: (c) => payments.tick(c, log) },
   { name: "ceo", key: config.ceo.key, everyMs: config.ceo.everyMs, run: (c) => ceo.tick(c, log) },
   ...config.specialists.keys.map((key, i) => ({ name: `specialist-${i + 1}`, key, everyMs: config.specialists.everyMs, run: (c) => specialist.tick(c, log, `specialist-${i + 1}`) })),
+  ...config.engineering.keys.map((key, i) => ({ name: `engineering-${i + 1}`, key, everyMs: config.engineering.everyMs, run: (c) => engineering.tick(c, log, `engineering-${i + 1}`) })),
 ];
 
 async function runOnce(agent, client, opts) {
@@ -56,7 +58,7 @@ async function main() {
   if (active.length === 0) {
     // Stay up idle rather than exit: under `restart: unless-stopped` an exit
     // would crash-loop until keys are added. Add keys and restart the service.
-    log.warn("worker", "No agent keys set (AGENT_KEY_OPERATIONS / _REPORTING / _COMPLAINTS / _SUPPORT / _REGISTRATION / _VERIFICATION / _PAYMENTS / _CEO, AGENT_KEYS_SPECIALISTS). Create agents in Admin → AI Agents, add the keys, then restart this service. Idling.");
+    log.warn("worker", "No agent keys set (AGENT_KEY_OPERATIONS / _REPORTING / _COMPLAINTS / _SUPPORT / _REGISTRATION / _VERIFICATION / _PAYMENTS / _CEO, AGENT_KEYS_SPECIALISTS, AGENT_KEYS_ENGINEERING). Create agents in Admin → AI Agents, add the keys, then restart this service. Idling.");
     if (once) process.exit(1);
     setInterval(() => {}, 1 << 30);
     return;

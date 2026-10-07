@@ -5,14 +5,18 @@ const config = require("./config");
 
 class BudgetExceeded extends Error {}
 
-const costOf = (usage) =>
-  ((usage.input_tokens || 0) * config.anthropic.inputPerMTok + (usage.output_tokens || 0) * config.anthropic.outputPerMTok) / 1e6;
+// `model` lets one agent use a different model from the default; its prices
+// (USD per million tokens) come with it so budgets stay right.
+const defaultModel = () => ({ id: config.anthropic.model, inputPerMTok: config.anthropic.inputPerMTok, outputPerMTok: config.anthropic.outputPerMTok });
 
-async function complete(client, { system, prompt, maxTokens = 600 }) {
+const costOf = (usage, m = defaultModel()) => ((usage.input_tokens || 0) * m.inputPerMTok + (usage.output_tokens || 0) * m.outputPerMTok) / 1e6;
+
+async function complete(client, { system, prompt, maxTokens = 600, model, timeoutMs }) {
   if (!config.anthropic.apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
+  const m = model || defaultModel();
   const self = await client.get("/agents/self");
   // Worst case for this call, so one call can't blow far past the cap.
-  const worst = (maxTokens * config.anthropic.outputPerMTok + (prompt.length / 2) * config.anthropic.inputPerMTok) / 1e6;
+  const worst = (maxTokens * m.outputPerMTok + (prompt.length / 2) * m.inputPerMTok) / 1e6;
   if (self.budgetRemainingUsd < worst) throw new BudgetExceeded(`Daily AI budget used up ($${self.dailyBudgetUsd})`);
 
   const r = await fetch("https://api.anthropic.com/v1/messages", {
@@ -23,22 +27,23 @@ async function complete(client, { system, prompt, maxTokens = 600 }) {
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: config.anthropic.model,
+      model: m.id,
       max_tokens: maxTokens,
       system,
       messages: [{ role: "user", content: prompt }],
     }),
-    signal: AbortSignal.timeout(config.anthropic.timeoutMs),
+    signal: AbortSignal.timeout(timeoutMs || config.anthropic.timeoutMs),
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(`Claude API ${r.status}: ${data?.error?.message || "request failed"}`);
 
   const usage = data.usage || {};
   await client
-    .post("/agents/usage", { inputTokens: usage.input_tokens, outputTokens: usage.output_tokens, costUsd: costOf(usage) })
+    .post("/agents/usage", { inputTokens: usage.input_tokens, outputTokens: usage.output_tokens, costUsd: costOf(usage, m) })
     .catch(() => null);
   const text = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
   if (!text) throw new Error("Claude returned no text");
+  if (data.stop_reason === "max_tokens") throw new Error("Claude's answer was cut off (max_tokens) — the change is too big for one step");
   return text;
 }
 
@@ -64,8 +69,8 @@ function parseJsonObject(text) {
 
 // Wraps text written by customers/providers so the model can tell it apart
 // from instructions. Closing tags inside the text are neutralised.
-function untrusted(tag, text) {
-  const clean = String(text ?? "").replace(new RegExp(`</?${tag}[^>]*>`, "gi"), "[removed]").slice(0, 4000);
+function untrusted(tag, text, max = 4000) {
+  const clean = String(text ?? "").replace(new RegExp(`</?${tag}[^>]*>`, "gi"), "[removed]").slice(0, max);
   return `<${tag}>\n${clean}\n</${tag}>`;
 }
 

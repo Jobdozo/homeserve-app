@@ -8,6 +8,7 @@
 // What each side may do:
 //   CEO agent    — PROPOSE tasks and weekly goals, reply in the CEO thread,
 //                  comment on tasks. A person approves proposals.
+//   Bug Triage   — PROPOSE bug-fix tasks (capped per day); a person approves.
 //   Other agents — see tasks assigned to them, comment, move them to
 //                  in_progress or review. Only a person marks a task done.
 //   People       — everything: create/assign/approve/reject/close, reply anywhere.
@@ -23,7 +24,7 @@ const MAX_MESSAGES = 20000;
 const STATUSES = ["proposed", "open", "in_progress", "review", "done", "cancelled", "rejected"];
 const ACTIVE = ["proposed", "open", "in_progress", "review"];
 const PRIORITIES = ["low", "normal", "high", "urgent"];
-const LIMITS = { ceoTasksPerDay: 10, ceoGoalsPerWeek: 5, agentMessagesPerDay: 60, ceoRepliesPerDay: 40 };
+const LIMITS = { ceoTasksPerDay: 10, bugTasksPerDay: 5, ceoGoalsPerWeek: 5, agentMessagesPerDay: 60, ceoRepliesPerDay: 40 };
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const nowIso = () => new Date().toISOString();
@@ -58,10 +59,11 @@ function createTask(input, actor) {
   const title = str(input.title, 140);
   if (!title) throw fail(400, "Task title is required");
   const rows = jsonStore.readAll(TASKS);
-  const proposed = actor.type === "agent"; // agents (the CEO) can only propose
+  const proposed = actor.type === "agent"; // agents (the CEO, Bug triage) can only propose
   if (proposed) {
-    if (!actor.ceo) throw fail(403, "Only the CEO agent can propose tasks");
-    if (countToday((t) => sameActor(t.createdBy, actor))(rows) >= LIMITS.ceoTasksPerDay) throw fail(429, "The CEO agent has reached today's task-proposal limit");
+    if (!actor.ceo && !actor.bugTriage) throw fail(403, "Only the CEO and Bug Triage agents can propose tasks");
+    const cap = actor.ceo ? LIMITS.ceoTasksPerDay : LIMITS.bugTasksPerDay;
+    if (countToday((t) => sameActor(t.createdBy, actor))(rows) >= cap) throw fail(429, `${actor.name} has reached today's task-proposal limit`);
     const dup = rows.find((t) => ACTIVE.includes(t.status) && t.title.toLowerCase() === title.toLowerCase());
     if (dup) return { duplicate: true, task: dup };
   }

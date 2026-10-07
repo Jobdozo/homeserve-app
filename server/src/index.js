@@ -1971,7 +1971,8 @@ app.get("/api/agents/self", agentOnly, crm(async (req, res) => {
     supportKnowledge: agents.getConfig().supportKnowledge,
     supportAutoSend: agents.getConfig().supportAutoSend,
     kind: req.admin.kind,
-    instructions: req.admin.kind === "specialist" ? req.admin.instructions : undefined,
+    instructions: ["specialist", "engineer"].includes(req.admin.kind) ? req.admin.instructions : undefined,
+    template: req.admin.kind === "engineer" ? req.admin.template : undefined,
   });
 }));
 
@@ -2041,7 +2042,7 @@ app.patch("/api/admin/ai/agents/:id", adminOnly, crm(async (req, res) => {
   const before = agents.listAgents().find((a) => a.id === req.params.id);
   const agent = agents.updateAgent(req.params.id, req.body || {});
   if (!agent) return res.status(404).json({ error: "Agent not found" });
-  const changes = store.diffValues(before || {}, agent, ["name", "roleId", "active", "dailyBudgetUsd"]);
+  const changes = store.diffValues(before || {}, agent, ["name", "roleId", "active", "dailyBudgetUsd", "kind", "template"]);
   if (changes.length) audit(req, "ai.agent.update", "aiAgent", agent.id, agent.name, changes);
   res.json(agent);
 }));
@@ -2180,7 +2181,10 @@ app.post("/api/admin/inbox/:id/mode", adminOnly, crm(async (req, res) => {
 
 // ---- Agent Office: task board, CEO thread, weekly goals (see office.js) ----
 const personActor = (req) => ({ type: "person", id: req.admin.id, name: req.admin.name });
-const agentActor = (req) => ({ type: "agent", id: req.admin.agentId, name: req.admin.name, ceo: Boolean(req.admin.ceo) });
+const agentActor = (req) => ({
+  type: "agent", id: req.admin.agentId, name: req.admin.name, ceo: Boolean(req.admin.ceo),
+  bugTriage: req.admin.kind === "engineer" && req.admin.template === "bug_triage",
+});
 const officeActor = (req) => (req.admin?.agent ? agentActor(req) : personActor(req));
 // Phone numbers never go into the CEO agent's context.
 const redactPhones = (t) => String(t || "").replace(/\+?\d[\d\s-]{8,}\d/g, (m) => (m.replace(/\D/g, "").length >= 10 ? "[phone]" : m));
@@ -2227,6 +2231,11 @@ app.post("/api/agents/office/tasks", agentOnly, crm(async (req, res) => {
   if (b.assignee) {
     const match = ceoContext().assignees.find((x) => x.name.toLowerCase() === String(b.assignee).toLowerCase());
     if (match) assignee = match.type === "person" ? { type: "person", id: "owner", name: "Owner" } : match;
+  }
+  // Bug Triage hands fixes to the Developer agent by role, not by name.
+  if (!assignee && b.assigneeTemplate === "developer") {
+    const dev = agents.listAgents().find((a) => a.active && a.kind === "engineer" && a.template === "developer");
+    if (dev) assignee = { type: "agent", id: dev.id, name: dev.name };
   }
   const out = office.createTask({ title: b.title, description: b.description, priority: b.priority, dueDate: b.dueDate, assignee }, agentActor(req));
   res.status(out.duplicate ? 200 : 201).json(out);

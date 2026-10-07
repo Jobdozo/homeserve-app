@@ -148,7 +148,12 @@ function newKey() {
 // and proposes tasks/goals on the task board (see office.js). At most one.
 // specialist: a generic AI worker that drafts deliverables for tasks assigned
 // to it on the task board (see agents/src/specialist.js and agentCatalog.js).
-const KINDS_ALLOWED = ["standard", "ceo", "specialist"];
+// engineer: one of the Engineering team (bug_triage / developer / reviewer /
+// tester, set by `template`). They work on GitHub through the worker's own
+// GitHub App identity — pull requests and comments only, never merges
+// (see agents/src/engineering.js). Tikdum itself only gives them tasks.
+const KINDS_ALLOWED = ["standard", "ceo", "specialist", "engineer"];
+const ENGINEER_TEMPLATES = ["bug_triage", "developer", "reviewer", "tester"];
 const TEAM_KEYS = ["leadership", "operations", "marketing", "planning", "rnd", "engineering"];
 const cleanTeam = (t) => (TEAM_KEYS.includes(t) ? t : null);
 const cleanInstructions = (v) => String(v || "").slice(0, 6000);
@@ -166,6 +171,7 @@ function createAgent({ name, roleId, description, dailyBudgetUsd, kind, team, te
   cleanRole(roleId);
   const agentKind = cleanKind(kind);
   const tpl = template ? require("./agentCatalog").roleByKey(String(template)) : null;
+  if (agentKind === "engineer" && !ENGINEER_TEMPLATES.includes(tpl?.key)) throw fail(400, "Pick which Engineering role this agent is (Bug triage, Developer, Reviewer or Tester)");
   const apiKey = newKey();
   const agent = jsonStore.insert(AGENTS, {
     id: `agt_${crypto.randomBytes(6).toString("hex")}`,
@@ -203,6 +209,13 @@ function updateAgent(id, input) {
   if (input.kind !== undefined) patch.kind = cleanKind(input.kind, id);
   if (input.team !== undefined) patch.team = cleanTeam(input.team);
   if (input.instructions !== undefined) patch.instructions = cleanInstructions(input.instructions);
+  if (input.template !== undefined) {
+    const tpl = input.template ? require("./agentCatalog").roleByKey(String(input.template)) : null;
+    patch.template = tpl?.key || null;
+  }
+  const kindAfter = patch.kind || agent.kind;
+  const templateAfter = patch.template !== undefined ? patch.template : agent.template;
+  if (kindAfter === "engineer" && !ENGINEER_TEMPLATES.includes(templateAfter)) throw fail(400, "Pick which Engineering role this agent is (Bug triage, Developer, Reviewer or Tester)");
   return publicAgent(jsonStore.update(AGENTS, id, patch));
 }
 
@@ -241,6 +254,7 @@ function resolveAgent(agentId) {
     agentId: agent.id,
     ceo: agent.kind === "ceo",
     kind: agent.kind || "standard",
+    template: agent.template || null,
     instructions: agent.instructions || "",
   };
 }
@@ -464,7 +478,7 @@ function rejectAction(id, note, actor) {
 }
 
 module.exports = {
-  getConfig, setConfig,
+  getConfig, setConfig, ENGINEER_TEMPLATES,
   listAgents, createAgent, updateAgent, rotateKey, deleteAgent,
   resolveAgent, issueToken, policy, agentPermissions,
   status, heartbeat, recordUsage,
