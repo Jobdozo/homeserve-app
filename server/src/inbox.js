@@ -60,7 +60,9 @@ function parseInbound(raw) {
   return out;
 }
 
-async function ingest(raw, { businessNumber } = {}) {
+// ownerHandler(p) -> true when the message was taken elsewhere (the owner's
+// own number goes to the CEO agent's thread, not to customer support).
+async function ingest(raw, { businessNumber, ownerHandler } = {}) {
   const parsed = parseInbound(raw);
   const messages = jsonStore.readAll(MESSAGES);
   const seen = new Set(messages.filter((m) => m.waId).map((m) => m.waId));
@@ -69,6 +71,10 @@ async function ingest(raw, { businessNumber } = {}) {
     // Ignore events for some other number on the same MSG91 account.
     if (businessNumber && p.integratedNumber && !digits(businessNumber).endsWith(p.integratedNumber.slice(-10))) continue;
     if (p.waId && seen.has(p.waId)) continue; // MSG91 retries
+    if (ownerHandler && ownerHandler(p)) {
+      if (p.waId) seen.add(p.waId);
+      continue;
+    }
     const id = convId(p.phone);
     let conv = jsonStore.readAll(CONVERSATIONS).find((c) => c.id === id);
     if (!conv) {

@@ -113,7 +113,7 @@ const publicAgent = (a, roles = access.listRoles()) => {
   const role = roles.find((r) => r.id === a.roleId);
   const today = istDay();
   const usage = a.usage?.day === today ? a.usage : { day: today, costUsd: 0, inputTokens: 0, outputTokens: 0, calls: 0 };
-  return { ...rest, roleName: role?.name || "—", usage, effectivePermissions: role ? agentPermissions(role.permissions) : [] };
+  return { ...rest, kind: a.kind || "standard", roleName: role?.name || "—", usage, effectivePermissions: role ? agentPermissions(role.permissions) : [] };
 };
 
 function listAgents() {
@@ -140,17 +140,29 @@ function newKey() {
 }
 
 // Returns the agent plus its API key — the only time the key is ever visible.
-function createAgent({ name, roleId, description, dailyBudgetUsd }, actor) {
+// kind: "standard", or "ceo" — the one agent that reads every team's reports
+// and proposes tasks/goals on the task board (see office.js). At most one.
+const KINDS_ALLOWED = ["standard", "ceo"];
+function cleanKind(kind, exceptId) {
+  const k = kind || "standard";
+  if (!KINDS_ALLOWED.includes(k)) throw fail(400, "Unknown agent type");
+  if (k === "ceo" && jsonStore.readAll(AGENTS).some((a) => a.kind === "ceo" && a.id !== exceptId)) throw fail(409, "There is already a CEO agent");
+  return k;
+}
+
+function createAgent({ name, roleId, description, dailyBudgetUsd, kind }, actor) {
   const clean = String(name || "").trim().slice(0, 50);
   if (!clean) throw fail(400, "Agent name is required");
   if (jsonStore.readAll(AGENTS).some((a) => a.name.toLowerCase() === clean.toLowerCase())) throw fail(409, "An agent with that name already exists");
   cleanRole(roleId);
+  const agentKind = cleanKind(kind);
   const apiKey = newKey();
   const agent = jsonStore.insert(AGENTS, {
     id: `agt_${crypto.randomBytes(6).toString("hex")}`,
     name: clean,
     description: String(description || "").trim().slice(0, 200),
     roleId,
+    kind: agentKind,
     active: true,
     dailyBudgetUsd: dailyBudgetUsd === undefined ? DEFAULT_DAILY_BUDGET_USD : cleanBudget(dailyBudgetUsd),
     keyHash: sha256(apiKey),
@@ -175,6 +187,7 @@ function updateAgent(id, input) {
   if (input.roleId !== undefined) patch.roleId = cleanRole(input.roleId).id;
   if (input.active !== undefined) patch.active = Boolean(input.active);
   if (input.dailyBudgetUsd !== undefined) patch.dailyBudgetUsd = cleanBudget(input.dailyBudgetUsd);
+  if (input.kind !== undefined) patch.kind = cleanKind(input.kind, id);
   return publicAgent(jsonStore.update(AGENTS, id, patch));
 }
 
@@ -211,6 +224,7 @@ function resolveAgent(agentId) {
     owner: false,
     agent: true,
     agentId: agent.id,
+    ceo: agent.kind === "ceo",
   };
 }
 

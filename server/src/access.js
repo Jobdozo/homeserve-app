@@ -281,6 +281,8 @@ const RULES = [
   // [path regex, (method, body, match) => permission | permission[] | null (any staff) | "super"]
   [/^\/auth\/me$/, () => null],
   [/^\/admin\/ai\/actions\/[^/]+\/(approve|reject)$/, () => "ai.approve"],
+  [/^\/admin\/ai\/office\/(tasks|goals)\/[^/]+\/decide$/, () => "ai.approve"],
+  [/^\/admin\/ai\/office\/(tasks\/[^/]+\/messages|threads\/ceo\/messages)$/, () => "ai.view"],
   [/^\/admin\/ai\/feed\/[^/]+\/ack$/, () => "ai.view"],
   [/^\/admin\/ai\/(actions|feed)(\/|$)/, () => "ai.view"],
   [/^\/admin\/ai\//, (m) => (m === "GET" ? "ai.view" : "ai.manage")],

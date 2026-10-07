@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
 import { XIcon } from "../components/icons";
+import { TasksPanel, CeoChatPanel } from "./AgentOffice";
 
 // AI Agents: approve what agents propose, read their alerts and reports, and
 // manage the agent accounts themselves (role, on/off, daily AI budget, key).
@@ -44,7 +45,11 @@ export default function AiAgentsPage() {
   const { can } = useApp();
   const [tab, setTab] = useState("approvals");
   const [config, setConfig] = useState(null);
+  const [hasCeo, setHasCeo] = useState(true);
   const run = useRun();
+  useEffect(() => {
+    api.listAiAgents().then((d) => setHasCeo(d.agents.some((a) => a.kind === "ceo" && a.active))).catch(() => {});
+  }, [tab]);
 
   const loadConfig = () => api.getAiConfig().then(setConfig).catch(() => {});
   useEffect(() => {
@@ -63,6 +68,8 @@ export default function AiAgentsPage() {
         <div className="no-scrollbar flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-white p-1 shadow-card">
           {[
             ["approvals", "Approvals"],
+            ["tasks", "Tasks"],
+            ["ceo", "CEO chat"],
             ["feed", "Alerts & reports"],
             ["agents", "Agents"],
             ["knowledge", "Support knowledge"],
@@ -85,6 +92,8 @@ export default function AiAgentsPage() {
         )}
       </div>
       {tab === "approvals" && <ApprovalsPanel canDecide={can("ai.approve")} />}
+      {tab === "tasks" && <TasksPanel canApprove={can("ai.approve")} canManage={can("ai.manage")} />}
+      {tab === "ceo" && <CeoChatPanel hasCeo={hasCeo} />}
       {tab === "feed" && <FeedPanel />}
       {tab === "agents" && <AgentsPanel canManage={can("ai.manage")} />}
       {tab === "knowledge" && config && <KnowledgePanel config={config} onSaved={setConfig} canEdit={can("ai.manage")} />}
@@ -395,7 +404,9 @@ function AgentsPanel({ canManage }) {
             {agents?.map((a) => (
               <tr key={a.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
                 <td className="px-4 py-3">
-                  <p className="font-semibold text-gray-800">{a.name}</p>
+                  <p className="font-semibold text-gray-800">
+                    {a.name} {a.kind === "ceo" && <span className="ml-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">CEO</span>}
+                  </p>
                   <p className="text-[11px] text-gray-400">
                     {a.description || "—"} · key {a.keyPrefix}…
                   </p>
@@ -449,7 +460,7 @@ function AgentsPanel({ canManage }) {
 }
 
 function AgentModal({ agent, roles, onClose, onSave }) {
-  const [form, setForm] = useState({ id: agent.id, name: agent.name || "", description: agent.description || "", roleId: agent.roleId || "", dailyBudgetUsd: agent.dailyBudgetUsd ?? 1 });
+  const [form, setForm] = useState({ id: agent.id, name: agent.name || "", description: agent.description || "", roleId: agent.roleId || "", dailyBudgetUsd: agent.dailyBudgetUsd ?? 1, kind: agent.kind || "standard" });
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const submit = async (e) => {
@@ -478,6 +489,13 @@ function AgentModal({ agent, roles, onClose, onSave }) {
                 {r.name}
               </option>
             ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Type</label>
+          <select className={inputCls} value={form.kind} onChange={set("kind")}>
+            <option value="standard">Standard agent</option>
+            <option value="ceo">CEO (chief of staff) — reads all reports, proposes tasks, chats with you</option>
           </select>
         </div>
         <div>

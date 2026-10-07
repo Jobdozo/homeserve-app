@@ -20,6 +20,7 @@ const auth = require("./auth");
 const agents = require("./agents");
 const inbox = require("./inbox");
 const backoffice = require("./backoffice");
+const office = require("./office");
 access.setAgentHooks({ resolve: agents.resolveAgent, policy: agents.policy });
 // Per-request permission checks for staff sign-ins (admin roles, provider staff).
 auth.setAdminGuard(access.guard);
@@ -2112,7 +2113,14 @@ const sameSecret = (given) => {
 app.post("/api/webhooks/whatsapp/msg91", ah(async (req, res) => {
   if (!WEBHOOK_SECRET) return res.status(503).json({ error: "Inbound WhatsApp isn't configured" });
   if (!sameSecret(req.headers["x-webhook-secret"])) return res.status(401).json({ error: "Unauthorized" });
-  const added = await inbox.ingest(req.body, { businessNumber: process.env.MSG91_WHATSAPP_NUMBER });
+  // Messages from the owner's own number go to the CEO agent's thread.
+  const ownerHandler = (p) => {
+    const last10 = (x) => String(x || "").replace(/\D/g, "").slice(-10);
+    if (!auth.adminPhones().some((a) => last10(a) === last10(p.phone))) return false;
+    office.addOwnerWhatsApp(p.phone, p.text, p.waId);
+    return true;
+  };
+  const added = await inbox.ingest(req.body, { businessNumber: process.env.MSG91_WHATSAPP_NUMBER, ownerHandler });
   res.json({ received: added.length });
 }));
 
@@ -2136,6 +2144,122 @@ app.post("/api/admin/inbox/:id/mode", adminOnly, crm(async (req, res) => {
     await store.logActivity("ai", `${req.admin.name} handed a WhatsApp chat (${conv.name || conv.phone}) to the team: ${conv.handoffReason || "needs a person"}`).catch(() => {});
   }
   res.json(conv);
+}));
+
+// ---- Agent Office: task board, CEO thread, weekly goals (see office.js) ----
+const personActor = (req) => ({ type: "person", id: req.admin.id, name: req.admin.name });
+const agentActor = (req) => ({ type: "agent", id: req.admin.agentId, name: req.admin.name, ceo: Boolean(req.admin.ceo) });
+const officeActor = (req) => (req.admin?.agent ? agentActor(req) : personActor(req));
+// Phone numbers never go into the CEO agent's context.
+const redactPhones = (t) => String(t || "").replace(/\+?\d[\d\s-]{8,}\d/g, (m) => (m.replace(/\D/g, "").length >= 10 ? "[phone]" : m));
+
+// Everything the CEO agent reads, in one bounded, phone-free bundle.
+function ceoContext() {
+  const since = Date.now() - 24 * 3600 * 1000;
+  const feed = agents.listFeed({ limit: 300 }).filter((f) => Date.parse(f.createdAt) >= since);
+  const ageDays = (iso) => Math.floor((Date.now() - Date.parse(iso)) / 86400000);
+  return {
+    now: new Date().toISOString(),
+    week: office.weekOf(),
+    agents: agents.listAgents().map((a) => ({ name: a.name, kind: a.kind, role: a.roleName, active: a.active, lastSeenAt: a.lastSeenAt, lastStatus: a.lastStatus })),
+    reports: feed.filter((f) => f.kind === "report").slice(0, 8).map((f) => ({ agent: f.agentName, title: redactPhones(f.title), body: redactPhones(f.body).slice(0, 1500) })),
+    alerts: feed.filter((f) => f.kind !== "report").slice(0, 40).map((f) => ({ agent: f.agentName, severity: f.severity, title: redactPhones(f.title), seen: Boolean(f.ackedAt) })),
+    approvalsWaiting: agents.listActions({ status: "pending", limit: 30 }).map((a) => ({ agent: a.agentName, title: redactPhones(a.title), ageDays: ageDays(a.createdAt) })),
+    tasks: office.listTasks({ active: true }).slice(0, 40).map((t) => ({ id: t.id, title: t.title, status: t.status, priority: t.priority, assignee: t.assignee?.name || null, ageDays: ageDays(t.createdAt) })),
+    goals: office.listGoals().map((g) => ({ text: g.text, status: g.status })),
+    thread: office.listMessages("ceo", { limit: 20 }).map((m) => ({ from: m.from.type === "agent" ? "CEO" : "Owner", text: redactPhones(m.text).slice(0, 800), at: m.at })),
+    pending: office.pendingForCeo().map((m) => ({ id: m.id, text: redactPhones(m.text).slice(0, 1500), at: m.at, channel: m.channel })),
+    assignees: [
+      ...agents.listAgents().filter((a) => a.active && a.kind !== "ceo").map((a) => ({ type: "agent", id: a.id, name: a.name })),
+      { type: "person", id: "owner", name: "Owner" },
+    ],
+  };
+}
+
+// -- agent side --
+app.get("/api/agents/office", agentOnly, crm(async (req, res) => {
+  if (req.admin.ceo) return res.json({ role: "ceo", ...ceoContext() });
+  const mine = office.listTasks({ assigneeType: "agent", assigneeId: req.admin.agentId }).filter((t) => ["open", "in_progress"].includes(t.status));
+  res.json({ role: "agent", tasks: mine.map((t) => ({ ...t, messages: office.listMessages(t.id, { limit: 30 }) })) });
+}));
+app.post("/api/agents/office/tasks", agentOnly, crm(async (req, res) => {
+  const b = req.body || {};
+  // The CEO names an assignee from the list it was given; resolve it here.
+  let assignee = null;
+  if (b.assignee) {
+    const match = ceoContext().assignees.find((x) => x.name.toLowerCase() === String(b.assignee).toLowerCase());
+    if (match) assignee = match.type === "person" ? { type: "person", id: "owner", name: "Owner" } : match;
+  }
+  const out = office.createTask({ title: b.title, description: b.description, priority: b.priority, dueDate: b.dueDate, assignee }, agentActor(req));
+  res.status(out.duplicate ? 200 : 201).json(out);
+}));
+app.post("/api/agents/office/tasks/:id/messages", agentOnly, crm(async (req, res) => {
+  const t = office.getTask(req.params.id);
+  if (!t) return res.status(404).json({ error: "Task not found" });
+  const assigned = t.task.assignee?.type === "agent" && t.task.assignee.id === req.admin.agentId;
+  if (!assigned && !req.admin.ceo) return res.status(403).json({ error: "This task isn't assigned to this agent" });
+  res.status(201).json(office.addMessage(req.params.id, agentActor(req), req.body?.text));
+}));
+app.post("/api/agents/office/tasks/:id/status", agentOnly, crm(async (req, res) => {
+  const t = office.updateTask(req.params.id, { status: req.body?.status, result: req.body?.result }, agentActor(req));
+  if (!t) return res.status(404).json({ error: "Task not found" });
+  res.json(t);
+}));
+app.post("/api/agents/office/goals", agentOnly, crm(async (req, res) => {
+  const out = office.proposeGoal(req.body?.text, agentActor(req));
+  res.status(out.duplicate ? 200 : 201).json(out);
+}));
+// The CEO's reply in its thread; also sent on WhatsApp when the owner wrote there.
+app.post("/api/agents/office/ceo/reply", agentOnly, crm(async (req, res) => {
+  if (!req.admin.ceo) return res.status(403).json({ error: "Only the CEO agent replies in this thread" });
+  const target = office.whatsappReplyTarget();
+  const msg = office.addMessage("ceo", agentActor(req), req.body?.text);
+  let whatsapp = null;
+  if (target) {
+    const { sendWhatsAppMessage } = require("./whatsapp");
+    whatsapp = await sendWhatsAppMessage(target, msg.text.slice(0, 1500)).catch(() => false);
+  }
+  res.status(201).json({ message: msg, whatsapp });
+}));
+
+// -- people side --
+app.get("/api/admin/ai/office/tasks", adminOnly, crm(async (req, res) => {
+  res.json({ tasks: office.listTasks({ status: req.query.status }), statuses: office.STATUSES, priorities: office.PRIORITIES, assignees: ceoContext().assignees.filter((a) => a.type === "agent"), staff: await complaints.listStaff() });
+}));
+app.get("/api/admin/ai/office/tasks/:id", adminOnly, crm(async (req, res) => {
+  const t = office.getTask(req.params.id);
+  if (!t) return res.status(404).json({ error: "Task not found" });
+  res.json(t);
+}));
+app.post("/api/admin/ai/office/tasks", adminOnly, crm(async (req, res) => {
+  const out = office.createTask(req.body || {}, personActor(req));
+  audit(req, "office.task.create", "aiTask", out.task.id, out.task.title);
+  res.status(201).json(out);
+}));
+app.patch("/api/admin/ai/office/tasks/:id", adminOnly, crm(async (req, res) => {
+  const t = office.updateTask(req.params.id, req.body || {}, personActor(req));
+  if (!t) return res.status(404).json({ error: "Task not found" });
+  res.json(t);
+}));
+app.post("/api/admin/ai/office/tasks/:id/decide", adminOnly, crm(async (req, res) => {
+  const t = office.decideTask(req.params.id, req.body?.approve === true, req.body?.note, personActor(req));
+  if (!t) return res.status(404).json({ error: "Task not found" });
+  audit(req, req.body?.approve === true ? "office.task.approve" : "office.task.reject", "aiTask", t.id, t.title);
+  res.json(t);
+}));
+app.post("/api/admin/ai/office/tasks/:id/messages", adminOnly, crm(async (req, res) => {
+  res.status(201).json(office.addMessage(req.params.id, personActor(req), req.body?.text));
+}));
+app.get("/api/admin/ai/office/threads/ceo", adminOnly, crm(async (req, res) => res.json(office.listMessages("ceo", { limit: req.query.limit || 200 }))));
+app.post("/api/admin/ai/office/threads/ceo/messages", adminOnly, crm(async (req, res) => {
+  res.status(201).json(office.addMessage("ceo", personActor(req), req.body?.text));
+}));
+app.get("/api/admin/ai/office/goals", adminOnly, crm(async (req, res) => res.json({ week: office.weekOf(), goals: office.listGoals({ week: req.query.week }) })));
+app.post("/api/admin/ai/office/goals", adminOnly, crm(async (req, res) => res.status(201).json(office.proposeGoal(req.body?.text, personActor(req)))));
+app.post("/api/admin/ai/office/goals/:id/decide", adminOnly, crm(async (req, res) => {
+  const g = office.decideGoal(req.params.id, req.body?.decision, personActor(req));
+  if (!g) return res.status(404).json({ error: "Goal not found" });
+  res.json(g);
 }));
 
 // ---- Back-office checks (read-only; used by the Registration, Verification

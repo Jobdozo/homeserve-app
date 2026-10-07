@@ -61,6 +61,13 @@ module.exports = {
     reportHourIst: num(process.env.PAYMENTS_REPORT_HOUR_IST, 8),
   },
 
+  ceo: {
+    key: process.env.AGENT_KEY_CEO || "",
+    everyMs: num(process.env.CEO_CHECK_EVERY_SEC, 60) * 1000,
+    planHourIst: num(process.env.CEO_PLAN_HOUR_IST, 10), // after the 9 AM brief and 10 AM call list
+    maxTasksPerPlan: num(process.env.CEO_MAX_TASKS_PER_PLAN, 5),
+  },
+
   operations: {
     key: process.env.AGENT_KEY_OPERATIONS || "",
     everyMs: num(process.env.OPS_CHECK_EVERY_SEC, 300) * 1000,

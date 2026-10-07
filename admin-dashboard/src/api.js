@@ -283,6 +283,18 @@ export const api = {
   getVerificationPrecheck: () => request("/admin/verification/precheck"),
   getPaymentsReconciliation: () => request("/admin/payments/reconciliation"),
 
+  listOfficeTasks: () => request("/admin/ai/office/tasks"),
+  getOfficeTask: (id) => request(`/admin/ai/office/tasks/${encodeURIComponent(id)}`),
+  createOfficeTask: (data) => request("/admin/ai/office/tasks", { method: "POST", body: JSON.stringify(data) }),
+  updateOfficeTask: (id, patch) => request(`/admin/ai/office/tasks/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  decideOfficeTask: (id, approve, note) => request(`/admin/ai/office/tasks/${encodeURIComponent(id)}/decide`, { method: "POST", body: JSON.stringify({ approve, note }) }),
+  addOfficeTaskMessage: (id, text) => request(`/admin/ai/office/tasks/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify({ text }) }),
+  getCeoThread: () => request("/admin/ai/office/threads/ceo"),
+  sendCeoMessage: (text) => request("/admin/ai/office/threads/ceo/messages", { method: "POST", body: JSON.stringify({ text }) }),
+  listOfficeGoals: () => request("/admin/ai/office/goals"),
+  addOfficeGoal: (text) => request("/admin/ai/office/goals", { method: "POST", body: JSON.stringify({ text }) }),
+  decideOfficeGoal: (id, decision) => request(`/admin/ai/office/goals/${encodeURIComponent(id)}/decide`, { method: "POST", body: JSON.stringify({ decision }) }),
+
   listOffers: () => request("/admin/offers"),
   createOffer: (data) => request("/admin/offers", { method: "POST", body: JSON.stringify(data) }),
   updateOffer: (id, patch) => request(`/admin/offers/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),

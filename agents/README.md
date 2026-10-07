@@ -13,6 +13,7 @@ over HTTP only (never to the data files). Safety model: `server/src/agents.js`.
 | Registration | Registration Team | No (rules) | Hourly: reminds providers with incomplete applications what's missing (in-app, max 3×, needs "Notifications → Add" on the role); daily 10:00 IST call list of unfinished sign-ups |
 | Verification Pre-check | Provider Verification Team | No (rules) | Every 15 min: checks pending applications (ID proof, services, areas, agreement, GST format, duplicates); **proposes** approval only when complete — never rejection; documents are not sent to any AI |
 | Payments | Payment Team | No (rules) | Every 6 h: reconciles wallets vs recharge/deduction history, commission charged vs completed jobs, fees on cancelled jobs, negative wallets; alerts + daily 08:00 IST summary; never moves money |
+| **CEO (chief of staff)** | Reporting / Management Team, **Type: CEO** | Yes | Reads every agent's reports/alerts, the task board and approvals. Answers you in **AI Agents → CEO chat** (or on WhatsApp from the owner number) within ~1 min; posts a daily review at 10:00 IST and **proposes** tasks and weekly goals for your approval. Can't approve, change data, contact customers or create agents |
 
 ## What agents can never do
 - Hold Super Admin / Admin, or touch users, settings, data import/export or AI settings.
@@ -44,6 +45,7 @@ over HTTP only (never to the data files). Safety model: `server/src/agents.js`.
    AGENT_KEY_REGISTRATION=tkag_...
    AGENT_KEY_VERIFICATION=tkag_...
    AGENT_KEY_PAYMENTS=tkag_...
+   AGENT_KEY_CEO=tkag_...
    ANTHROPIC_API_KEY=sk-ant-...
    ```
 4. `mkdir -p /root/tikdum-data/agents-state && chown 1000:1000 /root/tikdum-data/agents-state`
@@ -69,3 +71,8 @@ Each agent has a daily USD budget in Admin; when reached it stops calling the AI
   last 24h (Meta rule). Reliable delivery needs an approved WhatsApp template.
 - Proposal approvals run synchronously; if the server restarts mid-approval the item can
   stay in "executing" — reject/re-propose it.
+
+## Agent Office (task board + CEO chat)
+- **Tasks:** Proposed (by the CEO) → To do → In progress → Review → Done. Only people approve proposals and mark tasks done; agents can move their own tasks to In progress/Review.
+- **CEO chat:** one thread between you and the CEO agent. Messages from the owner number(s) in `ADMIN_PHONES` to the business WhatsApp number land here instead of the customer inbox, and the CEO's answer goes back on WhatsApp (within WhatsApp's 24h window).
+- **No agent-to-agent chat:** everything goes through task threads people can see. Daily caps: CEO 10 task proposals, 40 replies; other agents 60 messages; 5 goal proposals per week.
