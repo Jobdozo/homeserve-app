@@ -2111,8 +2111,14 @@ const sameSecret = (given) => {
   return a.length === b.length && require("crypto").timingSafeEqual(a, b);
 };
 app.post("/api/webhooks/whatsapp/msg91", ah(async (req, res) => {
-  if (!WEBHOOK_SECRET) return res.status(503).json({ error: "Inbound WhatsApp isn't configured" });
-  if (!sameSecret(req.headers["x-webhook-secret"])) return res.status(401).json({ error: "Unauthorized" });
+  if (!WEBHOOK_SECRET) {
+    console.warn("[whatsapp-webhook] rejected: WHATSAPP_WEBHOOK_SECRET is not set on the server");
+    return res.status(503).json({ error: "Inbound WhatsApp isn't configured" });
+  }
+  if (!sameSecret(req.headers["x-webhook-secret"])) {
+    console.warn(`[whatsapp-webhook] rejected: ${req.headers["x-webhook-secret"] ? "wrong" : "missing"} x-webhook-secret header`);
+    return res.status(401).json({ error: "Unauthorized" });
+  }
   // Messages from the owner's own number go to the CEO agent's thread.
   const ownerHandler = (p) => {
     const last10 = (x) => String(x || "").replace(/\D/g, "").slice(-10);
@@ -2121,6 +2127,8 @@ app.post("/api/webhooks/whatsapp/msg91", ah(async (req, res) => {
     return true;
   };
   const added = await inbox.ingest(req.body, { businessNumber: process.env.MSG91_WHATSAPP_NUMBER, ownerHandler });
+  const items = Array.isArray(req.body) ? req.body.length : req.body && typeof req.body === "object" ? 1 : 0;
+  console.log(`[whatsapp-webhook] ok: ${items} event(s), ${added.length} new customer message(s)`);
   res.json({ received: added.length });
 }));
 
