@@ -1969,6 +1969,7 @@ app.get("/api/agents/self", agentOnly, crm(async (req, res) => {
     agent: { id: req.admin.agentId, name: req.admin.name, roleName: req.admin.roleName, permissions: req.admin.permissions },
     ...agents.status(req.admin.agentId),
     supportKnowledge: agents.getConfig().supportKnowledge,
+    supportAutoSend: agents.getConfig().supportAutoSend,
     kind: req.admin.kind,
     instructions: req.admin.kind === "specialist" ? req.admin.instructions : undefined,
   });
@@ -2014,10 +2015,14 @@ app.post("/api/agents/notify-owner", agentOnly, crm(async (req, res) => {
 app.get("/api/admin/ai/config", adminOnly, crm(async (req, res) => res.json(agents.getConfig())));
 app.patch("/api/admin/ai/config", adminOnly, crm(async (req, res) => {
   const before = agents.getConfig();
-  const cfg = agents.setConfig({ enabled: req.body?.enabled, supportKnowledge: req.body?.supportKnowledge }, actorOf(req));
+  const cfg = agents.setConfig({ enabled: req.body?.enabled, supportKnowledge: req.body?.supportKnowledge, supportAutoSend: req.body?.supportAutoSend }, actorOf(req));
   if (before.enabled !== cfg.enabled) {
     audit(req, "ai.config", "ai", "config", "AI agents", [{ field: "enabled", from: before.enabled, to: cfg.enabled }]);
     await store.logActivity("ai", `All AI agents switched ${cfg.enabled ? "on" : "off"} by ${actorOf(req)}`).catch(() => {});
+  }
+  if (before.supportAutoSend !== cfg.supportAutoSend) {
+    audit(req, "ai.config", "ai", "config", "Support auto-send", [{ field: "supportAutoSend", from: before.supportAutoSend, to: cfg.supportAutoSend }]);
+    await store.logActivity("ai", `WhatsApp support AI ${cfg.supportAutoSend ? "now sends replies itself" : "switched to review mode (drafts only)"} — by ${actorOf(req)}`).catch(() => {});
   }
   if (before.supportKnowledge !== cfg.supportKnowledge) {
     audit(req, "ai.knowledge", "ai", "config", "Support knowledge", [{ field: "supportKnowledge", from: `${before.supportKnowledge.length} chars`, to: `${cfg.supportKnowledge.length} chars` }]);
@@ -2144,9 +2149,25 @@ app.get("/api/admin/inbox/:id", adminOnly, crm(async (req, res) => {
   res.json(found);
 }));
 app.post("/api/admin/inbox/:id/reply", adminOnly, crm(async (req, res) => {
-  const msg = await inbox.reply(req.params.id, req.body?.text, actorOf(req), { agent: Boolean(req.admin.agent) });
+  const msg = await inbox.reply(req.params.id, req.body?.text, actorOf(req), {
+    agent: Boolean(req.admin.agent),
+    // A person sending the AI's draft (as-is or edited) keeps the chat in AI mode.
+    fromDraft: !req.admin.agent && req.body?.fromDraft === true,
+  });
   if (!msg) return res.status(404).json({ error: "Conversation not found" });
   res.status(201).json(msg);
+}));
+// Review mode: the support agent leaves a draft; a person sends or discards it.
+app.post("/api/admin/inbox/:id/draft", adminOnly, crm(async (req, res) => {
+  if (!req.admin.agent) return res.status(403).json({ error: "Only the support AI writes drafts — reply directly instead" });
+  const conv = inbox.saveDraft(req.params.id, req.body || {}, actorOf(req));
+  if (!conv) return res.status(404).json({ error: "Conversation not found" });
+  res.status(201).json(conv);
+}));
+app.delete("/api/admin/inbox/:id/draft", adminOnly, crm(async (req, res) => {
+  const conv = inbox.discardDraft(req.params.id, actorOf(req));
+  if (!conv) return res.status(404).json({ error: "Conversation not found" });
+  res.json(conv);
 }));
 app.post("/api/admin/inbox/:id/mode", adminOnly, crm(async (req, res) => {
   const conv = inbox.setMode(req.params.id, req.body?.mode, req.body?.reason, actorOf(req));

@@ -70,7 +70,7 @@ test("support tick: replies to a booking question; hands a refund request to a p
   const conv = { id: "wa_919811112222", phone: "+919811112222", name: "Asha", customerId: "c1", mode: "ai", needsReply: true, lastInboundAt: "t" };
   const routes = {
     "GET /admin/inbox": [conv],
-    "GET /agents/self": { supportKnowledge: "Cancel from My Bookings.", budgetRemainingUsd: 1, dailyBudgetUsd: 1 },
+    "GET /agents/self": { supportKnowledge: "Cancel from My Bookings.", supportAutoSend: true, budgetRemainingUsd: 1, dailyBudgetUsd: 1 },
     "GET /bookings": [{ id: "b1", ref: "TK12", customerId: "c1", service: { name: "Plumbing" }, status: "Accepted", date: "2026-10-06", time: "10:00 AM", createdAt: "2026-10-05" }],
     "GET /admin/inbox/wa_919811112222": { conversation: conv, messages: [{ direction: "in", text: "where is my plumber?" }] },
     "POST /admin/inbox/wa_919811112222/reply": { delivered: true },
@@ -89,6 +89,30 @@ test("support tick: replies to a booking question; hands a refund request to a p
   const reply = client.calls.find(([m, p]) => p.endsWith("/reply"));
   assert.equal(reply[2].text, support.HANDOFF_TEXT); // never the model's refund promise
   assert.ok(client.calls.some(([m, p, b]) => p.endsWith("/mode") && b.mode === "human"));
+});
+
+test("support tick in review mode: drafts instead of sending; never messages or logs on its own", async () => {
+  const conv = { id: "wa_919811112222", phone: "+919811112222", name: "Asha", customerId: "c1", mode: "ai", needsReply: true, lastInboundAt: "t" };
+  const routes = {
+    "GET /admin/inbox": [conv],
+    "GET /agents/self": { supportKnowledge: "Cancel from My Bookings.", budgetRemainingUsd: 1, dailyBudgetUsd: 1 }, // supportAutoSend missing = review
+    "GET /bookings": [],
+    "GET /admin/inbox/wa_919811112222": { conversation: conv, messages: [{ direction: "in", text: "plumber was rude" }] },
+  };
+  fakeClaude({ reply: "Sorry about that. I've noted it for our team.", intent: "complaint", handoff: false, complaint: { subject: "Rude plumber", category: "Provider behaviour", priority: "normal" } });
+  let client = fakeTikdum(routes);
+  assert.match(await support.tick(client, silent), /1 drafted/);
+  const draft = client.calls.find(([m, p]) => m === "POST" && p.endsWith("/draft"));
+  assert.match(draft[2].text, /noted/);
+  assert.equal(draft[2].complaint.subject, "Rude plumber");
+  assert.ok(!client.calls.some(([, p]) => p.endsWith("/reply") || p === "/admin/complaints"));
+
+  // A refund request in review mode: handed to a person silently (no auto message).
+  fakeClaude({ reply: "I'll refund you", intent: "refund_payment", handoff: false, complaint: null });
+  client = fakeTikdum(routes);
+  assert.match(await support.tick(client, silent), /1 handoff/);
+  assert.ok(!client.calls.some(([, p]) => p.endsWith("/reply") || p.endsWith("/draft")));
+  assert.ok(client.calls.some(([, p, b]) => p.endsWith("/mode") && b.mode === "human"));
 });
 
 test("support tick: AI failure hands off instead of guessing", async () => {

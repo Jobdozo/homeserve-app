@@ -30,7 +30,7 @@ const TEAMS = [
     key: "operations", name: "Operations", description: "Runs the marketplace day to day.",
     roles: [
       { key: "operations", name: "Operations Agent", how: "rules", role: "operations", description: "Late providers, stuck bookings, long jobs; nudges providers." },
-      { key: "support", name: "Support Agent", how: "ai", role: "support", description: "Answers customers on WhatsApp; hands refunds, safety and anything unsure to people." },
+      { key: "support", name: "Support Agent", how: "ai", role: "support", description: "Answers customers on WhatsApp (drafts for review until you switch on auto-send); hands refunds, safety and anything unsure to people." },
       { key: "complaints", name: "Complaint Triage Agent", how: "ai", role: "complaints", description: "Sorts complaints, escalates safety, proposes replies and refund decisions." },
       { key: "registration", name: "Registration Agent", how: "rules", role: "registration", description: "Daily call list of unfinished sign-ups; reminds providers what's missing." },
       { key: "verification", name: "Verification Agent", how: "rules", role: "verification", description: "Pre-checks provider applications; proposes approval when complete." },

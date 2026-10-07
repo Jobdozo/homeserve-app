@@ -9,7 +9,7 @@ over HTTP only (never to the data files). Safety model: `server/src/agents.js`.
 | Operations | Operations Team | No (rules) | Every 5 min: alerts on requests stuck without a provider, providers late for accepted bookings (and nudges them once in-app), very long jobs |
 | Reporting | Reporting / Management Team | Yes (Claude Haiku) | Daily at 09:00 IST: founder brief for yesterday, posted to Admin → AI Agents and (best effort) WhatsApp |
 | Complaint Triage | Complaint Handling Team | Yes | Every 3 min: new complaints get category, priority, an internal "[AI triage]" note and escalation for safety issues; a first customer reply and refund-claim decisions are **proposed** for approval |
-| Customer Support | Customer Support | Yes | Every 20 s: answers WhatsApp chats in AI mode from the customer's own bookings + your Support knowledge; logs complaints; hands refunds, safety, legal, abuse and anything unsure to a person |
+| Customer Support | Customer Support | Yes | Every 20 s: drafts (review mode, default) or sends (auto-send) replies to WhatsApp chats in AI mode from the customer's own bookings + your Support knowledge; logs complaints; hands refunds, safety, legal, abuse and anything unsure to a person |
 | Registration | Registration Team | No (rules) | Hourly: reminds providers with incomplete applications what's missing (in-app, max 3×, needs "Notifications → Add" on the role); daily 10:00 IST call list of unfinished sign-ups |
 | Verification Pre-check | Provider Verification Team | No (rules) | Every 15 min: checks pending applications (ID proof, services, areas, agreement, GST format, duplicates); **proposes** approval only when complete — never rejection; documents are not sent to any AI |
 | Payments | Payment Team | No (rules) | Every 6 h: reconciles wallets vs recharge/deduction history, commission charged vs completed jobs, fees on cancelled jobs, negative wallets; alerts + daily 08:00 IST summary; never moves money |
@@ -28,10 +28,15 @@ over HTTP only (never to the data files). Safety model: `server/src/agents.js`.
 2. MSG91 → WhatsApp → Webhook (New) → Create: event **On Inbound Request Received**,
    URL `https://<your API host>/api/webhooks/whatsapp/msg91`, header `x-webhook-secret: <the secret>`.
 3. Send a WhatsApp message to the business number and check **WhatsApp Inbox** in admin.
-4. Write the support agent's knowledge (hours, prices policy, how to cancel/reschedule in the app, areas served)
-   in Admin → AI Agents → Support knowledge. The agent only answers from this and the customer's own bookings.
-5. Test replies with your own number before creating the Support agent. MSG91's free-form
-   send path in `whatsapp.js` has not been verified against a real account yet.
+4. Write the support agent's knowledge in Admin → AI Agents → **Support agent**
+   ("Start from Tikdum basics" fills in what the apps do today; add hours and areas).
+   The agent only answers from this and the customer's own bookings.
+5. Test from a phone that is **not** in `ADMIN_PHONES` — messages from admin numbers go to the
+   CEO chat, not the inbox. MSG91's free-form send path in `whatsapp.js` has not been verified
+   against a real account yet, so send one reply by hand from the Inbox first.
+6. The agent starts in **review mode**: it only writes a suggested reply on each chat
+   (Inbox → AI drafts); a person sends, edits or discards it. Switch to **Auto-send** on the
+   Support agent tab once the drafts are consistently right.
 
 ## Setup (VPS)
 1. Deploy the updated server + admin dashboard.

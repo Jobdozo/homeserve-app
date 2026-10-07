@@ -66,6 +66,9 @@ function getConfig() {
   return {
     enabled: row ? row.enabled !== false : true,
     supportKnowledge: row?.supportKnowledge || "",
+    // false = review mode: the support agent only drafts replies and a person
+    // sends them. Off by default so nothing reaches customers unreviewed.
+    supportAutoSend: row?.supportAutoSend === true,
     updatedAt: row?.updatedAt || null,
     updatedBy: row?.updatedBy || null,
   };
@@ -75,6 +78,7 @@ function setConfig(patch, actor) {
   const current = jsonStore.readAll(CONFIG)[0] || { id: "config", enabled: true };
   const row = { ...current, id: "config", updatedAt: nowIso(), updatedBy: actor };
   if (patch.enabled !== undefined) row.enabled = Boolean(patch.enabled);
+  if (patch.supportAutoSend !== undefined) row.supportAutoSend = patch.supportAutoSend === true;
   if (patch.supportKnowledge !== undefined) {
     const text = String(patch.supportKnowledge || "");
     if (text.length > MAX_KNOWLEDGE) throw fail(400, `Support knowledge is limited to ${MAX_KNOWLEDGE} characters`);

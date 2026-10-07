@@ -73,7 +73,7 @@ export default function AiAgentsPage() {
             ["feed", "Alerts & reports"],
             ["teams", "Teams"],
             ["agents", "Agents"],
-            ["knowledge", "Support knowledge"],
+            ["knowledge", "Support agent"],
           ].map(([key, label]) => (
             <button key={key} onClick={() => setTab(key)} className={`rounded-lg px-4 py-1.5 text-[12.5px] font-semibold ${tab === key ? "bg-brand text-white" : "text-gray-500"}`}>
               {label}
@@ -105,18 +105,37 @@ export default function AiAgentsPage() {
 
 // ---------------------------------------------------------------- knowledge
 
-const KNOWLEDGE_TEMPLATE = `Support hours: 8 AM – 9 PM, every day.
-Areas we serve: Jammu city (PIN codes ...).
-How to cancel a booking: My Bookings → open the booking → Cancel. Free until the provider accepts.
-How to reschedule: ...
-Payments: customers pay the provider directly after the job (cash/UPI).
-Refunds: never promised by the assistant — a team member reviews every request.
-Becoming a provider: download "Tikdum Business" from the Play Store and sign up with your mobile number.`;
+// Every line below matches how the Tikdum apps work today (checked against the
+// code). Hours and service areas aren't in the code — the owner fills those in.
+const KNOWLEDGE_TEMPLATE = `About Tikdum: book trusted local home-service providers (plumbers, electricians, cleaners and more) in the Tikdum app. Customer app: "Tikdum" on the Play Store.
+Support hours: (fill in, e.g. 8 AM - 9 PM every day)
+Areas we serve: (fill in)
+
+Booking: open the app, pick a service, add it to the cart and check out. You are not charged when booking - payment is after the service is completed.
+Each booking has a request ID on the booking screen. Ask the customer for it if they have more than one booking.
+If a provider declines, Tikdum automatically tries another provider in the same category.
+Provider's phone number: shown in the app on the booking once the provider has accepted (and while the job is in progress).
+
+Cancel: My Bookings -> open the booking -> "Cancel Booking". Possible while the booking is Pending or Accepted. Once the job has started, the customer can't cancel in the app - a team member helps.
+Reschedule: not possible in the app. The customer can cancel and book again for the new time, or a team member can help.
+
+Job OTPs: after the provider accepts, the booking screen shows a Start OTP. Share it with the provider only once they have arrived. When the job is done and the customer is happy, they share the Completion OTP. Never share an OTP with anyone over the phone or chat - Tikdum staff never ask for it.
+
+Booking protection (only for bookings made in the Tikdum app): genuine service guarantee, damage protection up to Rs 1,000, fair price guarantee, SOS emergency help. Problems with a booking: open the booking -> "Something wrong with this booking?" - a team member reviews every claim.
+
+Become a provider: install "Tikdum Business" from the Play Store and sign up with your mobile number. Our team verifies new providers before they get jobs.
+Delete account: in the app, Profile -> Delete account.
+Other contact: email support@tikdum.com.`;
 
 function KnowledgePanel({ config, onSaved, canEdit }) {
   const [text, setText] = useState(config.supportKnowledge || "");
   const [saving, setSaving] = useState(false);
   const run = useRun();
+  const setAutoSend = async (on) => {
+    if (on && !window.confirm("The support AI will reply to customers on WhatsApp by itself (refunds, safety and complaints still go to a person). Turn on?")) return;
+    const out = await run(() => api.setAiConfig({ supportAutoSend: on }), on ? "Support AI now replies by itself" : "Review mode: the AI only drafts replies");
+    if (out) onSaved(out);
+  };
   const dirty = text !== (config.supportKnowledge || "");
   const save = async () => {
     setSaving(true);
@@ -125,6 +144,29 @@ function KnowledgePanel({ config, onSaved, canEdit }) {
     setSaving(false);
   };
   return (
+    <div className="space-y-4">
+    <div className="rounded-2xl bg-white p-4 shadow-card">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-[14px] font-bold text-gray-900">How the WhatsApp support agent replies</h2>
+          <p className="text-[12px] text-gray-500">
+            {config.supportAutoSend
+              ? "Auto-send: it replies to customers itself. Refunds, safety, legal and abusive chats, and anything it isn't sure about, still go to your team."
+              : "Review mode: it writes a suggested reply on each chat (Inbox → AI drafts) and a person sends, edits or discards it. Nothing reaches customers without a person."}
+          </p>
+        </div>
+        {canEdit && (
+          <div className="flex flex-shrink-0 rounded-xl border border-gray-200 p-0.5">
+            <button className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold ${!config.supportAutoSend ? "bg-brand text-white" : "text-gray-500"}`} onClick={() => config.supportAutoSend && setAutoSend(false)}>
+              Review mode
+            </button>
+            <button className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold ${config.supportAutoSend ? "bg-brand text-white" : "text-gray-500"}`} onClick={() => !config.supportAutoSend && setAutoSend(true)}>
+              Auto-send
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
     <div className="rounded-2xl bg-white p-4 shadow-card">
       <h2 className="text-[14px] font-bold text-gray-900">What the WhatsApp support agent may tell customers</h2>
       <p className="mb-3 text-[12px] text-gray-500">
@@ -144,7 +186,7 @@ function KnowledgePanel({ config, onSaved, canEdit }) {
           <div className="flex gap-2">
             {!text && (
               <button className={ghostCls} onClick={() => setText(KNOWLEDGE_TEMPLATE)}>
-                Start from example
+                Start from Tikdum basics
               </button>
             )}
             <button className={btnCls} disabled={!dirty || saving} onClick={save}>
@@ -153,6 +195,7 @@ function KnowledgePanel({ config, onSaved, canEdit }) {
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 }

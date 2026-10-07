@@ -4,7 +4,8 @@ import { useApp } from "../context/AppContext";
 
 // WhatsApp inbox: customer chats from the business number. Chats in "AI" mode
 // are answered by the Customer Support agent; replying yourself takes the chat
-// over ("Team" mode) until you hand it back.
+// over ("Team" mode) until you hand it back. In review mode the agent only
+// drafts: a person sends the draft (as-is or edited) or discards it.
 
 const inputCls = "w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-[12.5px] text-gray-800 outline-none focus:border-brand";
 const btnCls = "rounded-xl bg-brand px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50";
@@ -19,7 +20,7 @@ export default function InboxPage() {
   const [openId, setOpenId] = useState(null);
 
   const load = () => {
-    const params = filter === "needs_reply" ? { queue: "needs_reply" } : filter === "all" ? {} : { mode: filter };
+    const params = filter === "needs_reply" || filter === "drafts" ? { queue: filter } : filter === "all" ? {} : { mode: filter };
     api.listInbox({ ...params, q }).then(setList).catch(() => setList([]));
   };
   useEffect(() => {
@@ -36,6 +37,7 @@ export default function InboxPage() {
           <div className="no-scrollbar flex gap-1 overflow-x-auto">
             {[
               ["needs_reply", "Waiting"],
+              ["drafts", "AI drafts"],
               ["human", "Team"],
               ["ai", "AI"],
               ["all", "All"],
@@ -61,6 +63,7 @@ export default function InboxPage() {
                   </div>
                   <div className="mt-0.5 flex items-center gap-1.5">
                     <ModeBadge mode={c.mode} />
+                    {c.draft && <span className="flex-shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Draft ready</span>}
                     {c.needsReply && <span className="h-2 w-2 flex-shrink-0 rounded-full bg-red-500" title="Waiting for a reply" />}
                     <p className="truncate text-[11.5px] text-gray-500">{c.lastPreview}</p>
                   </div>
@@ -92,6 +95,8 @@ function Conversation({ id, canReply, onBack, onChanged }) {
   const [data, setData] = useState(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  // Set when the composer holds the AI's draft — sending it keeps the chat in AI mode.
+  const [fromDraft, setFromDraft] = useState(false);
   const bottom = useRef(null);
 
   const load = () => api.getInboxConversation(id).then(setData).catch((e) => showToast(e.message));
@@ -109,8 +114,9 @@ function Conversation({ id, canReply, onBack, onChanged }) {
     if (!text.trim()) return;
     setBusy(true);
     try {
-      const msg = await api.replyInbox(id, text);
+      const msg = await api.replyInbox(id, text, { fromDraft });
       setText("");
+      setFromDraft(false);
       if (!msg.delivered) showToast("Saved, but WhatsApp didn't accept the message — check MSG91");
       await load();
       onChanged();
@@ -118,6 +124,30 @@ function Conversation({ id, canReply, onBack, onChanged }) {
       showToast(err.message);
     }
     setBusy(false);
+  };
+
+  const sendDraft = async () => {
+    setBusy(true);
+    try {
+      const msg = await api.replyInbox(id, data.conversation.draft.text, { fromDraft: true });
+      if (!msg.delivered) showToast("Saved, but WhatsApp didn't accept the message — check MSG91");
+      await load();
+      onChanged();
+    } catch (err) {
+      showToast(err.message);
+    }
+    setBusy(false);
+  };
+  const discardDraft = async () => {
+    try {
+      await api.discardInboxDraft(id);
+      setFromDraft(false);
+      showToast("Draft discarded — this chat is now with the team");
+      await load();
+      onChanged();
+    } catch (err) {
+      showToast(err.message);
+    }
   };
 
   const setMode = async (mode) => {
@@ -172,6 +202,9 @@ function Conversation({ id, canReply, onBack, onChanged }) {
         ))}
         <div ref={bottom} />
       </div>
+      {canReply && c.draft && c.canReply && (
+        <DraftCard draft={c.draft} busy={busy} onSend={sendDraft} onEdit={() => { setText(c.draft.text); setFromDraft(true); }} onDiscard={discardDraft} />
+      )}
       {canReply && (
         <form onSubmit={send} className="flex gap-2 border-t border-gray-100 p-3">
           <textarea
@@ -181,13 +214,46 @@ function Conversation({ id, canReply, onBack, onChanged }) {
             placeholder={c.canReply ? (c.mode === "ai" ? "Reply yourself (takes the chat over from the AI)" : "Type a reply") : "Over 24h since the customer wrote — WhatsApp needs an approved template now"}
             disabled={!c.canReply || busy}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              if (!e.target.value) setFromDraft(false);
+            }}
           />
           <button className={btnCls} disabled={!c.canReply || busy || !text.trim()}>
             Send
           </button>
         </form>
       )}
+    </div>
+  );
+}
+
+const INTENT_LABEL = {
+  booking_status: "Booking status", how_to: "How-to", reschedule_cancel: "Reschedule / cancel", complaint: "Complaint",
+  provider_signup: "Provider sign-up", greeting: "Greeting", other: "Other",
+};
+
+function DraftCard({ draft, busy, onSend, onEdit, onDiscard }) {
+  return (
+    <div className="border-t border-emerald-100 bg-emerald-50/70 px-4 py-3">
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <span className="text-[11.5px] font-bold text-emerald-800">AI suggested reply</span>
+        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-emerald-700">{INTENT_LABEL[draft.intent] || draft.intent}</span>
+        <span className="text-[10.5px] text-emerald-700/70">not sent yet</span>
+      </div>
+      <p className="whitespace-pre-line break-words rounded-xl bg-white px-3 py-2 text-[12.5px] text-gray-800">{draft.text}</p>
+      {draft.complaint && (
+        <p className="mt-1.5 text-[11.5px] text-amber-800">
+          Possible complaint: <b>{draft.complaint.subject || "—"}</b>
+          {draft.complaint.category ? ` · ${draft.complaint.category}` : ""}
+          {draft.complaint.priority ? ` · ${draft.complaint.priority}` : ""} — log it in Complaints if you agree.
+        </p>
+      )}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button className={btnCls} disabled={busy} onClick={onSend}>Send as is</button>
+        <button className={ghostCls} disabled={busy} onClick={onEdit}>Edit first</button>
+        <button className={ghostCls} disabled={busy} onClick={onDiscard}>Discard (I'll handle it)</button>
+      </div>
     </div>
   );
 }

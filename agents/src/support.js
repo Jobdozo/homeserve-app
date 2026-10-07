@@ -6,6 +6,12 @@
 // It can't: cancel/reschedule bookings, promise refunds or compensation, or
 // see anyone else's data (only bookings linked to the number that wrote in).
 //
+// Two modes, set in Admin -> AI Agents -> Support knowledge:
+//   review (default) — it only leaves a draft on the chat; a person sends it.
+//                      Nothing is sent to the customer and no complaint is
+//                      logged automatically (the draft carries the suggestion).
+//   auto-send        — it replies itself, within the rules below.
+//
 // Hard rules (enforced here in code, not just in the prompt):
 //   - refund/payment, safety, legal and abusive chats always go to a person;
 //   - a reply mentioning refunds/compensation, containing a phone number or a
@@ -79,11 +85,13 @@ async function logComplaint(client, conv, messages, complaint, bookings) {
   return client.post("/admin/complaints", body);
 }
 
-async function handOff(client, conv, reason, intent) {
-  try {
-    await client.post(`/admin/inbox/${encodeURIComponent(conv.id)}/reply`, { text: HANDOFF_TEXT });
-  } catch {
-    /* outside window / limit — the team still gets the handoff below */
+async function handOff(client, conv, reason, intent, { tellCustomer = true } = {}) {
+  if (tellCustomer) {
+    try {
+      await client.post(`/admin/inbox/${encodeURIComponent(conv.id)}/reply`, { text: HANDOFF_TEXT });
+    } catch {
+      /* outside window / limit — the team still gets the handoff below */
+    }
   }
   await client.post(`/admin/inbox/${encodeURIComponent(conv.id)}/mode`, { mode: "human", reason });
   await client.feed({
@@ -114,6 +122,21 @@ async function handle(client, conv, ctx) {
     d = { action: "handoff", reason: e instanceof BudgetExceeded ? "AI budget used up for today" : `AI unavailable: ${e.message}`.slice(0, 200), intent: "other" };
   }
 
+  if (!ctx.autoSend) {
+    // Review mode: never message the customer, never log on our own.
+    if (d.action === "handoff") {
+      await handOff(client, conversation, d.reason, d.intent, { tellCustomer: false });
+      return "handoff";
+    }
+    await client.post(`/admin/inbox/${encodeURIComponent(conversation.id)}/draft`, {
+      text: d.reply,
+      intent: d.intent,
+      note: d.complaint ? "Looks like a complaint — log it in Complaints if you agree." : null,
+      complaint: d.complaint && Object.keys(d.complaint).length ? d.complaint : d.complaint ? { subject: "WhatsApp complaint" } : null,
+    });
+    return "drafted";
+  }
+
   let complaintId = null;
   if (d.complaint) {
     const created = await logComplaint(client, conversation, messages, d.complaint, ctx.bookings).catch(() => null);
@@ -136,7 +159,7 @@ async function tick(client, log) {
   const queue = await client.get("/admin/inbox?queue=ai");
   if (!queue.length) return null;
   const [self, bookings] = await Promise.all([client.get("/agents/self"), client.get("/bookings").catch(() => [])]);
-  const ctx = { knowledge: self.supportKnowledge || "", bookings };
+  const ctx = { knowledge: self.supportKnowledge || "", bookings, autoSend: self.supportAutoSend === true };
   const counts = {};
   for (const conv of queue.slice(0, config.support.maxPerRun)) {
     try {

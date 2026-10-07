@@ -8,6 +8,11 @@
 //           switches to human; only a person can switch it back.
 // WhatsApp lets a business send free-form text only within 24 hours of the
 // customer's last message, so replies outside that window are refused here.
+//
+// Review mode (Admin -> AI Agents -> Support, the default): the agent doesn't
+// send; it leaves a draft on the conversation (conv.draft) for the newest
+// customer message, and a person sends it (as-is or edited) or discards it.
+// A new customer message makes the draft stale, so the agent drafts again.
 const crypto = require("crypto");
 const jsonStore = require("./jsonStore");
 const store = require("./store");
@@ -84,6 +89,7 @@ async function ingest(raw, { businessNumber, ownerHandler } = {}) {
         mode: "ai", createdAt: nowIso(), lastInboundAt: null, lastMessageAt: null, lastDirection: null, handoffReason: null,
       });
     }
+    if (conv.draft) jsonStore.update(CONVERSATIONS, id, { draft: null }); // stale now
     const msg = { id: `wam_${Date.now().toString(36)}${crypto.randomBytes(3).toString("hex")}`, conversationId: id, direction: "in", sender: "customer", text: p.text, contentType: p.contentType, waId: p.waId, at: p.at };
     messages.push(msg);
     if (p.waId) seen.add(p.waId);
@@ -103,15 +109,19 @@ async function ingest(raw, { businessNumber, ownerHandler } = {}) {
 // ---- reading ----
 const withinWindow = (c) => Boolean(c.lastInboundAt && Date.now() - new Date(c.lastInboundAt).getTime() < WINDOW_MS);
 const needsReply = (c) => c.lastDirection === "in";
-const publicConv = (c) => ({ ...c, needsReply: needsReply(c), canReply: withinWindow(c) });
+// A draft only counts while it answers the newest customer message.
+const hasDraft = (c) => Boolean(c.draft && c.draft.forInboundAt === c.lastInboundAt && needsReply(c));
+const publicConv = (c) => ({ ...c, draft: hasDraft(c) ? c.draft : null, needsReply: needsReply(c), canReply: withinWindow(c) });
 
-// queue: "ai" = chats the support agent should answer now; "needs_reply" = any unanswered.
+// queue: "ai" = chats the support agent should answer (or draft for) now;
+// "drafts" = AI drafts waiting for a person; "needs_reply" = any unanswered.
 function listConversations({ queue, mode, q, limit } = {}) {
   const term = String(q || "").trim().toLowerCase();
   return jsonStore
     .readAll(CONVERSATIONS)
     .filter((c) => {
-      if (queue === "ai" && !(c.mode === "ai" && needsReply(c) && withinWindow(c))) return false;
+      if (queue === "ai" && !(c.mode === "ai" && needsReply(c) && withinWindow(c) && !hasDraft(c))) return false;
+      if (queue === "drafts" && !(c.mode === "ai" && hasDraft(c))) return false;
       if (queue === "needs_reply" && !needsReply(c)) return false;
       if (mode && c.mode !== mode) return false;
       if (term && !`${c.name} ${c.phone}`.toLowerCase().includes(term)) return false;
@@ -130,7 +140,7 @@ function getConversation(id, { limit = 50 } = {}) {
 }
 
 // ---- writing ----
-async function reply(id, text, actor, { agent = false } = {}) {
+async function reply(id, text, actor, { agent = false, fromDraft = false } = {}) {
   const conv = jsonStore.readAll(CONVERSATIONS).find((c) => c.id === id);
   if (!conv) return null;
   const body = String(text || "").trim().slice(0, 1500);
@@ -143,19 +153,53 @@ async function reply(id, text, actor, { agent = false } = {}) {
     const recent = messages.filter((m) => m.conversationId === id && m.sender === "ai" && new Date(m.at).getTime() > since).length;
     if (recent >= AI_REPLIES_PER_DAY) throw fail(429, "AI reply limit reached for this conversation today — hand it to a person");
   }
+  const approvingDraft = !agent && fromDraft && hasDraft(conv) && conv.mode === "ai";
   const delivered = await sendWhatsAppMessage(conv.phone, body).catch(() => false);
   const msg = {
     id: `wam_${Date.now().toString(36)}${crypto.randomBytes(3).toString("hex")}`,
     conversationId: id, direction: "out", sender: agent ? "ai" : "staff", actor, text: body, delivered: Boolean(delivered), at: nowIso(),
+    ...(approvingDraft ? { aiDraft: true, editedDraft: body !== conv.draft.text } : {}),
   };
   messages.push(msg);
   jsonStore.writeAll(MESSAGES, messages.slice(-MAX_MESSAGES));
   jsonStore.update(CONVERSATIONS, id, {
-    lastMessageAt: msg.at, lastDirection: "out", lastPreview: body.slice(0, 120),
-    // A person replying takes the chat over so the AI doesn't talk over them.
-    ...(agent ? {} : { mode: "human" }),
+    lastMessageAt: msg.at, lastDirection: "out", lastPreview: body.slice(0, 120), draft: null,
+    // A person replying takes the chat over so the AI doesn't talk over them —
+    // unless they're sending the AI's own draft (review mode).
+    ...(agent || approvingDraft ? {} : { mode: "human" }),
   });
   return msg;
+}
+
+const DRAFT_INTENT = /^[a-z_]{1,30}$/;
+function saveDraft(id, { text, intent, note, complaint } = {}, actor) {
+  const conv = jsonStore.readAll(CONVERSATIONS).find((c) => c.id === id);
+  if (!conv) return null;
+  if (conv.mode !== "ai") throw fail(409, "A person has taken over this conversation");
+  if (!needsReply(conv)) throw fail(409, "Nothing to answer — the last message was ours");
+  const body = String(text || "").trim().slice(0, 1500);
+  if (!body) throw fail(400, "Draft text is empty");
+  const c = complaint && typeof complaint === "object" ? complaint : null;
+  const draft = {
+    text: body,
+    intent: DRAFT_INTENT.test(String(intent || "")) ? intent : "other",
+    note: String(note || "").slice(0, 300) || null,
+    complaint: c ? { subject: String(c.subject || "").slice(0, 120), category: String(c.category || "").slice(0, 40), priority: String(c.priority || "").slice(0, 10) } : null,
+    forInboundAt: conv.lastInboundAt,
+    by: actor,
+    at: nowIso(),
+  };
+  return publicConv(jsonStore.update(CONVERSATIONS, id, { draft }));
+}
+
+function discardDraft(id, actor) {
+  const conv = jsonStore.readAll(CONVERSATIONS).find((c) => c.id === id);
+  if (!conv) return null;
+  // Discarding means "I'll handle this": the chat moves to the team so the AI
+  // doesn't immediately draft the same answer again.
+  return publicConv(jsonStore.update(CONVERSATIONS, id, {
+    draft: null, mode: "human", handoffReason: "AI draft discarded", modeChangedAt: nowIso(), modeChangedBy: actor,
+  }));
 }
 
 function setMode(id, mode, reason, actor) {
@@ -170,4 +214,4 @@ function setMode(id, mode, reason, actor) {
   }));
 }
 
-module.exports = { parseInbound, ingest, listConversations, getConversation, reply, setMode, normalise };
+module.exports = { parseInbound, ingest, listConversations, getConversation, reply, saveDraft, discardDraft, setMode, normalise };

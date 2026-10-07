@@ -58,6 +58,37 @@ test("replies: AI only while mode=ai; a person replying takes over", async () =>
   await assert.rejects(inbox.reply(id, "AI again", "bot", { agent: true }), /taken over/);
 });
 
+test("review mode: AI drafts leave the AI queue; a person sending the draft keeps AI mode", async () => {
+  const id = "wa_919822223333";
+  await inbox.ingest({ customerNumber: "919822223333", text: "is my cleaner coming?", uuid: "d1" });
+  assert.ok(inbox.listConversations({ queue: "ai" }).some((c) => c.id === id));
+  inbox.saveDraft(id, { text: "Yes, your cleaner is booked for 4 PM.", intent: "booking_status" }, "Support Agent [AI agent]");
+  assert.equal(inbox.listConversations({ queue: "ai" }).some((c) => c.id === id), false); // not drafted twice
+  assert.ok(inbox.listConversations({ queue: "drafts" }).some((c) => c.id === id));
+  const sent = await inbox.reply(id, "Yes, your cleaner is booked for 4 PM today.", "Ravi", { fromDraft: true });
+  assert.equal(sent.aiDraft, true);
+  assert.equal(sent.editedDraft, true);
+  const c = inbox.getConversation(id).conversation;
+  assert.equal(c.mode, "ai");
+  assert.equal(c.draft, null);
+
+  // A new customer message makes any draft stale; discarding hands the chat to the team.
+  await inbox.ingest({ customerNumber: "919822223333", text: "and the price?", uuid: "d2" });
+  inbox.saveDraft(id, { text: "It's shown in the app.", intent: "how_to" }, "bot");
+  await inbox.ingest({ customerNumber: "919822223333", text: "hello??", uuid: "d3" });
+  assert.equal(inbox.getConversation(id).conversation.draft, null);
+  assert.ok(inbox.listConversations({ queue: "ai" }).some((x) => x.id === id));
+  inbox.saveDraft(id, { text: "Hi!", intent: "greeting" }, "bot");
+  assert.equal(inbox.discardDraft(id, "Ravi").mode, "human");
+  assert.throws(() => inbox.saveDraft(id, { text: "x" }, "bot"), /taken over/);
+});
+
+test("support auto-send is off unless switched on", () => {
+  assert.equal(agents.getConfig().supportAutoSend, false);
+  assert.equal(agents.setConfig({ supportAutoSend: true }, "owner").supportAutoSend, true);
+  assert.equal(agents.setConfig({ supportAutoSend: "yes" }, "owner").supportAutoSend, false); // only literal true
+});
+
 test("no free-form reply outside WhatsApp's 24h window", async () => {
   await inbox.ingest({ customerNumber: "919800000001", text: "old", uuid: "old1", ts: String(Math.floor(Date.now() / 1000) - 26 * 3600) });
   await assert.rejects(inbox.reply("wa_919800000001", "late reply", "x"), /24 hours/);

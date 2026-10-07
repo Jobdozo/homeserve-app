@@ -278,7 +278,8 @@ export const api = {
 
   listInbox: (params = {}) => request(`/admin/inbox?${new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v)))}`),
   getInboxConversation: (id) => request(`/admin/inbox/${encodeURIComponent(id)}?limit=200`),
-  replyInbox: (id, text) => request(`/admin/inbox/${encodeURIComponent(id)}/reply`, { method: "POST", body: JSON.stringify({ text }) }),
+  replyInbox: (id, text, { fromDraft = false } = {}) => request(`/admin/inbox/${encodeURIComponent(id)}/reply`, { method: "POST", body: JSON.stringify({ text, fromDraft }) }),
+  discardInboxDraft: (id) => request(`/admin/inbox/${encodeURIComponent(id)}/draft`, { method: "DELETE" }),
   setInboxMode: (id, mode, reason) => request(`/admin/inbox/${encodeURIComponent(id)}/mode`, { method: "POST", body: JSON.stringify({ mode, reason }) }),
 
   getVerificationPrecheck: () => request("/admin/verification/precheck"),
