@@ -83,6 +83,11 @@ let revocationCheck = null;
 function setRevocationCheck(fn) {
   revocationCheck = fn;
 }
+// Numbers the team has blocked: customer/provider sessions on them stop working.
+let blockCheck = null;
+function setBlockCheck(fn) {
+  blockCheck = fn;
+}
 let providerGuard = null;
 function setProviderGuard(fn) {
   providerGuard = fn;
@@ -99,6 +104,9 @@ function requireAuth(...allowedRoles) {
     }
     if (payload.role !== "admin" && revocationCheck && revocationCheck(payload.id)) {
       return res.status(401).json({ error: "This account has been deleted" });
+    }
+    if (payload.role !== "admin" && payload.phone && blockCheck && blockCheck(payload.phone)) {
+      return res.status(403).json({ error: "This number has been blocked. Contact support if you think this is a mistake." });
     }
     req.user = payload;
     if (payload.role === "admin" && adminGuard) {
@@ -119,6 +127,7 @@ module.exports = {
   adminPhones: () => [...ADMIN_PHONES],
   setAdminGuard,
   setRevocationCheck,
+  setBlockCheck,
   setProviderGuard,
   requestOtp,
   clearOtp,

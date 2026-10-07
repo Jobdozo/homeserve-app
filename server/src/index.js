@@ -29,6 +29,8 @@ auth.setRevocationCheck(accountDeletion.isDeleted);
 const { sendOtpViaWhatsApp, isConfigured: whatsappConfigured } = require("./whatsapp");
 const otpGuard = require("./otpGuard");
 const loginAttempts = require("./loginAttempts");
+const blockedPhones = require("./blockedPhones");
+auth.setBlockCheck(blockedPhones.isBlocked);
 const liveLocation = require("./liveLocation");
 const push = require("./push");
 const fcm = require("./fcm");
@@ -256,6 +258,10 @@ app.post("/api/auth/otp/request", ah(async (req, res) => {
     loginAttempts.recordRequest({ phone, role, ip: otpGuard.clientIp(req), outcome: "not-admin" });
     return res.status(403).json({ error: "This number is not registered as an admin" });
   }
+  if (role !== "admin" && blockedPhones.isBlocked(phone)) {
+    loginAttempts.recordRequest({ phone, role, ip: otpGuard.clientIp(req), outcome: "blocked" });
+    return res.status(403).json({ error: "This number can't be used to sign in. Contact support if you think this is a mistake." });
+  }
   const ip = otpGuard.clientIp(req);
   const gate = otpGuard.check(phone, ip);
   if (!gate.ok) {
@@ -300,6 +306,9 @@ app.post("/api/auth/otp/verify", ah(async (req, res) => {
   const { phone, code, role, name } = req.body || {};
   if (!phone || !code || !OTP_ROLES.includes(role)) {
     return res.status(400).json({ error: "phone, code and a valid role are required" });
+  }
+  if (role !== "admin" && blockedPhones.isBlocked(phone)) {
+    return res.status(403).json({ error: "This number can't be used to sign in. Contact support if you think this is a mistake." });
   }
   const result = auth.verifyOtp(role, phone, code);
   if (!result.ok) {
@@ -1656,6 +1665,26 @@ app.patch("/api/admin/customers/deleted-accounts/:id", auth.requireAuth("admin")
   const row = accountDeletion.updateFeedback(req.params.id, { status: req.body?.status, followUpNote: req.body?.followUpNote }, actorOf(req));
   if (!row) return res.status(404).json({ error: "Record not found" });
   res.json(row);
+}));
+
+// Numbers that may not sign in or use the app.
+app.get("/api/admin/customers/blocked-numbers", auth.requireAuth("admin"), (req, res) => {
+  res.json(blockedPhones.list());
+});
+
+app.post("/api/admin/customers/blocked-numbers", auth.requireAuth("admin"), ah(async (req, res) => {
+  const phone = req.body?.phone;
+  if (phone && access.resolveByPhone(phone)) return res.status(400).json({ error: "That number belongs to a staff account — remove it in User management instead" });
+  const row = blockedPhones.add(phone, req.body?.reason, actorOf(req));
+  audit(req, "customer.block", "blockedNumber", row.id, row.phone, [{ field: "blocked", from: false, to: true }]);
+  res.status(201).json(row);
+}));
+
+app.delete("/api/admin/customers/blocked-numbers/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const row = blockedPhones.list().find((r) => r.id === req.params.id);
+  if (!row || !blockedPhones.remove(req.params.id)) return res.status(404).json({ error: "Number not found" });
+  audit(req, "customer.unblock", "blockedNumber", row.id, row.phone, [{ field: "blocked", from: true, to: false }]);
+  res.status(204).end();
 }));
 
 app.get("/api/admin/customers", auth.requireAuth("admin"), ah(async (req, res) => {
