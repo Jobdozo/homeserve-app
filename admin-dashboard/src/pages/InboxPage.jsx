@@ -100,7 +100,9 @@ function Conversation({ id, canReply, onBack, onChanged }) {
     const t = setInterval(load, 8000);
     return () => clearInterval(t);
   }, [id]);
-  useEffect(() => bottom.current?.scrollIntoView({ block: "end" }), [data?.messages?.length]);
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ block: "end" });
+  }, [data?.messages?.length]);
 
   const send = async (e) => {
     e.preventDefault();

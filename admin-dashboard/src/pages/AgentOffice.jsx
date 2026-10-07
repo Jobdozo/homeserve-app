@@ -266,7 +266,9 @@ export function CeoChatPanel({ hasCeo }) {
     const t = setInterval(load, 8000);
     return () => clearInterval(t);
   }, []);
-  useEffect(() => bottom.current?.scrollIntoView({ block: "end" }), [msgs?.length]);
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ block: "end" });
+  }, [msgs?.length]);
   const waiting = msgs && msgs.length > 0 && msgs[msgs.length - 1].from.type === "person";
   return (
     <div className="flex min-h-[60vh] flex-col overflow-hidden rounded-2xl bg-white shadow-card">
