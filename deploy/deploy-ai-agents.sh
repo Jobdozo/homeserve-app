@@ -11,6 +11,13 @@
 # The agents worker starts idle until agent keys are added to .env (see agents/README.md).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Use the same compose project the running containers belong to (on this VPS
+# it's "homeserve", not the folder name) so we replace them instead of
+# starting a second copy that fights over the same ports.
+PROJECT="${COMPOSE_PROJECT_NAME:-$(docker ps --filter "label=com.docker.compose.project.working_dir=$PWD" --format '{{.Label "com.docker.compose.project"}}' | head -1)}"
+PROJECT="${PROJECT:-homeserve}"
+dc() { docker compose -p "$PROJECT" "$@"; }
+echo "Compose project: $PROJECT"
 
 echo "== 1/4 Backup"
 if command -v tikdum-backup >/dev/null 2>&1; then
