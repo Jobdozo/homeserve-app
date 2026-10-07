@@ -1,0 +1,47 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            admin-dashboard/package-lock.json
+
+      - name: Server tests
+        working-directory: server
+        env:
+          NODE_ENV: test
+        run: |
+          npm ci
+          npm test
+
+      - name: Agent worker tests
+        working-directory: agents
+        run: npm test
+
+      - name: Admin dashboard build
+        working-directory: admin-dashboard
+        run: |
+          npm ci
+          npm run build
