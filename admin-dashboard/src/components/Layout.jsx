@@ -18,6 +18,7 @@ const TITLES = {
   "/monitoring": { title: "Live Service Provider Monitoring", subtitle: "Real-time provider status, orders and reports" },
   "/bookings": { title: "Bookings", subtitle: "All bookings across every provider" },
   "/reviews": { title: "Reviews & Ratings", subtitle: "Customer feedback across the platform" },
+  "/accounting": { title: "Accounting & GST", subtitle: "Tax invoices, credit notes and GST return figures" },
   "/payments": { title: "Payments & Transactions", subtitle: "Revenue, platform fees, and provider payouts" },
   "/reports": { title: "Reports & Analytics", subtitle: "Revenue, bookings, and provider performance" },
   "/audit-logs": { title: "Audit Logs", subtitle: "Every platform event, in order" },

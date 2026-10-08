@@ -40,7 +40,7 @@ const sha256 = (s) => crypto.createHash("sha256").update(String(s)).digest("hex"
 // Roles an agent may never hold.
 const FORBIDDEN_ROLES = ["super_admin", "admin"];
 // Modules an agent never touches, even read-only.
-const DENY_MODULES = ["users", "settings", "data", "ai"];
+const DENY_MODULES = ["users", "settings", "data", "ai", "accounting"];
 // Read-style actions an agent keeps from its role.
 const READ_ACTIONS = ["view", "export"];
 // The only writes an agent may make directly (if its role has them).

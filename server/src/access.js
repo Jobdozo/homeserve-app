@@ -35,6 +35,7 @@ const MODULES = [
   { key: "users", label: "User management", actions: ["view", "add", "edit", "delete", "manage"] },
   { key: "ai", label: "AI agents (approvals, alerts, agent accounts)", actions: ["view", "approve", "manage"] },
   { key: "inbox", label: "WhatsApp inbox (customer chats)", actions: ["view", "add", "manage"] },
+  { key: "accounting", label: "Accounting & GST (invoices, credit notes, returns)", actions: ["view", "export", "manage"] },
 ];
 
 // One-time grants for permissions added after roles were first saved (saved
@@ -67,7 +68,7 @@ const DEFAULT_ROLES = [
   { key: "super_admin", name: "Super Admin", description: "Full access to everything, including user management.", permissions: ["*"], locked: true },
   {
     key: "admin", name: "Admin", description: "Runs the platform day to day; can't manage users or delete platform data.",
-    permissions: everything.filter((p) => !p.startsWith("users.") && p !== "settings.delete").concat(["users.view"]),
+    permissions: everything.filter((p) => !p.startsWith("users.") && !p.startsWith("accounting.") && p !== "settings.delete").concat(["users.view"]),
   },
   {
     key: "registration", name: "Registration Team", description: "Onboards customers and providers.",
@@ -280,6 +281,8 @@ const decisionAction = (v) => (v === "approved" || v === "approve" ? "approve" :
 const RULES = [
   // [path regex, (method, body, match) => permission | permission[] | null (any staff) | "super"]
   [/^\/auth\/me$/, () => null],
+  [/^\/admin\/accounting\/(settings|invoices\/[^/]+\/credit-note)/, (m) => (m === "GET" ? "accounting.view" : "accounting.manage")],
+  [/^\/admin\/accounting(\/|$)/, () => "accounting.view"],
   [/^\/admin\/ai\/actions\/[^/]+\/(approve|reject)$/, () => "ai.approve"],
   [/^\/admin\/ai\/office\/(tasks|goals)\/[^/]+\/decide$/, () => "ai.approve"],
   [/^\/admin\/ai\/office\/(tasks\/[^/]+\/messages|threads\/ceo\/messages)$/, () => "ai.view"],

@@ -131,6 +131,13 @@ export const api = {
   listLoginAttempts: () => request("/admin/customers/login-attempts"),
   updateLoginAttempt: (id, patch) => request(`/admin/customers/login-attempts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
   listDeletedAccounts: () => request("/admin/customers/deleted-accounts"),
+  getAccountingSettings: () => request("/admin/accounting/settings"),
+  updateAccountingSettings: (patch) => request("/admin/accounting/settings", { method: "PATCH", body: JSON.stringify(patch) }),
+  listTaxInvoices: (params = {}) =>
+    request(`/admin/accounting/invoices?${new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString()}`),
+  issueCreditNote: (id, reason) => request(`/admin/accounting/invoices/${id}/credit-note`, { method: "POST", body: JSON.stringify({ reason }) }),
+  getAccountingSummary: (month) => request(`/admin/accounting/summary?month=${month}`),
+  getEcoExposure: (month) => request(`/admin/accounting/eco-exposure?month=${month}`),
   listBlockedNumbers: () => request("/admin/customers/blocked-numbers"),
   blockNumber: (phone, reason) => request("/admin/customers/blocked-numbers", { method: "POST", body: JSON.stringify({ phone, reason }) }),
   unblockNumber: (id) => request(`/admin/customers/blocked-numbers/${id}`, { method: "DELETE" }),

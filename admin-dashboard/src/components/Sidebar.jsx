@@ -39,6 +39,7 @@ const sections = [
       { label: "Locations", icon: MapPinIcon, to: "/locations", perm: "locations.view" },
       { label: "Bookings", icon: CalendarIcon, to: "/bookings", perm: "bookings.view" },
       { label: "Payments & Transactions", icon: WalletIcon, to: "/payments", perm: "payments.view" },
+      { label: "Accounting & GST", icon: FileIcon, to: "/accounting", perm: "accounting.view" },
       { label: "Reviews & Ratings", icon: StarIcon, to: "/reviews", perm: "reviews.view" },
       { label: "Complaints & Disputes", icon: AlertIcon, to: "/complaints", perm: "complaints.view" },
       { label: "Notifications", icon: BellIcon, to: "/notifications", perm: "notifications.view" },

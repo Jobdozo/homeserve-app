@@ -1,5 +1,6 @@
 const { query, mutate } = require("./dataconnect");
 const jsonStore = require("./jsonStore");
+const accounting = require("./accounting");
 const push = require("./push");
 const fcm = require("./fcm");
 const presence = require("./presence");
@@ -3507,12 +3508,21 @@ async function deductWalletCommission(providerId, booking, bookingId) {
     max: cfg.communicationFeeMax,
     at: new Date().toISOString(),
   });
+  let result;
   try {
-    return await applyWalletDeduction(providerId, fee, { bookingId, reason: "commission" });
+    result = await applyWalletDeduction(providerId, fee, { bookingId, reason: "commission" });
   } catch (e) {
     jsonStore.remove("bookingFees", bookingId); // nothing was charged — let a retry try again
     throw e;
   }
+  // GST tax invoice for the fee. The money has already moved, so a failure here
+  // must not undo it — it shows up under "fees without an invoice" in Accounting.
+  try {
+    accounting.recordFee({ provider: await getProvider(providerId), bookingId, bookingRef: bookingRef(bookingId), fee, at: new Date().toISOString() });
+  } catch (e) {
+    console.error(`Tax invoice for booking ${bookingId} failed:`, e);
+  }
+  return result;
 }
 
 // Called periodically (see index.js) — re-sends the recharge reminder to any

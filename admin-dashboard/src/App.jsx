@@ -25,6 +25,7 @@ import NotificationsPage from "./pages/NotificationsPage";
 import UserManagementPage from "./pages/UserManagementPage";
 import AiAgentsPage from "./pages/AiAgentsPage";
 import InboxPage from "./pages/InboxPage";
+import AccountingPage from "./pages/AccountingPage";
 
 function NoAccess() {
   return (
@@ -77,6 +78,7 @@ function AppRoutes() {
     ["/users", <UserManagementPage />, "users.view"],
     ["/ai-agents", <AiAgentsPage />, "ai.view"],
     ["/inbox", <InboxPage />, "inbox.view"],
+    ["/accounting", <AccountingPage />, "accounting.view"],
   ];
   const landing = routes.find(([, , perm]) => can(perm))?.[0];
 

@@ -30,6 +30,7 @@ const { sendOtpViaWhatsApp, isConfigured: whatsappConfigured } = require("./what
 const otpGuard = require("./otpGuard");
 const loginAttempts = require("./loginAttempts");
 const blockedPhones = require("./blockedPhones");
+const accounting = require("./accounting");
 auth.setBlockCheck(blockedPhones.isBlocked);
 const liveLocation = require("./liveLocation");
 const push = require("./push");
@@ -1665,6 +1666,48 @@ app.patch("/api/admin/customers/deleted-accounts/:id", auth.requireAuth("admin")
   const row = accountDeletion.updateFeedback(req.params.id, { status: req.body?.status, followUpNote: req.body?.followUpNote }, actorOf(req));
   if (!row) return res.status(404).json({ error: "Record not found" });
   res.json(row);
+}));
+
+// ---- Accounting & GST (see accounting.js) ----
+app.get("/api/admin/accounting/settings", auth.requireAuth("admin"), (req, res) => {
+  res.json({ ...accounting.getSettings(), states: accounting.STATES });
+});
+
+app.patch("/api/admin/accounting/settings", auth.requireAuth("admin"), ah(async (req, res) => {
+  const before = accounting.getSettings();
+  const after = accounting.setSettings(req.body || {}, actorOf(req));
+  const changes = store.diffValues(before, after, ["enabled", "legalName", "gstin", "pan", "address", "sacCode", "gstRate", "feeIncludesGst", "invoicePrefix", "creditNotePrefix"]);
+  if (changes.length) audit(req, "accounting.settings", "accounting", "settings", "Accounting settings", changes);
+  res.json({ ...after, states: accounting.STATES });
+}));
+
+app.get("/api/admin/accounting/invoices", auth.requireAuth("admin"), (req, res) => {
+  const { from, to, type, q, providerId, limit } = req.query;
+  res.json(accounting.listInvoices({ from, to, type, q, providerId, limit }));
+});
+
+app.get("/api/admin/accounting/invoices/:id", auth.requireAuth("admin"), (req, res) => {
+  const inv = accounting.getInvoice(req.params.id);
+  if (!inv) return res.status(404).json({ error: "Invoice not found" });
+  res.json(inv);
+});
+
+app.post("/api/admin/accounting/invoices/:id/credit-note", auth.requireAuth("admin"), ah(async (req, res) => {
+  const note = accounting.issueCreditNote(req.params.id, req.body?.reason, actorOf(req));
+  audit(req, "accounting.credit_note", "taxInvoice", note.id, note.number, [{ field: "creditNoteFor", from: null, to: note.originalNumber }]);
+  res.status(201).json(note);
+}));
+
+app.get("/api/admin/accounting/summary", auth.requireAuth("admin"), ah(async (req, res) => {
+  const summary = accounting.monthSummary(req.query.month);
+  const fees = require("./jsonStore").readAll("bookingFees");
+  res.json({ ...summary, uninvoicedFees: accounting.uninvoicedFees(fees).length, settings: { enabled: accounting.getSettings().enabled, startedAt: accounting.getSettings().startedAt } });
+}));
+
+app.get("/api/admin/accounting/eco-exposure", auth.requireAuth("admin"), ah(async (req, res) => {
+  const s = accounting.getSettings();
+  const [bookings, providers] = await Promise.all([store.listBookings(), store.listProviders()]);
+  res.json(accounting.ecoExposure({ month: req.query.month, bookings, providers, categoryIds: s.ecoCategoryIds, rate: s.gstRate }));
 }));
 
 // Numbers that may not sign in or use the app.
