@@ -119,12 +119,13 @@ function reconcileData({ wallets = [], fees = [], bookings = [], providers = [],
     }
   }
 
-  // 4. Fees charged for jobs that are no longer Completed (cancelled/swapped later).
+  // 4. Fees charged for jobs that fell through after acceptance (cancelled, rejected or handed back).
+  //    The fee is charged on acceptance, so Accepted / In Progress / Completed are all normal.
   for (const f of fees) {
     const b = bookingById.get(f.id);
     if (!b) {
       push({ key: `orphan-fee:${f.id}`, type: "fee_without_booking", severity: "warning", providerId: null, bookingId: f.id, detail: `₹${r2(f.fee)} fee recorded for a booking that no longer exists`, amountInr: r2(f.fee) });
-    } else if (b.status !== "Completed") {
+    } else if (!["Accepted", "In Progress", "Completed"].includes(b.status)) {
       push({ key: `fee-not-completed:${f.id}:${b.status}`, type: "fee_on_unfinished_job", severity: "warning", providerId: b.providerId, bookingId: b.id,
         detail: `₹${r2(f.fee)} commission charged but job #${b.ref || b.id} is now "${b.status}" — a refund to the wallet may be due`, amountInr: r2(f.fee) });
     }

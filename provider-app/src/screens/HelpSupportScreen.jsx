@@ -14,7 +14,7 @@ const faqs = [
   },
   {
     q: "How do payouts work?",
-    a: "Tikdum takes a 10% platform fee on completed bookings. The rest is your payout. Payout account setup is coming soon — for now, completed earnings are tracked on your Earnings screen.",
+    a: "Tikdum charges its platform fee from your wallet the moment you accept a request. The rest of the booking amount is yours. Payout account setup is coming soon — for now, completed earnings are tracked on your Earnings screen.",
   },
   {
     q: "How is my rating calculated?",

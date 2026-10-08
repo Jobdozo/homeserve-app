@@ -1674,6 +1674,15 @@ async function updateBookingStatus(id, status) {
   // reached the customer, so "Accepted" isn't itself proof of arrival.
   if (status === "Accepted") {
     ensureBookingOtp(id, "start");
+    // Tikdum's job is delivering the customer to the provider, so the fee is
+    // charged the moment the provider takes the request — not after the job.
+    // A wallet-side failure must not undo the acceptance; the Completed step
+    // below retries it (it only ever charges a booking once).
+    try {
+      await deductWalletCommission(existing.providerId, existing, id);
+    } catch (e) {
+      console.error(`Wallet commission deduction failed for booking ${id} on accept:`, e);
+    }
   }
 
   const customerMessages = {
@@ -1694,7 +1703,9 @@ async function updateBookingStatus(id, status) {
   }
   if (status === "Completed") {
     // Never let a wallet-side failure block marking the job Completed — the
-    // booking status update above has already succeeded at this point.
+    // booking status update above has already succeeded at this point. The fee
+    // is normally charged on acceptance; this only catches jobs that weren't
+    // (accepted before the fee moved, or a failed charge) and never double-charges.
     try {
       await deductWalletCommission(existing.providerId, existing, id);
     } catch (e) {
@@ -3485,7 +3496,9 @@ async function deductWalletCommission(providerId, booking, bookingId) {
   const { cfg, source } = resolveFeeConfig(booking);
   const fee = calcCommunicationFee(applicableAmount(booking, cfg), cfg);
   if (fee <= 0) return null; // fee switched off, below the threshold, or a zero-value job
-  const result = await applyWalletDeduction(providerId, fee, { bookingId, reason: "commission" });
+  // Claim the booking before touching the wallet: the check above and this
+  // insert happen with no await between them, so a second request for the same
+  // booking sees the claim and stops instead of charging twice.
   jsonStore.insert("bookingFees", {
     id: bookingId,
     fee,
@@ -3494,7 +3507,12 @@ async function deductWalletCommission(providerId, booking, bookingId) {
     max: cfg.communicationFeeMax,
     at: new Date().toISOString(),
   });
-  return result;
+  try {
+    return await applyWalletDeduction(providerId, fee, { bookingId, reason: "commission" });
+  } catch (e) {
+    jsonStore.remove("bookingFees", bookingId); // nothing was charged — let a retry try again
+    throw e;
+  }
 }
 
 // Called periodically (see index.js) — re-sends the recharge reminder to any

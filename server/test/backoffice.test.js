@@ -69,3 +69,27 @@ test("permission rules for the new endpoints", () => {
   assert.equal(access.requiredFor("GET", "/admin/verification/precheck"), "providers.view");
   assert.equal(access.requiredFor("GET", "/admin/payments/reconciliation"), "payments.view");
 });
+
+test("a fee on an Accepted or In Progress job is normal (charged on acceptance); on a job handed back or cancelled it is flagged", () => {
+  const t0 = "2026-10-01T00:00:00.000Z";
+  const r = reconcileData({
+    wallets: [{ id: "p1", balance: 400, recharges: [{ amount: 500 }], deductions: [{ amount: 25, reason: "commission" }, { amount: 25, reason: "commission" }, { amount: 25, reason: "commission" }, { amount: 25, reason: "commission" }] }],
+    fees: [
+      { id: "a1", fee: 25, at: t0 }, // Accepted
+      { id: "a2", fee: 25, at: t0 }, // In Progress
+      { id: "a3", fee: 25, at: t0 }, // handed back to Pending
+      { id: "a4", fee: 25, at: t0 }, // Rejected after acceptance
+    ],
+    bookings: [
+      { id: "a1", providerId: "p1", status: "Accepted" },
+      { id: "a2", providerId: "p1", status: "In Progress" },
+      { id: "a3", providerId: "p1", status: "Pending" },
+      { id: "a4", providerId: "p1", status: "Rejected" },
+    ],
+    providers: [{ id: "p1", name: "Ravi" }],
+    expectedFee: () => 25,
+  });
+  const flagged = r.issues.filter((i) => i.type === "fee_on_unfinished_job").map((i) => i.bookingId).sort();
+  assert.deepEqual(flagged, ["a3", "a4"]);
+  assert.equal(r.issues.length, 2);
+});
