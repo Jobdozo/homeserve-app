@@ -299,7 +299,7 @@ const RULES = [
   [/^\/admin\/providers\/[^/]+\/kyc-documents$/, () => "providers.view"],
   [/^\/admin\/providers(\/|$)/, (m) => `providers.${byMethod(m)}`],
   [/^\/providers\/[^/]+\/earnings$/, () => "providers.view"],
-  [/^\/admin\/customers\/(login-attempts|deleted-accounts)/, (m) => (m === "GET" ? "customers.view" : "customers.edit")],
+  [/^\/admin\/customers\/(login-attempts|deleted-accounts|blocked-numbers)/, (m) => (m === "GET" ? "customers.view" : "customers.edit")],
   [/^\/admin\/customers/, () => "customers.view"],
   [/^\/admin\/services\/[^/]+\/image$/, () => "services.edit"],
   [/^\/admin\/services\/[^/]+\/review$/, (m, b) => `services.${decisionAction(b?.decision)}`],
