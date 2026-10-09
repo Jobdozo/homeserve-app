@@ -44,11 +44,11 @@ export default function TypedCategoryLayout({ category, displayList, chips, show
         </div>
       </div>
 
-      <div className="mx-auto grid max-w-6xl grid-cols-[250px_minmax(0,1fr)_290px] items-start gap-8 px-8 pt-8">
+      <div className="mx-auto grid max-w-6xl grid-cols-[272px_minmax(0,1fr)_290px] items-start gap-8 px-8 pt-8">
         {/* Select a service */}
         <aside className="sticky top-24 rounded-2xl border border-gray-200 bg-white p-4">
           <p className="mb-4 text-[13.5px] font-semibold text-gray-800">Select a service</p>
-          <div role="tablist" aria-label="Type" className="grid grid-cols-3 gap-x-2 gap-y-4">
+          <div role="tablist" aria-label="Type" className="grid grid-cols-3 gap-x-1 gap-y-4">
             {showAll && <TypeTile name="All" categoryId={category.id} active={activeSub === ""} onClick={() => onSub("")} />}
             {chips.map((c) => (
               <TypeTile key={c.id} name={c.name} imageUrl={c.imageUrl} categoryId={category.id} active={activeSub === c.id} onClick={() => onSub(c.id)} />
