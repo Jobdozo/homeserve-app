@@ -379,6 +379,7 @@ function generateRefCode() {
 // One Request ID for a whole order (a cart): every booking of the order shows the code of the
 // order's lead booking — the first one of the order that was ever read. orderId -> lead booking id.
 let leadByOrder = null;
+let leadFlushQueued = false;
 function refBookingId(b) {
   if (!b?.orderId) return b?.id;
   if (!leadByOrder) leadByOrder = new Map(jsonStore.readAll("orderLeads").map((r) => [r.id, r.bookingId]));
@@ -386,7 +387,14 @@ function refBookingId(b) {
   if (!lead) {
     lead = b.id;
     leadByOrder.set(b.orderId, lead);
-    jsonStore.insert("orderLeads", { id: b.orderId, bookingId: lead });
+    // One write per tick, so the first list after a deploy (many older orders at once) isn't one file write each.
+    if (!leadFlushQueued) {
+      leadFlushQueued = true;
+      setImmediate(() => {
+        leadFlushQueued = false;
+        jsonStore.writeAll("orderLeads", [...leadByOrder].map(([id, bookingId]) => ({ id, bookingId })));
+      });
+    }
   }
   return lead;
 }
@@ -414,11 +422,15 @@ function bookingRef(bookingId) {
 }
 
 const { normalizeQuantity } = require("./quantity");
-const { describeGroup } = require("./orderGroups");
+const { describeGroup, sameServiceName, pincodeFromLine } = require("./orderGroups");
 
 // Quantity of a booking line (bookingQuantities: id -> { id, quantity }); 1 when none was stored.
+// Read once and kept in memory: a booking list maps hundreds of bookings, and reading the file for each one
+// would be one disk read per booking. Our own writes below keep the copy current.
+let quantityById = null;
 function bookingQuantity(bookingId) {
-  return jsonStore.readAll("bookingQuantities").find((r) => r.id === bookingId)?.quantity || 1;
+  if (!quantityById) quantityById = new Map(jsonStore.readAll("bookingQuantities").map((r) => [r.id, r.quantity]));
+  return quantityById.get(bookingId) || 1;
 }
 
 function mapBooking(b, customer, service) {
@@ -1669,7 +1681,10 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
     }
   );
   const bookingId = booking_insert.id;
-  if (qty > 1) jsonStore.insert("bookingQuantities", { id: bookingId, quantity: qty });
+  if (qty > 1) {
+    jsonStore.insert("bookingQuantities", { id: bookingId, quantity: qty });
+    if (quantityById) quantityById.set(bookingId, qty);
+  }
   cacheClear("openBookings");
   await mutate(
     `mutation($bookingId: UUID!, $status: String!, $at: Timestamp!) {
@@ -1697,6 +1712,51 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
     ).catch((e) => console.error("WhatsApp booking alert failed", e));
   }
   return fetchBookingWithRelations(bookingId);
+}
+
+function groupBookingsByProvider(bookings) {
+  const groups = new Map();
+  for (const b of bookings) {
+    if (!groups.has(b.providerId)) groups.set(b.providerId, []);
+    groups.get(b.providerId).push(b);
+  }
+  return [...groups.values()];
+}
+
+// Tell a provider about every booking of one order they've just been given — once, not once per service.
+async function notifyProviderOfGroup(providerId, list) {
+  if (!list.length) return;
+  const what = describeGroup(list);
+  const who = list[0].customer?.name || "A customer";
+  const message =
+    list.length === 1 ? `${who} requested ${what} for ${list[0].date}` : `${who} requested ${list.length} services for ${list[0].date}: ${what}`;
+  await addNotification({
+    recipientType: "provider",
+    recipientId: providerId,
+    type: "booking",
+    title: list.length > 1 ? "New order request" : "New booking request",
+    message,
+    bookingId: list[0].id,
+    skipPush: true, // dispatchBooking (index.js) sends the push
+  });
+  notifyProviderOfBookingByWhatsApp(
+    providerId,
+    `New Tikdum booking request!\n${message}\nOpen the Tikdum Business app to accept or decline.`
+  ).catch((e) => console.error("WhatsApp booking alert failed", e));
+}
+
+// Tell the customer once that no provider could take these services.
+async function notifyCustomerNoProviders(list) {
+  if (!list.length) return;
+  const names = describeGroup(list);
+  await addNotification({
+    recipientType: "customer",
+    recipientId: list[0].customerId,
+    type: "booking",
+    title: "Booking Rejected",
+    message: `No providers were available for your ${list.length > 1 ? `${list.length} services (${names})` : names} request. Please try again later.`,
+    bookingId: list[0].id,
+  });
 }
 
 async function createOrder({ items, address, customerId, offerCode, referralCode, useCredits }) {
@@ -1745,32 +1805,7 @@ async function createOrder({ items, address, customerId, offerCode, referralCode
   }
 
   // One notification + WhatsApp per provider for the whole order, not one per service.
-  const customer = await getCustomerById(customerId);
-  const byProvider = new Map();
-  for (const b of created) {
-    if (!byProvider.has(b.providerId)) byProvider.set(b.providerId, []);
-    byProvider.get(b.providerId).push(b);
-  }
-  for (const [providerId, list] of byProvider) {
-    const what = describeGroup(list);
-    const message =
-      list.length === 1
-        ? `${customer?.name || "A customer"} requested ${what} for ${list[0].date}`
-        : `${customer?.name || "A customer"} requested ${list.length} services for ${list[0].date}: ${what}`;
-    await addNotification({
-      recipientType: "provider",
-      recipientId: providerId,
-      type: "booking",
-      title: list.length > 1 ? "New order request" : "New booking request",
-      message,
-      bookingId: list[0].id,
-      skipPush: true, // dispatchBooking (index.js) sends the push
-    });
-    notifyProviderOfBookingByWhatsApp(
-      providerId,
-      `New Tikdum booking request!\n${message}\nOpen the Tikdum Business app to accept or decline.`
-    ).catch((e) => console.error("WhatsApp booking alert failed", e));
-  }
+  for (const list of groupBookingsByProvider(created)) await notifyProviderOfGroup(list[0].providerId, list);
 
   if (referrerId) {
     jsonStore.insert("referralRedemptions", {
@@ -2049,24 +2084,28 @@ async function explainProviderVisibility(providerId, pincode) {
   };
 }
 
-async function findAlternativeProviderService(categorySlug, excludeProviderIds) {
+// Another provider's copy of the SAME service (same name) who can take the booking at the customer's PIN.
+// A provider who already took another service of this order comes first, so an order stays with one provider.
+async function findAlternativeProviderService(categorySlug, excludeProviderIds, { name, pincode, preferProviderId } = {}) {
   const vctx = await buildVisibilityContext();
   const categoryUuid = await getCategoryUuidBySlug(categorySlug);
   if (!categoryUuid) return null;
   const { services } = await query(
     `query($categoryId: UUID!) {
       services(where: { category: { id: { eq: $categoryId } }, status: { eq: "active" } }) {
-        id price provider { id live }
+        id name price provider { id live }
       }
     }`,
     { categoryId: categoryUuid }
   );
-  const candidate = services.find(
+  const fits = services.filter(
     (s) =>
       s.provider &&
       !excludeProviderIds.includes(s.provider.id) &&
-      providerVisibilityIssues(s.provider.id, vctx).length === 0
+      sameServiceName(s.name, name) &&
+      providerVisibilityIssues(s.provider.id, vctx, pincode ? { pincode } : {}).length === 0
   );
+  const candidate = fits.find((s) => s.provider.id === preferProviderId) || fits[0];
   if (!candidate) return null;
   return { serviceId: candidate.id, providerId: candidate.provider.id, amount: candidate.price };
 }
@@ -2074,26 +2113,37 @@ async function findAlternativeProviderService(categorySlug, excludeProviderIds) 
 // Tries to move a still-pending booking to another provider in the same
 // category. If none are left, the booking is marked Rejected for real and
 // the customer is told. Returns { reassigned, booking }.
-async function reassignBooking(bookingId, excludeProviderIds) {
+// opts.preferProviderId: try this provider first. opts.quiet: send no notices — the caller sends one for the whole order.
+async function reassignBooking(bookingId, excludeProviderIds, opts = {}) {
   const booking = await fetchBookingWithRelations(bookingId);
   if (!booking || booking.status !== "Pending") return { reassigned: false, booking };
+  const current = await getService(booking.serviceId);
+  const qty = bookingQuantity(bookingId);
 
   // Always exclude the booking's current provider too — reassigning it to
   // itself is never meaningful, regardless of what the caller passed in.
   const excludeIds = [...new Set([...excludeProviderIds, booking.providerId])];
   const categorySlug = booking.service?.categoryId;
-  const candidate = categorySlug ? await findAlternativeProviderService(categorySlug, excludeIds) : null;
+  const candidate =
+    categorySlug && current
+      ? await findAlternativeProviderService(categorySlug, excludeIds, {
+          name: current.name,
+          pincode: pincodeFromLine(booking.address?.line),
+          preferProviderId: opts.preferProviderId,
+        })
+      : null;
 
   if (candidate) {
     await mutate(
       `mutation($id: UUID!, $serviceId: UUID!, $providerId: UUID!, $amount: Int!) {
         booking_update(id: $id, data: { serviceId: $serviceId, providerId: $providerId, amount: $amount })
       }`,
-      { id: bookingId, serviceId: candidate.serviceId, providerId: candidate.providerId, amount: candidate.amount }
+      { id: bookingId, serviceId: candidate.serviceId, providerId: candidate.providerId, amount: candidate.amount * qty }
     );
     cacheClear("openBookings");
     await logActivity("booking", `Booking #${bookingRef(bookingId)} reassigned to another provider after no response`);
     const updated = await fetchBookingWithRelations(bookingId);
+    if (opts.quiet) return { reassigned: true, booking: updated };
     const bookingMessage = `${updated.customer?.name || "A customer"} requested ${updated.service?.name || "a service"} for ${updated.date}`;
     await addNotification({
       recipientType: "provider",
@@ -2125,6 +2175,7 @@ async function reassignBooking(bookingId, excludeProviderIds) {
   cacheClear("openBookings");
   await logActivity("booking", `Booking #${bookingRef(bookingId)} rejected — no providers available`);
   const updated = await fetchBookingWithRelations(bookingId);
+  if (opts.quiet) return { reassigned: false, booking: updated };
   await addNotification({
     recipientType: "customer",
     recipientId: updated.customerId,
@@ -4391,6 +4442,8 @@ module.exports = {
   addJobCheckpoint,
   getBookingOtpsForCustomer,
   orderGroup,
+  notifyProviderOfGroup,
+  notifyCustomerNoProviders,
   verifyBookingOtp,
   getCustomerReferralInfo,
   applyReferralCode,

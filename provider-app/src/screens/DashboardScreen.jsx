@@ -125,7 +125,10 @@ export default function DashboardScreen() {
           >
             {newOnes.map((g) => {
               const r = g.first;
-              const answer = (action) => (g.count > 1 ? respondToOrder(g.orderId, action) : action === "accept" ? acceptRequest(r.id) : rejectRequest(r.id));
+              const answer = (action) =>
+                (g.count > 1 ? respondToOrder(g.orderId, action) : action === "accept" ? acceptRequest(r.id) : rejectRequest(r.id)).catch((e) =>
+                  showToast(e.message || "Couldn't update the request")
+                );
               return (
               <div key={g.key} className="flex items-center gap-3 border-b border-gray-50 py-3 last:border-0">
                 <CategoryIcon categoryId={r.service?.categoryId} size={44} />

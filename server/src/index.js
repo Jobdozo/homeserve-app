@@ -162,16 +162,23 @@ async function dispatchBooking(booking, triedProviderIds = [booking.providerId],
 // Hand pending bookings to other providers and ring each new provider once for the bookings they received.
 async function reassignGroup(pending, triedProviderIds) {
   const moved = [];
+  const unplaced = [];
   for (const b of pending) {
-    const result = await store.reassignBooking(b.id, triedProviderIds);
+    // Keep the order together: try the provider who just took one of its services first.
+    const result = await store.reassignBooking(b.id, triedProviderIds, { preferProviderId: moved[0]?.providerId, quiet: true });
     rt.booking("booking:updated", result.booking, { previous: triedProviderIds });
     if (result.reassigned) {
       rt.booking("booking:created", result.booking);
       moved.push(result.booking);
+    } else if (result.booking?.status === "Rejected") {
+      unplaced.push(result.booking);
     }
   }
   rt.activity((await store.listActivities(1))[0]);
+  // One notice per new provider and one to the customer for anything nobody could take.
+  await store.notifyCustomerNoProviders(unplaced);
   for (const group of groupByProvider(moved)) {
+    await store.notifyProviderOfGroup(group[0].providerId, group);
     await dispatchBooking(group[0], [...triedProviderIds, group[0].providerId], group);
   }
 }

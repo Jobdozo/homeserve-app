@@ -32,18 +32,21 @@ export default function DesktopBookings() {
 
   const sorted = useMemo(() => [...bookings].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), [bookings]);
 
+  // Counted as requests: an order of several services from one provider is one request.
+  const requests = useMemo(() => groupBookings(bookings).map((g) => g.first), [bookings]);
   const counts = useMemo(() => {
-    const c = { All: bookings.length };
-    for (const b of bookings) c[b.status] = (c[b.status] || 0) + 1;
+    const c = { All: requests.length };
+    for (const b of requests) c[b.status] = (c[b.status] || 0) + 1;
     return c;
-  }, [bookings]);
+  }, [requests]);
 
   const stats = useMemo(() => {
-    const active = bookings.filter((b) => ACTIVE.includes(b.status)).length;
-    const done = bookings.filter((b) => b.status === "Completed");
-    const closed = bookings.filter((b) => CLOSED.includes(b.status)).length;
-    return { active, completed: done.length, closed, spent: done.reduce((n, b) => n + Number(b.amount || 0), 0) };
-  }, [bookings]);
+    const active = requests.filter((b) => ACTIVE.includes(b.status)).length;
+    const closed = requests.filter((b) => CLOSED.includes(b.status)).length;
+    const completed = requests.filter((b) => b.status === "Completed").length;
+    const spent = bookings.filter((b) => b.status === "Completed").reduce((n, b) => n + Number(b.amount || 0), 0);
+    return { active, completed, closed, spent };
+  }, [bookings, requests]);
 
   const filtered = tab === "All" ? sorted : sorted.filter((b) => b.status === tab);
   const upcoming = tab === "All" ? filtered.filter((b) => ACTIVE.includes(b.status)) : [];

@@ -20,4 +20,17 @@ function describeGroup(bookings, limit = 3) {
   return names.length > limit ? `${shown} and ${names.length - limit} more` : shown;
 }
 
-module.exports = { groupByProvider, describeGroup };
+// Two providers' services are "the same service" when their names match, ignoring case and spacing —
+// what a request may be handed to when its provider declines or doesn't answer.
+const normName = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+function sameServiceName(a, b) {
+  return Boolean(normName(a)) && normName(a) === normName(b);
+}
+
+// The customer's PIN from a booking's address line ("..., Sector 21, Noida 201301" -> "201301").
+function pincodeFromLine(line) {
+  const all = String(line || "").match(/\b\d{6}\b/g);
+  return all ? all[all.length - 1] : "";
+}
+
+module.exports = { groupByProvider, describeGroup, sameServiceName, pincodeFromLine };

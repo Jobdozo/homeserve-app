@@ -6,7 +6,7 @@ import { startRingtone } from "../utils/ringtone";
 const RING_SECONDS = 90;
 
 export default function RingingOverlay() {
-  const { ringingRequest, requests, acceptRequest, rejectRequest, respondToOrder, dismissRinging, notificationPrefs } = useApp();
+  const { ringingRequest, requests, acceptRequest, rejectRequest, respondToOrder, dismissRinging, notificationPrefs, showToast } = useApp();
   const [secondsLeft, setSecondsLeft] = useState(RING_SECONDS);
   const [busy, setBusy] = useState(false);
 
@@ -63,6 +63,8 @@ export default function RingingOverlay() {
     try {
       if (isOrder) await respondToOrder(ringingRequest.orderId, "accept");
       else await acceptRequest(ringingRequest.id);
+    } catch (e) {
+      showToast(e.message || "Couldn't update the request");
     } finally {
       setBusy(false);
     }
@@ -73,6 +75,8 @@ export default function RingingOverlay() {
     try {
       if (isOrder) await respondToOrder(ringingRequest.orderId, "reject");
       else await rejectRequest(ringingRequest.id);
+    } catch (e) {
+      showToast(e.message || "Couldn't update the request");
     } finally {
       setBusy(false);
     }
