@@ -7,10 +7,23 @@
 //   serviceSubcategories { id (the service id), subcategoryId }
 // A service has at most one sub-category, and it must belong to the service's
 // own category.
+const fs = require("fs");
+const path = require("path");
 const jsonStore = require("./jsonStore");
+const { UPLOADS_DIR } = require("./uploads");
 
 const SUBS = "subcategories";
 const LINKS = "serviceSubcategories";
+
+// Files live in the shared uploads folder; only plain /uploads/<name> paths are ever touched.
+function deleteUploaded(url) {
+  if (!url || !url.startsWith("/uploads/") || !/^[A-Za-z0-9._-]+$/.test(url.slice("/uploads/".length))) return;
+  try {
+    fs.unlinkSync(path.join(UPLOADS_DIR, url.slice("/uploads/".length)));
+  } catch (e) {
+    if (e.code !== "ENOENT") console.error("Could not remove old sub-category picture", e.message);
+  }
+}
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 
@@ -65,9 +78,21 @@ function update(id, patch) {
 
 // Deleting a sub-category leaves its services in the category, unsorted.
 function remove(id) {
-  if (!get(id)) return false;
+  const cur = get(id);
+  if (!cur) return false;
+  deleteUploaded(cur.imageUrl);
   jsonStore.writeAll(LINKS, jsonStore.readAll(LINKS).filter((l) => l.subcategoryId !== id));
   return jsonStore.remove(SUBS, id);
+}
+
+// A picture for the type tile on the category page. A new one replaces the old; null removes it.
+function setImage(id, url) {
+  const cur = get(id);
+  if (!cur) return null;
+  const old = cur.imageUrl || null;
+  const next = jsonStore.update(SUBS, id, { imageUrl: url || null });
+  if (old && old !== url) deleteUploaded(old);
+  return next;
 }
 
 function removeForCategory(categoryId) {
@@ -108,4 +133,4 @@ function validate(subcategoryId, categoryId) {
   return subcategoryId;
 }
 
-module.exports = { list, get, create, update, remove, removeForCategory, subcategoryOf, link, reconcile, validate };
+module.exports = { list, get, create, update, remove, setImage, removeForCategory, subcategoryOf, link, reconcile, validate };

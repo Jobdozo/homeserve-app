@@ -64,6 +64,20 @@ async function uploadCategoryBanner(id, file) {
   return data;
 }
 
+// Sub-category pictures go up as multipart too.
+async function uploadSubcategoryImage(id, file) {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(`${API_BASE}/admin/subcategories/${id}/image`, {
+    method: "POST",
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    body,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Upload failed: ${res.status}`);
+  return data;
+}
+
 // Service photos go up as multipart, after being shrunk in the browser.
 async function uploadServiceImage(id, file) {
   const body = new FormData();
@@ -116,6 +130,8 @@ export const api = {
     request(`/admin/providers/${id}/profile`, { method: "PATCH", body: JSON.stringify(patch) }),
   uploadServiceImage,
   uploadCategoryBanner,
+  uploadSubcategoryImage,
+  removeSubcategoryImage: (id) => request(`/admin/subcategories/${id}/image`, { method: "DELETE" }),
   uploadServiceCatalogImage,
   removeServiceCatalogImage: (id) => request(`/admin/service-catalog/${id}/image`, { method: "DELETE" }),
   removeServiceImage: (id) => request(`/admin/services/${id}/image`, { method: "DELETE" }),

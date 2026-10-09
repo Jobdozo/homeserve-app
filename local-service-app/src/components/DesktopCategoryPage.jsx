@@ -7,7 +7,7 @@ import CategoryPhoto from "./CategoryPhoto";
 import CategoryBannerImage from "./CategoryBannerImage";
 import CategoryIcon from "./CategoryIcon";
 import ComingSoon from "./ComingSoon";
-import SubcategoryChips from "./SubcategoryChips";
+import TypedCategoryLayout from "./TypedCategoryLayout";
 
 const SORTS = [
   { id: "popular", label: "Popular" },
@@ -44,6 +44,10 @@ export default function DesktopCategoryPage({ category, displayList, aggregate, 
   }, [displayList, sort, counts]);
 
   const others = categories.filter((c) => c.id !== category.id).slice(0, 10);
+
+  if (chips.length > 0) {
+    return <TypedCategoryLayout category={category} displayList={displayList} chips={chips} activeSub={activeSub} onSub={onSub} totalCount={totalCount} aggregate={aggregate} />;
+  }
 
   return (
     <div className="pb-20">
@@ -84,9 +88,6 @@ export default function DesktopCategoryPage({ category, displayList, aggregate, 
           </div>
         ) : (
           <>
-            {/* Type (sub-category) */}
-            {chips.length > 0 && <SubcategoryChips chips={chips} value={activeSub} onChange={onSub} total={totalCount} className="pt-8" />}
-
             {/* Sort bar */}
             <div className="flex items-center justify-between gap-6 pb-6 pt-8">
               <div className="flex flex-wrap items-center gap-2">

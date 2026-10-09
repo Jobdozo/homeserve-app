@@ -5,6 +5,8 @@ import { StarIcon, ChevronRightIcon } from "./icons";
 import { formatCount, discountPct, dedupeByName } from "../utils/format";
 import CategoryIcon from "./CategoryIcon";
 import CategoryPhoto from "./CategoryPhoto";
+import { useApp } from "../context/AppContext";
+import { chipsFor } from "../utils/subcategories";
 
 // Gradient per admin-selectable banner colour (literal classes so Tailwind keeps them).
 const BANNER_GRADIENTS = {
@@ -164,6 +166,34 @@ function CategoryCarousel({ section, categories }) {
   );
 }
 
+// A category row for a category with types (AC Services -> Window / Split / VRF AC):
+// the types as picture tiles, each opening the category on that type.
+function TypeCarousel({ section, category, chips }) {
+  const navigate = useNavigate();
+  return (
+    <>
+      <SectionHeader title={section.title} onSeeAll={() => navigate(`/category/${category.id}`)} />
+      <Carousel>
+        {chips.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => navigate(`/category/${category.id}?type=${c.id}`)}
+            className="w-32 flex-shrink-0 overflow-hidden rounded-2xl bg-white text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.98] lg:w-56"
+          >
+            <div className="h-24 overflow-hidden lg:h-36">
+              <CategoryPhoto categoryId={category.id} imageUrl={c.imageUrl} size={96} />
+            </div>
+            <div className="p-2.5 lg:p-4">
+              <p className="text-[12.5px] font-semibold text-gray-900 lg:text-[15px]">{c.name}</p>
+              <p className="mt-0.5 text-[11px] text-gray-500 lg:text-[13px]">From ₹{c.minPrice}</p>
+            </div>
+          </button>
+        ))}
+      </Carousel>
+    </>
+  );
+}
+
 function ServiceCarousel({ section, items, counts, seeAll }) {
   if (items.length === 0) return null;
   return (
@@ -228,6 +258,7 @@ function matchServices(section, services, categories) {
 
 export default function HomeSections({ sections, services, categories, banners, bookingCounts }) {
   const navigate = useNavigate();
+  const { subcategories } = useApp();
   const list = sections.length > 0 ? sections : FALLBACK_SECTIONS;
   const inlineBanners = banners.filter((b) => b.placement === "inline").sort((a, b) => (a.afterItems || 3) - (b.afterItems || 3));
   const byPopularity = dedupeByName([...services].sort((a, b) => b.reviewCount - a.reviewCount));
@@ -246,6 +277,11 @@ export default function HomeSections({ sections, services, categories, banners, 
           return <ServiceCarousel key={section.id} section={section} items={items} counts={bookingCounts} seeAll={() => navigate("/services")} />;
         }
         if (section.type === "category") {
+          if (section.categoryId) {
+            const category = categories.find((c) => c.id === section.categoryId);
+            const chips = category ? chipsFor(subcategories, section.categoryId, services.filter((s) => s.categoryId === section.categoryId)) : [];
+            if (chips.length > 0) return <TypeCarousel key={section.id} section={section} category={category} chips={chips} />;
+          }
           const items = dedupeByName(matchServices(section, services, categories)).slice(0, limit);
           const seeAll = section.categoryId ? () => navigate(`/category/${section.categoryId}`) : () => navigate("/services");
           return <ServiceCarousel key={section.id} section={section} items={items} counts={bookingCounts} seeAll={seeAll} />;

@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useMemo } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import useIsDesktop from "../utils/useIsDesktop";
 import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
@@ -18,7 +18,9 @@ export default function CategoryServicesScreen() {
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
   const { categories, subcategories, services, catalogReady } = useApp();
-  const [sub, setSub] = useState("");
+  const [params, setParams] = useSearchParams();
+  const sub = params.get("type") || "";
+  const setSub = (id) => setParams(id ? { type: id } : {}, { replace: true });
 
   const category = categories.find((c) => c.id === categoryId);
   // Ratings/reviews stay computed from every provider's listing (real
@@ -95,7 +97,7 @@ export default function CategoryServicesScreen() {
           </div>
         </div>
 
-        <SubcategoryChips chips={chips} value={activeSub} onChange={setSub} total={dedupeByName(inCategory).length} className="mt-4" />
+        <SubcategoryChips chips={chips} value={activeSub} onChange={setSub} categoryId={category.id} className="mt-4" />
 
         {inCategory.length === 0 ? (
           catalogReady ? (

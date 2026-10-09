@@ -77,3 +77,26 @@ test("permissions: managing sub-categories follows the services permissions", ()
   assert.equal(access.requiredFor("PATCH", "/admin/subcategories/x", {}), "services.edit");
   assert.equal(access.requiredFor("DELETE", "/admin/subcategories/x", {}), "services.delete");
 });
+
+test("picture: set, replace and remove; unknown ids do nothing; the file goes when the sub-category does", () => {
+  const { UPLOADS_DIR } = require("../src/uploads");
+  const sub = subs.create({ categoryId: "painting", name: "Interior" });
+  const touch = (name) => fs.writeFileSync(path.join(UPLOADS_DIR, name), "x");
+  touch("pic-one.jpg");
+  touch("pic-two.jpg");
+  assert.equal(subs.setImage("nope", "/uploads/pic-one.jpg"), null);
+  assert.equal(subs.setImage(sub.id, "/uploads/pic-one.jpg").imageUrl, "/uploads/pic-one.jpg");
+  assert.equal(subs.list({ categoryId: "painting" })[0].imageUrl, "/uploads/pic-one.jpg");
+  subs.setImage(sub.id, "/uploads/pic-two.jpg");
+  assert.equal(fs.existsSync(path.join(UPLOADS_DIR, "pic-one.jpg")), false, "replaced picture is deleted");
+  assert.equal(subs.setImage(sub.id, null).imageUrl, null);
+  assert.equal(fs.existsSync(path.join(UPLOADS_DIR, "pic-two.jpg")), false, "removed picture is deleted");
+  touch("pic-three.jpg");
+  subs.setImage(sub.id, "/uploads/pic-three.jpg");
+  subs.remove(sub.id);
+  assert.equal(fs.existsSync(path.join(UPLOADS_DIR, "pic-three.jpg")), false, "deleting the sub-category deletes its picture");
+  // only plain /uploads/<name> paths are ever deleted
+  const other = subs.create({ categoryId: "painting", name: "Exterior" });
+  subs.setImage(other.id, "/uploads/../../etc/passwd");
+  subs.setImage(other.id, null);
+});

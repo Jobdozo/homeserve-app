@@ -714,6 +714,7 @@ function SubcategoriesPanel() {
           <table className="w-full min-w-[560px] text-left text-[12.5px]">
             <thead>
               <tr className="border-b border-gray-100 text-gray-400">
+                <th className="px-4 py-3 font-medium">Picture</th>
                 <th className="px-4 py-3 font-medium">Sub-category</th>
                 <th className="px-4 py-3 font-medium">Services</th>
                 <th className="px-4 py-3 font-medium">Shown to customers</th>
@@ -723,6 +724,35 @@ function SubcategoriesPanel() {
             <tbody>
               {mine.map((s, i) => (
                 <tr key={s.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
+                        {s.imageUrl ? <img src={SERVER_URL + s.imageUrl} alt="" className="h-full w-full object-cover" /> : <span className="text-[9px] text-gray-400">None</span>}
+                      </div>
+                      <div className="flex flex-col items-start gap-1">
+                        <label className={"cursor-pointer text-[11.5px] font-semibold text-brand " + (busy === s.id ? "pointer-events-none opacity-50" : "")}>
+                          {s.imageUrl ? "Replace" : "Upload"}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              e.target.value = "";
+                              if (!f) return;
+                              if (!f.type.startsWith("image/")) return showToast("Choose an image file (JPEG, PNG or WebP)");
+                              run(s.id, async () => api.uploadSubcategoryImage(s.id, await shrinkImage(f, 600)), "Picture saved");
+                            }}
+                          />
+                        </label>
+                        {s.imageUrl && (
+                          <button onClick={() => run(s.id, () => api.removeSubcategoryImage(s.id), "Picture removed")} className="text-[11px] font-semibold text-red-500">
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 font-semibold text-gray-800">
                     {editing?.id === s.id ? (
                       <form
@@ -780,7 +810,7 @@ function SubcategoriesPanel() {
               ))}
               {mine.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={5} className="px-4 py-10 text-center text-gray-400">
                     No sub-categories in this category yet. Add the first one above.
                   </td>
                 </tr>

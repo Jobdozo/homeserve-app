@@ -308,6 +308,7 @@ const RULES = [
   [/^\/admin\/services\/[^/]+\/review$/, (m, b) => `services.${decisionAction(b?.decision)}`],
   [/^\/admin\/service-changes\/[^/]+\/review$/, (m, b) => `services.${decisionAction(b?.decision)}`],
   [/^\/admin\/service-changes/, () => "services.view"],
+  [/^\/admin\/subcategories\/[^/]+\/image$/, () => "services.edit"],
   [/^\/admin\/(categories|services|subcategories)(\/|$)/, (m) => `services.${byMethod(m)}`],
   [/^\/admin\/service-catalog\/[^/]+\/apply$/, () => "services.add"],
   [/^\/admin\/service-catalog\/[^/]+\/image$/, () => "services.edit"],

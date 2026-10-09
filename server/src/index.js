@@ -726,6 +726,21 @@ app.patch("/api/admin/subcategories/:id", auth.requireAuth("admin"), ah(async (r
   res.json(sub);
 }));
 
+app.post("/api/admin/subcategories/:id/image", auth.requireAuth("admin"), upload.single("file"), ah(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Choose an image" });
+  const sub = subcategories.setImage(req.params.id, `/uploads/${req.file.filename}`);
+  if (!sub) return res.status(404).json({ error: "Sub-category not found" });
+  audit(req, "subcategory.update", "subcategory", sub.id, sub.name, [{ field: "picture", from: null, to: "uploaded" }]);
+  res.json(sub);
+}));
+
+app.delete("/api/admin/subcategories/:id/image", auth.requireAuth("admin"), ah(async (req, res) => {
+  const sub = subcategories.setImage(req.params.id, null);
+  if (!sub) return res.status(404).json({ error: "Sub-category not found" });
+  audit(req, "subcategory.update", "subcategory", sub.id, sub.name, [{ field: "picture", from: "uploaded", to: "removed" }]);
+  res.json(sub);
+}));
+
 app.delete("/api/admin/subcategories/:id", auth.requireAuth("admin"), ah(async (req, res) => {
   const before = subcategories.get(req.params.id);
   if (!before || !subcategories.remove(req.params.id)) return res.status(404).json({ error: "Sub-category not found" });
