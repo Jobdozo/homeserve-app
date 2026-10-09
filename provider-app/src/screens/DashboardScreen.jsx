@@ -6,13 +6,14 @@ import { BellIcon, StarIcon, ShieldCheckIcon, TrendUpIcon, TrendDownIcon, AlertI
 import BatteryOptimizationBanner from "../components/BatteryOptimizationBanner";
 import CategoryIcon from "../components/CategoryIcon";
 import Avatar from "../components/Avatar";
+import { groupByOrder } from "../utils/groupOrders";
 
 // Phone: one stack, top to bottom (the numbers on the `order-*` classes keep that order).
 // Computer: two columns — your work on the left (new requests, open jobs, numbers), your
 // account on the right (receiving switch, earnings, wallet, today).
 export default function DashboardScreen() {
   const navigate = useNavigate();
-  const { provider: providerProfile, requests, earnings, wallet, notifications, setAcceptingRequests, acceptRequest, rejectRequest, showToast } = useApp();
+  const { provider: providerProfile, requests, earnings, wallet, notifications, setAcceptingRequests, acceptRequest, rejectRequest, respondToOrder, showToast } = useApp();
   const accepting = providerProfile.coverage?.acceptingRequests !== false;
   const [togglingRequests, setTogglingRequests] = useState(false);
   const [capacity, setCapacity] = useState(null);
@@ -41,7 +42,7 @@ export default function DashboardScreen() {
   }, [requests]);
 
   const byNewest = (a, b) => new Date(b.createdAt) - new Date(a.createdAt);
-  const newOnes = useMemo(() => requests.filter((r) => r.status === "Pending").sort(byNewest).slice(0, 5), [requests]);
+  const newOnes = useMemo(() => groupByOrder(requests.filter((r) => r.status === "Pending").sort(byNewest)).slice(0, 5), [requests]);
   const openJobs = useMemo(() => requests.filter((r) => ["Accepted", "In Progress"].includes(r.status)).sort(byNewest).slice(0, 5), [requests]);
 
   return (
@@ -122,24 +123,28 @@ export default function DashboardScreen() {
             action={newOnes.length > 0 ? { label: "See all", onClick: () => navigate("/requests") } : null}
             empty={newOnes.length === 0 ? "No new requests right now. They appear here the moment a customer books you." : null}
           >
-            {newOnes.map((r) => (
-              <div key={r.id} className="flex items-center gap-3 border-b border-gray-50 py-3 last:border-0">
+            {newOnes.map((g) => {
+              const r = g.first;
+              const answer = (action) => (g.count > 1 ? respondToOrder(g.orderId, action) : action === "accept" ? acceptRequest(r.id) : rejectRequest(r.id));
+              return (
+              <div key={g.key} className="flex items-center gap-3 border-b border-gray-50 py-3 last:border-0">
                 <CategoryIcon categoryId={r.service?.categoryId} size={44} />
                 <button onClick={() => navigate(`/requests/${r.id}`)} className="min-w-0 flex-1 text-left">
-                  <p className="truncate text-[13.5px] font-semibold text-gray-900">{r.service?.name}</p>
+                  <p className="truncate text-[13.5px] font-semibold text-gray-900">{g.count > 1 ? `${g.count} services · ${r.customer?.name || "Customer"}` : r.service?.name}</p>
                   <p className="flex items-center gap-1 truncate text-[11.5px] text-gray-500">
                     <MapPinIcon width={12} height={12} /> {r.address?.line || "—"}
                   </p>
                 </button>
-                <p className="text-[14px] font-bold text-brand">₹{r.amount}</p>
-                <button onClick={() => rejectRequest(r.id)} className="rounded-lg border border-gray-200 px-3.5 py-1.5 text-[12.5px] font-semibold text-gray-600 hover:bg-gray-50">
+                <p className="text-[14px] font-bold text-brand">₹{g.total}</p>
+                <button onClick={() => answer("reject")} className="rounded-lg border border-gray-200 px-3.5 py-1.5 text-[12.5px] font-semibold text-gray-600 hover:bg-gray-50">
                   Reject
                 </button>
-                <button onClick={() => acceptRequest(r.id)} className="rounded-lg bg-brand px-4 py-1.5 text-[12.5px] font-semibold text-white hover:bg-brand-dark">
+                <button onClick={() => answer("accept")} className="rounded-lg bg-brand px-4 py-1.5 text-[12.5px] font-semibold text-white hover:bg-brand-dark">
                   Accept
                 </button>
               </div>
-            ))}
+              );
+            })}
           </Panel>
         </div>
 

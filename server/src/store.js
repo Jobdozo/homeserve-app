@@ -399,6 +399,7 @@ function bookingRef(bookingId) {
 }
 
 const { normalizeQuantity } = require("./quantity");
+const { describeGroup } = require("./orderGroups");
 
 // Quantity of a booking line (bookingQuantities: id -> { id, quantity }); 1 when none was stored.
 function bookingQuantity(bookingId) {
@@ -1663,20 +1664,23 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
   );
 
   if (!orderId) await logActivity("booking", `New booking received: #${bookingRef(bookingId)} — ${service.name}`);
-  const bookingMessage = `${customer.name} requested ${service.name}${qty > 1 ? ` × ${qty}` : ""} for ${date}`;
-  await addNotification({
-    recipientType: "provider",
-    recipientId: service.providerId,
-    type: "booking",
-    title: "New booking request",
-    message: bookingMessage,
-    bookingId,
-    skipPush: true, // dispatchBooking (index.js) sends this one's push
-  });
-  notifyProviderOfBookingByWhatsApp(
-    service.providerId,
-    `New Tikdum booking request!\n${bookingMessage}\nOpen the Tikdum Business app to accept or decline.`
-  ).catch((e) => console.error("WhatsApp booking alert failed", e));
+  // An order (a cart) alerts the provider once for all of its services — see createOrder.
+  if (!orderId) {
+    const bookingMessage = `${customer.name} requested ${service.name}${qty > 1 ? ` × ${qty}` : ""} for ${date}`;
+    await addNotification({
+      recipientType: "provider",
+      recipientId: service.providerId,
+      type: "booking",
+      title: "New booking request",
+      message: bookingMessage,
+      bookingId,
+      skipPush: true, // dispatchBooking (index.js) sends this one's push
+    });
+    notifyProviderOfBookingByWhatsApp(
+      service.providerId,
+      `New Tikdum booking request!\n${bookingMessage}\nOpen the Tikdum Business app to accept or decline.`
+    ).catch((e) => console.error("WhatsApp booking alert failed", e));
+  }
   return fetchBookingWithRelations(bookingId);
 }
 
@@ -1723,6 +1727,34 @@ async function createOrder({ items, address, customerId, offerCode, referralCode
         flatDiscount: i === 0 ? referralDiscount + creditAmount : 0,
       })
     );
+  }
+
+  // One notification + WhatsApp per provider for the whole order, not one per service.
+  const customer = await getCustomerById(customerId);
+  const byProvider = new Map();
+  for (const b of created) {
+    if (!byProvider.has(b.providerId)) byProvider.set(b.providerId, []);
+    byProvider.get(b.providerId).push(b);
+  }
+  for (const [providerId, list] of byProvider) {
+    const what = describeGroup(list);
+    const message =
+      list.length === 1
+        ? `${customer?.name || "A customer"} requested ${what} for ${list[0].date}`
+        : `${customer?.name || "A customer"} requested ${list.length} services for ${list[0].date}: ${what}`;
+    await addNotification({
+      recipientType: "provider",
+      recipientId: providerId,
+      type: "booking",
+      title: list.length > 1 ? "New order request" : "New booking request",
+      message,
+      bookingId: list[0].id,
+      skipPush: true, // dispatchBooking (index.js) sends the push
+    });
+    notifyProviderOfBookingByWhatsApp(
+      providerId,
+      `New Tikdum booking request!\n${message}\nOpen the Tikdum Business app to accept or decline.`
+    ).catch((e) => console.error("WhatsApp booking alert failed", e));
   }
 
   if (referrerId) {

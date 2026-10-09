@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { FilterIcon, MapPinIcon } from "../components/icons";
 import CategoryIcon from "../components/CategoryIcon";
+import { groupByOrder } from "../utils/groupOrders";
 
 // Each tab is a pure function of the booking's status, so a request moves
 // between tabs by itself as the order workflow advances (Pending → Open once
@@ -23,13 +24,13 @@ export default function RequestsScreen() {
   const [tab, setTab] = useState("Pending");
 
   const counts = useMemo(
-    () => Object.fromEntries(TABS.map((t) => [t, requests.filter((r) => TAB_STATUSES[t].includes(r.status)).length])),
+    () => Object.fromEntries(TABS.map((t) => [t, groupByOrder(requests.filter((r) => TAB_STATUSES[t].includes(r.status))).length])),
     [requests]
   );
 
   const filtered = useMemo(() => {
     const sorted = [...requests].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    return sorted.filter((r) => TAB_STATUSES[tab].includes(r.status));
+    return groupByOrder(sorted.filter((r) => TAB_STATUSES[tab].includes(r.status)));
   }, [requests, tab]);
 
   return (
@@ -64,7 +65,10 @@ export default function RequestsScreen() {
             <p className="text-sm text-gray-500">No {tab.toLowerCase()} requests.</p>
           </div>
         )}
-        {filtered.map((r) => (
+        {filtered.map((g) => {
+          const r = g.first;
+          if (g.count > 1) return <OrderCard key={g.key} group={g} />;
+          return (
           <div key={r.id} className="rounded-2xl border border-gray-100 p-3 shadow-card lg:p-4">
             <button onClick={() => navigate(`/requests/${r.id}`)} className="flex w-full items-start gap-3 text-left">
               <CategoryIcon categoryId={r.service?.categoryId} size={56} />
@@ -109,8 +113,83 @@ export default function RequestsScreen() {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
+    </div>
+  );
+}
+
+// One order with several services: one card, the services listed, one Accept / Reject for all of them.
+function OrderCard({ group }) {
+  const navigate = useNavigate();
+  const { respondToOrder, showToast } = useApp();
+  const [busy, setBusy] = useState(false);
+  const r = group.first;
+  const pending = r.status === "Pending";
+  const answer = async (action) => {
+    setBusy(true);
+    try {
+      await respondToOrder(group.orderId, action);
+    } catch (e) {
+      showToast(e.message || "Couldn't update the order");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="rounded-2xl border border-gray-100 p-3 shadow-card lg:p-4">
+      <div className="flex items-start gap-3">
+        <CategoryIcon categoryId={r.service?.categoryId} size={56} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            {pending && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9.5px] font-bold text-emerald-700">NEW</span>}
+            <p className="truncate text-[13.5px] font-semibold text-gray-900">
+              {group.count} services · {r.customer?.name || "Customer"}
+            </p>
+          </div>
+          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-gray-500">
+            <MapPinIcon width={12} height={12} />
+            <span className="truncate">{r.address?.line}</span>
+          </div>
+          <div className="mt-1 flex items-center justify-between">
+            <span className="text-[10.5px] text-gray-400">{r.date} · {r.time}</span>
+            <span className="text-[13px] font-bold text-brand">₹{group.total}</span>
+          </div>
+        </div>
+      </div>
+      <ul className="mt-2.5 divide-y divide-gray-100 rounded-xl bg-gray-50">
+        {group.items.map((i) => (
+          <li key={i.id}>
+            <button onClick={() => navigate(`/requests/${i.id}`)} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[12px] text-gray-700 hover:bg-gray-100/70">
+              <span className="truncate">{i.service?.name}</span>
+              <span className="flex-shrink-0 font-semibold text-gray-900">₹{i.amount}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {pending ? (
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={() => answer("reject")}
+            disabled={busy}
+            className="flex-1 rounded-lg border border-gray-200 py-2 text-[12.5px] font-semibold text-gray-600 hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50"
+          >
+            Reject all
+          </button>
+          <button
+            onClick={() => answer("accept")}
+            disabled={busy}
+            className="flex-1 rounded-lg bg-brand py-2 text-[12.5px] font-semibold text-white hover:bg-brand-dark active:scale-[0.98] disabled:opacity-50"
+          >
+            Accept all
+          </button>
+        </div>
+      ) : (
+        <div className="mt-2">
+          <StatusPill status={r.status} />
+        </div>
+      )}
     </div>
   );
 }

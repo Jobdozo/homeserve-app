@@ -378,6 +378,7 @@ function ruleFor(method, path) {
   if (path === "/bookings") return { needs: null };
   if (/^\/messages\/[^/]+$/.test(path)) return { needs: "messages.use", scope: true };
   if (/^\/bookings\/[^/]+\/(photos|checkpoints)$/.test(path)) return { needs: write ? "orders.act" : ["orders.view_all", "orders.view_assigned"], scope: true };
+  if (/^\/orders\/[^/]+\/respond$/.test(path)) return { needs: "orders.act", scope: false };
   if (ACTING.test(path)) return { needs: "orders.act", scope: true };
   if (/^\/bookings\/[^/]+$/.test(path)) return { needs: write ? "orders.act" : ["orders.view_all", "orders.view_assigned"], scope: true };
   // Any other provider-account route stays with the owner.

@@ -6,7 +6,7 @@ import { startRingtone } from "../utils/ringtone";
 const RING_SECONDS = 90;
 
 export default function RingingOverlay() {
-  const { ringingRequest, acceptRequest, rejectRequest, dismissRinging, notificationPrefs } = useApp();
+  const { ringingRequest, requests, acceptRequest, rejectRequest, respondToOrder, dismissRinging, notificationPrefs } = useApp();
   const [secondsLeft, setSecondsLeft] = useState(RING_SECONDS);
   const [busy, setBusy] = useState(false);
 
@@ -50,10 +50,19 @@ export default function RingingOverlay() {
 
   if (!ringingRequest) return null;
 
+  // A cart with several services is one request: every pending service of this order, accepted or declined together.
+  const siblings = ringingRequest.orderId
+    ? requests.filter((r) => r.orderId === ringingRequest.orderId && r.status === "Pending" && r.id !== ringingRequest.id)
+    : [];
+  const lines = siblings.length ? [ringingRequest, ...siblings] : [ringingRequest];
+  const isOrder = lines.length > 1;
+  const orderTotal = lines.reduce((sum, r) => sum + (r.amount || 0), 0);
+
   const handleAccept = async () => {
     setBusy(true);
     try {
-      await acceptRequest(ringingRequest.id);
+      if (isOrder) await respondToOrder(ringingRequest.orderId, "accept");
+      else await acceptRequest(ringingRequest.id);
     } finally {
       setBusy(false);
     }
@@ -62,7 +71,8 @@ export default function RingingOverlay() {
   const handleDecline = async () => {
     setBusy(true);
     try {
-      await rejectRequest(ringingRequest.id);
+      if (isOrder) await respondToOrder(ringingRequest.orderId, "reject");
+      else await rejectRequest(ringingRequest.id);
     } finally {
       setBusy(false);
     }
@@ -81,7 +91,7 @@ export default function RingingOverlay() {
         </div>
 
         <p className="text-[11px] font-semibold uppercase tracking-wide text-brand">New Booking Request</p>
-        <h2 className="mt-1 text-lg font-bold text-gray-900">{ringingRequest.service?.name || "Service Request"}</h2>
+        <h2 className="mt-1 text-lg font-bold text-gray-900">{isOrder ? `${lines.length} services` : ringingRequest.service?.name || "Service Request"}</h2>
         <p className="text-[13px] text-gray-500">{ringingRequest.customer?.name}</p>
 
         <div className="mt-4 space-y-2 rounded-2xl bg-gray-50 p-3 text-left">
@@ -95,7 +105,17 @@ export default function RingingOverlay() {
               <span className="line-clamp-2">{ringingRequest.address.line}</span>
             </div>
           )}
-          <div className="text-[13px] font-bold text-gray-900">₹{ringingRequest.amount}</div>
+          {isOrder && (
+            <ul className="max-h-32 space-y-1 overflow-y-auto border-t border-gray-200 pt-2">
+              {lines.map((r) => (
+                <li key={r.id} className="flex justify-between gap-2 text-[12px] text-gray-700">
+                  <span className="truncate">{r.service?.name}</span>
+                  <span className="flex-shrink-0 font-semibold">₹{r.amount}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="text-[13px] font-bold text-gray-900">{isOrder ? `Total ₹${orderTotal}` : `₹${ringingRequest.amount}`}</div>
         </div>
 
         <div className="mt-4">

@@ -346,11 +346,11 @@ export function AppProvider({ children }) {
       // as a fresh dispatch is for the owner — it still needs to ring.
       if (staffLimitedRef.current) {
         api.listBookings().then(setRequests).catch(() => {});
-        if (booking.status === "Pending") setRingingRequest(booking);
+        if (booking.status === "Pending") setRingingRequest((prev) => (prev?.orderId && prev.orderId === booking.orderId ? prev : booking));
         return;
       }
       setRequests((prev) => upsertById(prev, booking));
-      if (booking.status === "Pending") setRingingRequest(booking);
+      if (booking.status === "Pending") setRingingRequest((prev) => (prev?.orderId && prev.orderId === booking.orderId ? prev : booking));
     };
     const onBookingUpdated = (booking) => {
       if (staffLimitedRef.current && booking.providerId === providerId) {
@@ -489,6 +489,24 @@ export function AppProvider({ children }) {
       setRequests((prev) => upsertById(prev, booking));
       setRingingRequest((prev) => (prev?.id === id ? null : prev));
       showToast("Request accepted");
+    },
+    [showToast]
+  );
+
+  // Accept or decline every pending service of one order in a single step.
+  const respondToOrder = useCallback(
+    async (orderId, action) => {
+      const result = await api.respondOrder(orderId, action);
+      if (action === "accept") {
+        setRequests((prev) => (result.bookings || []).reduce((acc, b) => upsertById(acc, b), prev));
+        showToast(result.failed?.length ? `${result.bookings.length} accepted, ${result.failed.length} couldn't be accepted` : "Order accepted");
+      } else {
+        const gone = new Set(result.rejected || []);
+        setRequests((prev) => prev.filter((r) => !gone.has(r.id)));
+        showToast("Order declined");
+      }
+      setRingingRequest((prev) => (prev?.orderId === orderId ? null : prev));
+      return result;
     },
     [showToast]
   );
@@ -707,6 +725,7 @@ export function AppProvider({ children }) {
       showToast,
       getRequest,
       acceptRequest,
+      respondToOrder,
       rejectRequest,
       swapRequest,
       verifyJobOtp,
@@ -753,6 +772,7 @@ export function AppProvider({ children }) {
       showToast,
       getRequest,
       acceptRequest,
+      respondToOrder,
       rejectRequest,
       verifyJobOtp,
       loadMessages,

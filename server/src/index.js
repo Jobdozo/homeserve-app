@@ -33,6 +33,7 @@ const blockedPhones = require("./blockedPhones");
 const accounting = require("./accounting");
 const subcategories = require("./subcategories");
 const imageStudio = require("./imageStudio");
+const { groupByProvider, describeGroup } = require("./orderGroups");
 auth.setBlockCheck(blockedPhones.isBlocked);
 const liveLocation = require("./liveLocation");
 const push = require("./push");
@@ -108,19 +109,21 @@ function simulateProviderIfNeeded(booking) {
 // How long a provider has to accept is a Business Rule (Settings → Requests).
 const ringTimeoutMs = () => store.getSettings().ringTimeoutSeconds * 1000;
 
-async function dispatchBooking(booking, triedProviderIds = [booking.providerId]) {
+// `group` = every booking of one order that goes to this provider; they ring together as one request.
+async function dispatchBooking(booking, triedProviderIds = [booking.providerId], group = [booking]) {
   const provider = await store.getProvider(booking.providerId);
   if (!provider || !provider.live) {
-    simulateProviderIfNeeded(booking);
+    group.forEach((b) => simulateProviderIfNeeded(b));
     return;
   }
+  const what = group.length > 1 ? `${group.length} services (${describeGroup(group, 2)})` : booking.service?.name || "A service";
   // The socket event only reaches a provider whose app is open right now —
   // the push notification is what actually wakes a backgrounded/closed app,
   // so it has to fire here too, not just rely on io.emit.
   push
     .sendPush("provider", provider.id, {
       title: "New booking request",
-      body: `${booking.service?.name || "A service"} request nearby`,
+      body: `${what} request nearby`,
       bookingId: booking.id,
       type: "booking:created",
     })
@@ -130,7 +133,7 @@ async function dispatchBooking(booking, triedProviderIds = [booking.providerId])
   // web push alone can't do that even when it's delivered successfully.
   const newBookingPush = {
     title: "New booking request",
-    body: `${booking.service?.name || "A service"} request nearby`,
+    body: `${what} request nearby`,
     bookingId: booking.id,
     type: "booking:created",
   };
@@ -144,19 +147,33 @@ async function dispatchBooking(booking, triedProviderIds = [booking.providerId])
   }
   setTimeout(async () => {
     try {
-      const current = await store.getBooking(booking.id);
-      if (!current || current.status !== "Pending") return; // already accepted/rejected/cancelled
-      const result = await store.reassignBooking(booking.id, triedProviderIds);
-      rt.booking("booking:updated", result.booking, { previous: triedProviderIds });
-      rt.activity((await store.listActivities(1))[0]);
-      if (result.reassigned) {
-        rt.booking("booking:created", result.booking);
-        await dispatchBooking(result.booking, [...triedProviderIds, result.booking.providerId]);
+      const still = [];
+      for (const g of group) {
+        const current = await store.getBooking(g.id);
+        if (current && current.status === "Pending") still.push(current); // not yet accepted/rejected/cancelled
       }
+      if (still.length) await reassignGroup(still, triedProviderIds);
     } catch (e) {
       console.error("dispatchBooking timeout failed:", e);
     }
   }, ringTimeoutMs());
+}
+
+// Hand pending bookings to other providers and ring each new provider once for the bookings they received.
+async function reassignGroup(pending, triedProviderIds) {
+  const moved = [];
+  for (const b of pending) {
+    const result = await store.reassignBooking(b.id, triedProviderIds);
+    rt.booking("booking:updated", result.booking, { previous: triedProviderIds });
+    if (result.reassigned) {
+      rt.booking("booking:created", result.booking);
+      moved.push(result.booking);
+    }
+  }
+  rt.activity((await store.listActivities(1))[0]);
+  for (const group of groupByProvider(moved)) {
+    await dispatchBooking(group[0], [...triedProviderIds, group[0].providerId], group);
+  }
 }
 
 function simulateReplyIfNeeded(bookingId, from) {
@@ -1355,12 +1372,38 @@ app.post("/api/bookings", auth.requireAuth("customer"), ah(async (req, res) => {
 // A cart checkout: creates one booking per line item, all sharing an orderId.
 app.post("/api/orders", auth.requireAuth("customer"), ah(async (req, res) => {
   const bookings = await store.createOrder({ ...req.body, customerId: req.user.id });
-  bookings.forEach((b) => {
-    rt.booking("booking:created", b);
-    dispatchBooking(b).catch((e) => console.error("dispatchBooking failed", e));
-  });
+  bookings.forEach((b) => rt.booking("booking:created", b));
+  for (const group of groupByProvider(bookings)) {
+    dispatchBooking(group[0], [group[0].providerId], group).catch((e) => console.error("dispatchBooking failed", e));
+  }
   rt.activity((await store.listActivities(1))[0]);
   res.status(201).json(bookings);
+}));
+
+// A provider answers every pending service of one order in a single step.
+app.post("/api/orders/:orderId/respond", auth.requireAuth("provider"), ah(async (req, res) => {
+  const action = req.body?.action;
+  if (!["accept", "reject"].includes(action)) return res.status(400).json({ error: "action must be accept or reject" });
+  const mine = (await store.listBookings({ providerId: req.user.id })).filter((b) => b.orderId === req.params.orderId && b.status === "Pending");
+  if (mine.length === 0) return res.status(404).json({ error: "No pending requests for this order" });
+  if (action === "reject") {
+    await reassignGroup(mine, [req.user.id]);
+    return res.json({ rejected: mine.map((b) => b.id) });
+  }
+  const bookings = [];
+  const failed = [];
+  for (const b of mine) {
+    try {
+      const booking = await store.updateBookingStatus(b.id, "Accepted");
+      if (req.staff && !staff.assignmentFor(b.id)) await staff.assignOrder(req.user.id, booking, req.staff.id, { name: req.staff.name });
+      rt.booking("booking:updated", booking);
+      bookings.push(booking);
+    } catch (e) {
+      failed.push({ id: b.id, error: e.message });
+    }
+  }
+  rt.activity((await store.listActivities(1))[0]);
+  res.json({ bookings, failed });
 }));
 
 app.patch("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
