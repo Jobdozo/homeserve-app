@@ -137,6 +137,8 @@ export const api = {
     request("/provider/notification-prefs", { method: "PATCH", body: JSON.stringify(patch) }),
   listKycDocuments: () => request("/provider/kyc-documents"),
   uploadKycDocument: (file, docType) => uploadFile("/provider/kyc-documents", file, { docType }),
+  uploadProfilePhoto: (providerId, file) => uploadFile(`/providers/${providerId}/photo`, file),
+  removeProfilePhoto: (providerId) => request(`/providers/${providerId}/photo`, { method: "DELETE" }),
   uploadServiceImage: (providerId, serviceId, file) => uploadFile(`/providers/${providerId}/services/${serviceId}/image`, file),
   removeServiceImage: (providerId, serviceId) =>
     request(`/providers/${providerId}/services/${serviceId}/image`, { method: "DELETE" }),

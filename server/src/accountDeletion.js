@@ -172,6 +172,10 @@ async function deleteProviderAccount(providerId, feedback) {
     removeUploadedFile(d.url);
     jsonStore.remove("kycDocuments", d.id);
   });
+  jsonStore.readAll("providerPhotos").filter((p) => p.id === providerId).forEach((p) => {
+    removeUploadedFile(p.url);
+    jsonStore.remove("providerPhotos", p.id);
+  });
   jsonStore.readAll("providerStaff").filter((s) => s.providerId === providerId).forEach((s) => jsonStore.update("providerStaff", s.id, { active: false, name: "Removed", phone: `deleted:${s.id}`, email: "" }));
   for (const name of ["providerCoverage", "providerNotificationPrefs", "providerVisibilityOverrides"]) jsonStore.remove(name, providerId);
   jsonStore.readAll("providerAds").filter((a) => a.providerId === providerId && a.status !== "stopped").forEach((a) => jsonStore.update("providerAds", a.id, { status: "stopped" }));

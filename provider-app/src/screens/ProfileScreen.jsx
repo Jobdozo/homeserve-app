@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DeleteAccountModal from "../components/DeleteAccountModal";
 import { useApp } from "../context/AppContext";
-import { ChevronRightIcon, StarIcon, ShieldCheckIcon, EditIcon, LogoutIcon } from "../components/icons";
+import { CameraIcon, ChevronRightIcon, StarIcon, ShieldCheckIcon, EditIcon, LogoutIcon } from "../components/icons";
+import Avatar from "../components/Avatar";
+import { compressImage } from "../utils/imageCompress";
 
 const verificationBadges = {
   approved: { text: "Verified", className: "bg-emerald-100 text-emerald-700" },
@@ -12,7 +14,29 @@ const verificationBadges = {
 
 export default function ProfileScreen() {
   const navigate = useNavigate();
-  const { provider: providerProfile, wallet, showToast, logout, can, staff } = useApp();
+  const { provider: providerProfile, wallet, showToast, logout, can, staff, setProfilePhoto } = useApp();
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const changePhoto = async (file) => {
+    if (!file) return;
+    setPhotoBusy(true);
+    try {
+      await setProfilePhoto(await compressImage(file, { maxDimension: 800 }));
+    } catch (e) {
+      showToast(e.message || "Couldn't update the photo");
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+  const removePhoto = async () => {
+    setPhotoBusy(true);
+    try {
+      await setProfilePhoto(null);
+    } catch (e) {
+      showToast(e.message || "Couldn't remove the photo");
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
   const [deleting, setDeleting] = useState(false);
 
   const menuItems = [
@@ -57,8 +81,19 @@ export default function ProfileScreen() {
       <div className="lg:mt-6 lg:grid lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start lg:gap-6">
       <div className="flex flex-col lg:gap-4">
       <div className="mx-4 mt-4 flex items-center gap-3 lg:mx-0 lg:mt-0 lg:rounded-2xl lg:border lg:border-gray-100 lg:bg-white lg:p-6">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-light text-3xl lg:h-20 lg:w-20 lg:text-4xl">
-          {providerProfile.avatar}
+        <div className="relative flex-shrink-0">
+          <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-brand-light text-3xl lg:h-20 lg:w-20 lg:text-4xl">
+            <Avatar provider={providerProfile} />
+          </div>
+          {can("profile.edit") && (
+            <label
+              title="Change photo or logo"
+              className={`absolute -bottom-1 -right-1 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 border-white bg-brand text-white shadow ${photoBusy ? "opacity-50" : ""}`}
+            >
+              <CameraIcon width={13} height={13} />
+              <input type="file" accept="image/*" className="hidden" disabled={photoBusy} onChange={(e) => { changePhoto(e.target.files?.[0]); e.target.value = ""; }} />
+            </label>
+          )}
         </div>
         <div>
           <div className="flex items-center gap-1.5">
@@ -66,6 +101,11 @@ export default function ProfileScreen() {
             {providerProfile.verified && <ShieldCheckIcon width={15} height={15} className="text-brand" />}
           </div>
           <p className="text-[12px] text-gray-500 lg:text-sm">{providerProfile.category}</p>
+          {providerProfile.photoUrl && can("profile.edit") && (
+            <button onClick={removePhoto} disabled={photoBusy} className="text-[11px] font-medium text-gray-400 underline disabled:opacity-50">
+              Remove photo
+            </button>
+          )}
           <div className="mt-0.5 flex items-center gap-1 text-[11.5px] text-gray-500 lg:text-[13px]">
             <StarIcon filled width={13} height={13} /> {providerProfile.rating} ({providerProfile.reviews}+ Reviews)
           </div>

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { SearchIcon } from "../components/icons";
+import Avatar from "../components/Avatar";
 
 export default function MessagesListScreen() {
   const navigate = useNavigate();
@@ -36,8 +37,8 @@ export default function MessagesListScreen() {
             onClick={() => navigate(`/chat/${booking.id}`)}
             className="flex w-full items-center gap-3 rounded-xl px-2 py-3 text-left hover:bg-gray-50 active:bg-gray-50"
           >
-            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-xl">
-              {provider?.avatar}
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-light text-xl">
+              <Avatar provider={provider} fallback="" />
             </div>
             <div className="min-w-0 flex-1 border-b border-gray-100 pb-3">
               <div className="flex items-center justify-between gap-2">

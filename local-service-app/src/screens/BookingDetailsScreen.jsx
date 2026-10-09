@@ -7,6 +7,7 @@ import { STATUS_STEPS } from "../data/mockData";
 import ScreenHeader from "../components/ScreenHeader";
 import { ChatIcon, PhoneIcon, StarIcon, CheckIcon, MapPinIcon } from "../components/icons";
 import CategoryIcon from "../components/CategoryIcon";
+import Avatar from "../components/Avatar";
 
 const LOCATION_TRACKED_STATUSES = ["Accepted", "In Progress"];
 
@@ -107,8 +108,8 @@ export default function BookingDetailsScreen() {
               onClick={() => navigate(`/provider/${booking.providerId}`)}
               className="flex min-w-0 flex-1 items-center gap-3 text-left"
             >
-              <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-xl">
-                {provider?.avatar}
+              <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-light text-xl">
+                <Avatar provider={provider} fallback="" />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] font-semibold text-gray-900">{provider?.name}</p>

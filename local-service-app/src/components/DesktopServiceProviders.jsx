@@ -4,6 +4,7 @@ import { StarIcon, ChevronRightIcon } from "./icons";
 import { formatCount, discountPct } from "../utils/format";
 import CategoryPhoto from "./CategoryPhoto";
 import CategoryBannerImage from "./CategoryBannerImage";
+import Avatar from "./Avatar";
 
 const PROTECTION = [
   "Genuine service guarantee",
@@ -93,8 +94,8 @@ export default function DesktopServiceProviders({ anchor, category, vendors }) {
                   onClick={() => navigate(`/service/${s.id}`)}
                   className="group flex w-full items-center gap-5 rounded-2xl bg-white p-5 text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg"
                 >
-                  <span className="flex h-[72px] w-[72px] flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-[34px]">
-                    {p?.avatar || "🧑"}
+                  <span className="flex h-[72px] w-[72px] flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-light text-[34px]">
+                    <Avatar provider={p} fallback="🧑" />
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[17px] font-bold text-gray-900">{p?.name || "Service provider"}</p>

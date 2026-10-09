@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { HomeIcon, RequestsIcon, GridIcon, WalletIcon, LogoutIcon } from "./icons";
 import { useApp } from "../context/AppContext";
 import LogoMark from "./LogoMark";
+import Avatar from "./Avatar";
 
 // The website's left menu (computer screens only). Phones keep the bottom bar.
 const MAIN = [
@@ -78,7 +79,7 @@ export default function DesktopSidebar() {
       </nav>
 
       <div className="mt-6 flex items-center gap-2.5 rounded-xl bg-gray-50 p-3">
-        <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-lg">{provider?.avatar || "🙂"}</span>
+        <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-light text-lg"><Avatar provider={provider} /></span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[12.5px] font-bold text-gray-900">{provider?.name || "Provider"}</p>
           <p className="truncate text-[10.5px] text-gray-400">{provider?.category || ""}</p>

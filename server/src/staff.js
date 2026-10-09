@@ -372,7 +372,7 @@ function ruleFor(method, path) {
   if (/^\/provider\/kyc-documents/.test(path)) return { needs: "profile.edit" };
   if (/^\/provider\/service-changes$/.test(path)) return { needs: ["services.view", "services.manage"] };
   if (/^\/provider\/notification-prefs$/.test(path)) return { needs: write ? "profile.edit" : null };
-  if (/^\/providers\/[^/]+\/(coverage|profile)$/.test(path)) return { needs: "profile.edit" };
+  if (/^\/providers\/[^/]+\/(coverage|profile|photo)$/.test(path)) return { needs: "profile.edit" };
   if (/^\/providers\/[^/]+\/services/.test(path)) return { needs: write ? "services.manage" : null };
   if (/^\/(push|provider\/fcm-token)/.test(path) || /^\/notifications/.test(path)) return { needs: null };
   if (path === "/bookings") return { needs: null };

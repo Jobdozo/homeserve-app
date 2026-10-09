@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { BackIcon, PhoneIcon, SendIcon } from "../components/icons";
 import { callProvider } from "../utils/callProvider";
+import Avatar from "../components/Avatar";
 
 export default function ChatScreen() {
   const { bookingId } = useParams();
@@ -72,8 +73,8 @@ export default function ChatScreen() {
           onClick={() => navigate(`/provider/${booking.providerId}`)}
           className="flex min-w-0 flex-1 items-center gap-3 text-left"
         >
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-lg">
-            {provider?.avatar}
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-light text-lg">
+            <Avatar provider={provider} fallback="" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13.5px] font-semibold text-gray-900 lg:text-[15px]">{provider?.name}</p>

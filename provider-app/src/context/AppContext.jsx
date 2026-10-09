@@ -548,6 +548,18 @@ export function AppProvider({ children }) {
     api.sendMessage(requestId, text).catch((e) => console.error("Failed to send message", e));
   }, []);
 
+  // Change or remove the provider's own profile photo / logo.
+  const setProfilePhoto = useCallback(
+    async (file) => {
+      if (!provider) return;
+      const updated = file ? await api.uploadProfilePhoto(provider.id, file) : await api.removeProfilePhoto(provider.id);
+      setProvider((prev) => (prev ? { ...prev, photoUrl: updated.photoUrl || null } : prev));
+      showToast(file ? "Profile photo updated" : "Profile photo removed");
+      return updated;
+    },
+    [provider, showToast]
+  );
+
   // Change or remove the photo of one of this provider's own services.
   const setServicePhoto = useCallback(
     async (id, file) => {
@@ -702,6 +714,7 @@ export function AppProvider({ children }) {
       sendMessage,
       toggleServiceStatus,
       setServicePhoto,
+      setProfilePhoto,
       addService,
       resubmitService,
       requestServiceChange,
@@ -746,6 +759,7 @@ export function AppProvider({ children }) {
       sendMessage,
       toggleServiceStatus,
       setServicePhoto,
+      setProfilePhoto,
       addService,
       resubmitService,
       requestServiceChange,

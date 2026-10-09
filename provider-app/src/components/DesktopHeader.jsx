@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { BellIcon } from "./icons";
 import { useApp } from "../context/AppContext";
+import Avatar from "./Avatar";
 
 const TITLES = {
   "/dashboard": "Dashboard",
@@ -33,7 +34,7 @@ export default function DesktopHeader() {
         )}
       </button>
       <button onClick={() => navigate("/profile")} className="flex items-center gap-2 rounded-lg pl-1 hover:bg-gray-50">
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-light text-base">{provider?.avatar || "🙂"}</span>
+        <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-brand-light text-base"><Avatar provider={provider} /></span>
         <span className="max-w-[140px] truncate text-[13px] font-semibold text-gray-800">{provider?.name || "Provider"}</span>
       </button>
     </header>

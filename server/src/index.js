@@ -657,6 +657,25 @@ app.patch("/api/providers/:id/services/:serviceId", auth.requireAuth("provider")
   res.json({ ...result.service, changeRequest: result.changeRequest });
 }));
 
+// A provider's own profile photo / logo. Allowed even on a verified account (it isn't account information).
+app.post("/api/providers/:id/photo", auth.requireAuth("provider"), upload.single("file"), ah(async (req, res) => {
+  const drop = () => req.file && require("fs").unlink(req.file.path, () => {});
+  if (req.user.id !== req.params.id) { drop(); return res.status(403).json({ error: "Not your provider account" }); }
+  if (!req.file) return res.status(400).json({ error: "Choose a photo to upload" });
+  const provider = await store.setProviderPhoto(req.params.id, `/uploads/${req.file.filename}`, `Provider ${req.user.id}${req.staff ? ` (staff ${req.staff.name})` : ""}`);
+  if (!provider) { drop(); return res.status(404).json({ error: "Provider not found" }); }
+  io.emit("provider:updated", publicProvider(provider));
+  res.json(provider);
+}));
+
+app.delete("/api/providers/:id/photo", auth.requireAuth("provider"), ah(async (req, res) => {
+  if (req.user.id !== req.params.id) return res.status(403).json({ error: "Not your provider account" });
+  const provider = await store.setProviderPhoto(req.params.id, null, `Provider ${req.user.id}${req.staff ? ` (staff ${req.staff.name})` : ""}`);
+  if (!provider) return res.status(404).json({ error: "Provider not found" });
+  io.emit("provider:updated", publicProvider(provider));
+  res.json(provider);
+}));
+
 // A provider changes the photo of their own service. It shows on that service only.
 const providerActor = (req) => `Provider ${req.user.id}${req.staff ? ` (staff ${req.staff.name})` : ""}`;
 app.post("/api/providers/:id/services/:serviceId/image", auth.requireAuth("provider"), upload.single("file"), ah(async (req, res) => {

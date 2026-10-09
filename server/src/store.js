@@ -123,6 +123,36 @@ function hasAcceptedAgreement(providerId) {
     .some((a) => a.providerId === providerId && a.version === AGREEMENT_VERSION);
 }
 
+// A provider's own profile photo or logo. Like service photos it is kept in a small
+// id -> url table beside the database (whose schema we can't extend); the emoji
+// avatar stays as the fallback.
+function providerPhotoUrl(providerId) {
+  return jsonStore.readAll("providerPhotos").find((r) => r.id === providerId)?.url || null;
+}
+
+async function setProviderPhoto(providerId, url, actor) {
+  const provider = await getProvider(providerId);
+  if (!provider) return undefined;
+  const previous = providerPhotoUrl(providerId);
+  if (url) {
+    if (previous) jsonStore.update("providerPhotos", providerId, { url, updatedAt: new Date().toISOString() });
+    else jsonStore.insert("providerPhotos", { id: providerId, url, updatedAt: new Date().toISOString() });
+  } else if (previous) {
+    jsonStore.remove("providerPhotos", providerId);
+  }
+  if (previous && previous !== url) deleteUploadedFile(previous);
+  cacheClear("providers");
+  recordAdminChange({
+    actor,
+    action: "provider.update",
+    entityType: "provider",
+    entityId: providerId,
+    entityName: provider.name,
+    changes: [{ field: "profile photo", from: previous ? "uploaded" : "none", to: url ? "uploaded" : "removed" }],
+  });
+  return getProvider(providerId);
+}
+
 function mapProvider(p) {
   if (!p) return p;
   // responseRate is never written at signup (no rejected/late responses yet
@@ -133,6 +163,7 @@ function mapProvider(p) {
     responseRate: p.responseRate ?? 100,
     agreementAccepted: hasAcceptedAgreement(p.id),
     coverage: getProviderCoverage(p.id),
+    photoUrl: providerPhotoUrl(p.id),
   };
 }
 
@@ -4170,6 +4201,7 @@ module.exports = {
   adminUpdateService,
   setServiceImage,
   setProviderServiceImage,
+  setProviderPhoto,
   adminDeleteService,
   setProviderVerification,
   deleteProvider,

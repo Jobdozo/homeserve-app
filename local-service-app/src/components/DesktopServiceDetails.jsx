@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { StarIcon, CheckIcon } from "./icons";
 import { formatCount } from "../utils/format";
 import CategoryPhoto from "./CategoryPhoto";
+import Avatar from "./Avatar";
 
 // Desktop-only service detail page: photo + what's included on the left, a
 // sticky booking card on the right. Same data and cart actions as the phone
@@ -85,7 +86,7 @@ export default function DesktopServiceDetails({ service, provider, category, pct
               onClick={() => navigate(`/provider/${provider.id}`)}
               className="mt-4 flex items-center gap-3 rounded-2xl border border-gray-100 px-4 py-3 text-left hover:border-brand/40"
             >
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-light text-[22px]">{provider.avatar || "🧑"}</span>
+              <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-brand-light text-[22px]"><Avatar provider={provider} fallback="🧑" /></span>
               <span>
                 <span className="block text-[12px] text-gray-400">Provided by</span>
                 <span className="block text-[15px] font-bold text-gray-900">{provider.name}</span>

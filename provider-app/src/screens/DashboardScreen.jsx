@@ -5,6 +5,7 @@ import { useApp } from "../context/AppContext";
 import { BellIcon, StarIcon, ShieldCheckIcon, TrendUpIcon, TrendDownIcon, AlertIcon, MapPinIcon } from "../components/icons";
 import BatteryOptimizationBanner from "../components/BatteryOptimizationBanner";
 import CategoryIcon from "../components/CategoryIcon";
+import Avatar from "../components/Avatar";
 
 // Phone: one stack, top to bottom (the numbers on the `order-*` classes keep that order).
 // Computer: two columns — your work on the left (new requests, open jobs, numbers), your
@@ -49,8 +50,8 @@ export default function DashboardScreen() {
         {/* Provider header */}
         <div className="order-1 lg:order-none flex items-center justify-between bg-brand px-4 pb-5 pt-1 text-white lg:rounded-2xl lg:px-8 lg:py-6">
           <div className="flex items-center gap-3 lg:gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 text-2xl lg:h-14 lg:w-14 lg:text-3xl">
-              {providerProfile.avatar}
+            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-white/20 text-2xl lg:h-14 lg:w-14 lg:text-3xl">
+              <Avatar provider={providerProfile} />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
