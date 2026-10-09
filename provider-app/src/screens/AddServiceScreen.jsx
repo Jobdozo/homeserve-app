@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
 import { CameraIcon, XIcon } from "../components/icons";
+import Pic from "../components/Pic";
 
 export default function AddServiceScreen() {
   const navigate = useNavigate();
@@ -67,33 +68,42 @@ export default function AddServiceScreen() {
                 className="w-full bg-transparent text-[13.5px] text-gray-800 outline-none placeholder:text-gray-400"
               />
             </Field>
-            <Field label="Category">
-              <select
-                value={categorySlug}
-                onChange={(e) => {
-                  setCategorySlug(e.target.value);
-                  setSubcategoryId("");
-                }}
-                className="w-full bg-transparent text-[13.5px] text-gray-800 outline-none"
-              >
+            <div>
+              <p className="mb-1.5 text-[11px] font-medium text-gray-400">Category</p>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                 {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.icon} {c.name}
-                  </option>
+                  <button
+                    type="button"
+                    key={c.id}
+                    onClick={() => {
+                      setCategorySlug(c.id);
+                      setSubcategoryId("");
+                    }}
+                    className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-center ${categorySlug === c.id ? "border-brand bg-brand-light" : "border-gray-100 hover:border-gray-200"}`}
+                  >
+                    <Pic urls={[c.bannerUrl]} categoryId={c.id} size={48} rounded="rounded-lg" />
+                    <span className="line-clamp-2 text-[11px] font-medium leading-tight text-gray-700">{c.name}</span>
+                  </button>
                 ))}
-              </select>
-            </Field>
+              </div>
+            </div>
             {types.length > 0 && (
-              <Field label="Type">
-                <select value={subcategoryId} onChange={(e) => setSubcategoryId(e.target.value)} className="w-full bg-transparent text-[13.5px] text-gray-800 outline-none">
-                  <option value="">Choose a type</option>
+              <div>
+                <p className="mb-1.5 text-[11px] font-medium text-gray-400">Type</p>
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                   {types.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
+                    <button
+                      type="button"
+                      key={t.id}
+                      onClick={() => setSubcategoryId(t.id)}
+                      className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-center ${subcategoryId === t.id ? "border-brand bg-brand-light" : "border-gray-100 hover:border-gray-200"}`}
+                    >
+                      <Pic urls={[t.imageUrl, categories.find((c) => c.id === categorySlug)?.bannerUrl]} categoryId={categorySlug} size={48} rounded="rounded-lg" />
+                      <span className="line-clamp-2 text-[11px] font-medium leading-tight text-gray-700">{t.name}</span>
+                    </button>
                   ))}
-                </select>
-              </Field>
+                </div>
+              </div>
             )}
             <Field label="Service Description">
               <textarea

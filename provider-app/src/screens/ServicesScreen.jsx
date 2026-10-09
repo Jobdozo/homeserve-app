@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { PlusIcon, StarIcon } from "../components/icons";
 import { formatCount, discountPct } from "../utils/format";
-import CategoryIcon from "../components/CategoryIcon";
+import Pic from "../components/Pic";
 import { api } from "../api";
 
 const TABS = ["Active", "Pending", "Rejected", "Inactive", "Draft"];
@@ -11,7 +11,7 @@ const TAB_STATUS = { Active: "active", Pending: "pending_approval", Rejected: "r
 
 export default function ServicesScreen() {
   const navigate = useNavigate();
-  const { services, toggleServiceStatus, resubmitService, showToast } = useApp();
+  const { services, categories, subcategories, toggleServiceStatus, resubmitService, showToast } = useApp();
   const [tab, setTab] = useState("Active");
   const [changes, setChanges] = useState([]);
   const loadChanges = () => api.listServiceChanges().then(setChanges).catch(() => {});
@@ -91,12 +91,17 @@ export default function ServicesScreen() {
         )}
         {filtered.map((s) => {
           const pct = discountPct(s.price, s.originalPrice);
+          const cat = categories.find((c) => c.id === s.categoryId);
+          const type = subcategories.find((t) => t.id === s.subcategoryId);
           return (
           <div key={s.id} className="rounded-2xl border border-gray-100 p-3 shadow-card lg:p-4">
           <div className="flex items-center gap-3">
-            <CategoryIcon categoryId={s.categoryId} size={56} />
+            <Pic urls={[s.imageUrl, type?.imageUrl, cat?.bannerUrl]} categoryId={s.categoryId} size={56} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13.5px] font-semibold text-gray-900">{s.name}</p>
+              {(cat || type) && (
+                <p className="truncate text-[10.5px] text-gray-400">{[cat?.name, type?.name].filter(Boolean).join(" · ")}</p>
+              )}
               <div className="flex items-center gap-1.5">
                 <p className="text-[11px] text-gray-500">Starting from ₹{s.price}</p>
                 {pct > 0 && (
