@@ -25,11 +25,11 @@ export function TypeTile({ name, imageUrl, categoryId, active, onClick, classNam
 }
 
 // "All | Window AC | Split AC | VRF AC" as a row of picture tiles (mobile).
-export default function SubcategoryChips({ chips, value, onChange, categoryId, className = "" }) {
+export default function SubcategoryChips({ chips, value, onChange, categoryId, showAll = true, className = "" }) {
   if (!chips.length) return null;
   return (
     <div role="tablist" aria-label="Type" className={"no-scrollbar flex gap-4 overflow-x-auto pb-1 " + className}>
-      <TypeTile name="All" categoryId={categoryId} active={value === ""} onClick={() => onChange("")} className="w-[72px] flex-shrink-0" />
+      {showAll && <TypeTile name="All" categoryId={categoryId} active={value === ""} onClick={() => onChange("")} className="w-[72px] flex-shrink-0" />}
       {chips.map((c) => (
         <TypeTile
           key={c.id}

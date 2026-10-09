@@ -10,7 +10,7 @@ import { TypeTile } from "./SubcategoryChips";
 // Window / Split / VRF AC), laid out like Urban Company's service page:
 // a "Select a service" panel of picture tiles on the left, the services of the
 // chosen type in the middle, and a trust + cart panel on the right.
-export default function TypedCategoryLayout({ category, displayList, chips, activeSub, onSub, totalCount, aggregate }) {
+export default function TypedCategoryLayout({ category, displayList, chips, showAll = true, activeSub, onSub, totalCount, aggregate }) {
   const navigate = useNavigate();
   const { cart, homeLayout } = useApp();
   const counts = homeLayout?.bookingCounts || {};
@@ -49,7 +49,7 @@ export default function TypedCategoryLayout({ category, displayList, chips, acti
         <aside className="sticky top-24 rounded-2xl border border-gray-200 bg-white p-4">
           <p className="mb-4 text-[13.5px] font-semibold text-gray-800">Select a service</p>
           <div role="tablist" aria-label="Type" className="grid grid-cols-3 gap-x-2 gap-y-4">
-            <TypeTile name="All" categoryId={category.id} active={activeSub === ""} onClick={() => onSub("")} />
+            {showAll && <TypeTile name="All" categoryId={category.id} active={activeSub === ""} onClick={() => onSub("")} />}
             {chips.map((c) => (
               <TypeTile key={c.id} name={c.name} imageUrl={c.imageUrl} categoryId={category.id} active={activeSub === c.id} onClick={() => onSub(c.id)} />
             ))}

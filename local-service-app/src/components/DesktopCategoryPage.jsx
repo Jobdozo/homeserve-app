@@ -20,7 +20,7 @@ const SORTS = [
 // Desktop-only category page: photo banner, sort bar, 4-column service grid and
 // a strip of other categories. The mobile list in CategoryServicesScreen is
 // untouched.
-export default function DesktopCategoryPage({ category, displayList, aggregate, hasAny, catalogReady, chips = [], activeSub = "", onSub, totalCount }) {
+export default function DesktopCategoryPage({ category, displayList, aggregate, hasAny, catalogReady, chips = [], showAll = true, activeSub = "", onSub, totalCount }) {
   const navigate = useNavigate();
   const { categories, homeLayout } = useApp();
   const [sort, setSort] = useState("popular");
@@ -46,7 +46,7 @@ export default function DesktopCategoryPage({ category, displayList, aggregate, 
   const others = categories.filter((c) => c.id !== category.id).slice(0, 10);
 
   if (chips.length > 0) {
-    return <TypedCategoryLayout category={category} displayList={displayList} chips={chips} activeSub={activeSub} onSub={onSub} totalCount={totalCount} aggregate={aggregate} />;
+    return <TypedCategoryLayout category={category} displayList={displayList} chips={chips} showAll={showAll} activeSub={activeSub} onSub={onSub} totalCount={totalCount} aggregate={aggregate} />;
   }
 
   return (

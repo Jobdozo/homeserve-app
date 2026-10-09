@@ -28,8 +28,11 @@ export default function CategoryServicesScreen() {
   // name) — only the cards shown below are deduped by name.
   const inCategory = useMemo(() => services.filter((s) => s.categoryId === categoryId), [services, categoryId]);
   const chips = useMemo(() => chipsFor(subcategories, categoryId, inCategory), [subcategories, categoryId, inCategory]);
-  // A chip the customer picked earlier may vanish (hidden by admin): fall back to All.
-  const activeSub = chips.some((c) => c.id === sub) ? sub : "";
+  // "All" is offered only while some services have no type (or a hidden one). When every
+  // service is sorted into a type, the page opens on the first type instead, like Urban Company.
+  const showAll = chips.length > 0 && inCategory.some((s) => !chips.some((c) => c.id === s.subcategoryId));
+  // A type the customer picked earlier may vanish (hidden by admin): fall back to the default.
+  const activeSub = chips.some((c) => c.id === sub) ? sub : chips.length > 0 && !showAll ? chips[0].id : "";
   const displayList = useMemo(() => dedupeByName(activeSub ? inCategory.filter((s) => s.subcategoryId === activeSub) : inCategory), [inCategory, activeSub]);
 
   const aggregate = useMemo(() => {
@@ -69,6 +72,7 @@ export default function CategoryServicesScreen() {
         hasAny={inCategory.length > 0}
         catalogReady={catalogReady}
         chips={chips}
+        showAll={showAll}
         activeSub={activeSub}
         onSub={setSub}
         totalCount={dedupeByName(inCategory).length}
@@ -97,7 +101,7 @@ export default function CategoryServicesScreen() {
           </div>
         </div>
 
-        <SubcategoryChips chips={chips} value={activeSub} onChange={setSub} categoryId={category.id} className="mt-4" />
+        <SubcategoryChips chips={chips} value={activeSub} onChange={setSub} categoryId={category.id} showAll={showAll} className="mt-4" />
 
         {inCategory.length === 0 ? (
           catalogReady ? (
