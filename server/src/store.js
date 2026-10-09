@@ -144,18 +144,23 @@ function mapProvider(p) {
 // fields on this same record and more conditions in
 // isProviderVisibleForPincode, instead of a new subsystem. ----
 
+const workingHours = require("./workingHours");
+
 function getProviderCoverage(providerId) {
   const existing = jsonStore.readAll("providerCoverage").find((c) => c.id === providerId);
   const base = existing || { id: providerId, pincodes: [], serveAllAreas: false };
   // Records saved before this switch existed have no flag — they're accepting.
-  return { ...base, acceptingRequests: base.acceptingRequests !== false };
+  // workingNow is worked out on every read (never stored): false only when the provider turned on
+  // working hours and it is currently outside them. acceptingRequests stays the provider's own switch.
+  return { ...base, acceptingRequests: base.acceptingRequests !== false, workingNow: workingHours.isWithinSchedule(base.schedule) };
 }
 
 // Provider's own Enable/Disable Receiving Requests switch: off hides all of
 // their services from customers and blocks new bookings, while jobs already
 // in flight carry on untouched (nothing else keys off this flag).
 function isProviderAcceptingRequests(providerId) {
-  return getProviderCoverage(providerId).acceptingRequests;
+  const c = getProviderCoverage(providerId);
+  return c.acceptingRequests && c.workingNow;
 }
 
 // A coverage entry is a full 6-digit PIN or a shorter prefix: "180" covers
@@ -185,6 +190,10 @@ function isProviderVisibleForPincode(providerId, pincode) {
 function updateProviderCoverage(providerId, patch, { allowServeAllAreas = true } = {}) {
   const existing = getProviderCoverage(providerId);
   const next = { ...existing };
+  delete next.workingNow; // derived, never saved
+  if (patch.schedule !== undefined) {
+    next.schedule = workingHours.normalizeSchedule(patch.schedule);
+  }
   if (patch.pincodes !== undefined) {
     const cleaned = (Array.isArray(patch.pincodes) ? patch.pincodes : [])
       .map((p) => String(p).trim())
@@ -1858,7 +1867,8 @@ function providerVisibilityChecks(providerId, ctx, { pincode } = {}) {
   add("wallet", "Provider account is active (wallet funded)", ctx.activeWallets.has(providerId), ctx.activeWallets.has(providerId) ? "Wallet balance is positive" : "Wallet balance is empty — account is paused");
   add("approval", "Provider is approved", provider?.verificationStatus === "approved", `Approval status: ${provider?.verificationStatus || "unknown"}`);
   add("verification", "Provider is verified", provider?.verified !== false && Boolean(provider), provider?.verified === false ? "Verification not completed" : "Verified");
-  add("requests_switch", "Receive Requests switch is on", coverage.acceptingRequests, coverage.acceptingRequests ? "Accepting new requests" : "Provider switched requests off");
+  const inHours = coverage.workingNow !== false;
+  add("requests_switch", "Receive Requests switch is on", coverage.acceptingRequests && inHours, !coverage.acceptingRequests ? "Provider switched requests off" : !inHours ? "Outside the provider's working hours" : "Accepting new requests");
   const overridden = Boolean(cap?.override); // the older "allow despite open requests" override
   const overLimit = Boolean(cap && cap.openCount >= cap.maxOpen) && !overridden;
   add("open_limit", "Under the maximum open request limit", !overLimit, cap ? `${cap.openCount} open of ${cap.maxOpen} allowed${overridden ? " (limit overridden)" : ""}` : "No open requests", true);

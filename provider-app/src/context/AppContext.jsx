@@ -631,6 +631,17 @@ export function AppProvider({ children }) {
     [provider, showToast]
   );
 
+  const saveSchedule = useCallback(
+    async (schedule) => {
+      if (!provider) return;
+      const coverage = await api.saveSchedule(provider.id, schedule);
+      setProvider((prev) => (prev ? { ...prev, coverage } : prev));
+      showToast(schedule.enabled ? "Working hours saved" : "Working hours turned off");
+      return coverage;
+    },
+    [provider, showToast]
+  );
+
   const updateCoverage = useCallback(
     async (pincodes) => {
       if (!provider) return;
@@ -683,6 +694,7 @@ export function AppProvider({ children }) {
       requestServiceChange,
       updateProfile,
       updateCoverage,
+      saveSchedule,
       setAcceptingRequests,
       acceptAgreement,
       notifications,
@@ -725,6 +737,7 @@ export function AppProvider({ children }) {
       requestServiceChange,
       updateProfile,
       updateCoverage,
+      saveSchedule,
       setAcceptingRequests,
       acceptAgreement,
       notifications,

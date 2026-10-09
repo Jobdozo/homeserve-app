@@ -176,7 +176,7 @@ export default function DashboardScreen() {
           <div>
             <p className="text-[13px] font-bold text-gray-900">{accepting ? "Receiving new requests" : "Not receiving new requests"}</p>
             <p className="mt-0.5 text-[11px] leading-snug text-gray-500">
-              {accepting ? "Customers in your area can see and book your services." : "Your services are hidden from customers. Jobs already in progress continue as normal."}
+              {!accepting ? "Your services are hidden from customers. Jobs already in progress continue as normal." : providerProfile.coverage?.workingNow === false ? "You are outside your working hours, so customers can't see your services right now. Change them in Manage Availability." : "Customers in your area can see and book your services."}
             </p>
           </div>
           <button onClick={toggleAccepting} disabled={togglingRequests} className="switch flex-shrink-0 disabled:opacity-50" data-on={accepting} aria-label="Toggle receiving requests">

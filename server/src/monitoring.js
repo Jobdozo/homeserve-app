@@ -191,6 +191,7 @@ async function build(query) {
     let unavailableReason = null;
     if (p.verificationStatus && p.verificationStatus !== "approved") unavailableReason = `Verification ${p.verificationStatus}`;
     else if (!coverage.acceptingRequests) unavailableReason = "Requests switched off";
+    else if (coverage.workingNow === false) unavailableReason = "Outside working hours";
     else if (store.isProviderSuspended(p.id)) unavailableReason = "Wallet empty — paused";
     else if (cap?.restricted) unavailableReason = "At open-request limit";
 

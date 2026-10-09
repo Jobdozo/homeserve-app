@@ -431,7 +431,7 @@ app.patch("/api/providers/:id/coverage", auth.requireAuth("provider"), ah(async 
   if (req.params.id !== req.user.id) return res.status(403).json({ error: "Not your profile" });
   const coverage = store.updateProviderCoverage(
     req.params.id,
-    { pincodes: req.body?.pincodes, acceptingRequests: req.body?.acceptingRequests },
+    { pincodes: req.body?.pincodes, acceptingRequests: req.body?.acceptingRequests, schedule: req.body?.schedule },
     { allowServeAllAreas: false }
   );
   res.json(coverage);

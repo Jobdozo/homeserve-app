@@ -105,6 +105,8 @@ export const api = {
     request(`/providers/${id}/coverage`, { method: "PATCH", body: JSON.stringify({ acceptingRequests }) }),
   updateCoverage: (id, pincodes) =>
     request(`/providers/${id}/coverage`, { method: "PATCH", body: JSON.stringify({ pincodes }) }),
+  saveSchedule: (id, schedule) =>
+    request(`/providers/${id}/coverage`, { method: "PATCH", body: JSON.stringify({ schedule }) }),
   listBookings: () => request("/bookings"),
   getBooking: (id) => request(`/bookings/${id}`),
   updateBookingStatus: (id, status) =>
