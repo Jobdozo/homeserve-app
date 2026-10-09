@@ -1,22 +1,10 @@
 import { Component } from "react";
+import { clearCachesAndReload, recoverFromStaleFiles } from "../utils/staleRecovery";
 
 // A screen's code file failing to load usually means the app was just updated
 // and the browser still holds the old cached files. Clearing the cache and
 // reloading fixes it.
 const LOAD_ERROR = /dynamically imported module|Loading chunk|Loading CSS chunk|Importing a module script failed|error loading dynamically/i;
-const RECOVERED_KEY = "tikdum-auto-recovered";
-
-async function clearCachesAndReload(hash) {
-  try {
-    const regs = (await navigator.serviceWorker?.getRegistrations?.()) || [];
-    await Promise.all(regs.map((r) => r.unregister()));
-    if (window.caches) await Promise.all((await caches.keys()).map((k) => caches.delete(k)));
-  } catch (e) {
-    console.error("cache clear failed", e);
-  }
-  if (hash) window.location.hash = hash;
-  window.location.reload();
-}
 
 // Catches a crash in any screen so the app shows a way out instead of a blank
 // white page: reload, or go back to the start.
@@ -32,15 +20,9 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error("Screen crashed", error, info?.componentStack);
-    // One automatic recovery attempt per session for stale-cache load failures.
-    try {
-      if (LOAD_ERROR.test(String(error?.message || error)) && !sessionStorage.getItem(RECOVERED_KEY)) {
-        sessionStorage.setItem(RECOVERED_KEY, "1");
-        clearCachesAndReload();
-      }
-    } catch (e) {
-      console.error("auto recovery failed", e);
-    }
+    // Automatic recovery for stale-cache load failures (at most once every two minutes, so several
+    // deploys in a day each recover, but a real fault can't make it reload in a loop).
+    if (LOAD_ERROR.test(String(error?.message || error))) recoverFromStaleFiles();
   }
 
   render() {
