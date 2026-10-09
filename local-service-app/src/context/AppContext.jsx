@@ -540,7 +540,7 @@ export function AppProvider({ children }) {
         }
         showToast("Added to cart");
         const like = likeServiceId ? prev.find((item) => item.serviceId === likeServiceId) : null;
-        return [...prev, { serviceId, date: like?.date || todayISO(), time: like?.time || timeSlots[1], issue: "" }];
+        return [...prev, { serviceId, date: like?.date || todayISO(), time: like?.time || timeSlots[1], issue: "", quantity: 1 }];
       });
     },
     [showToast]
@@ -604,7 +604,7 @@ export function AppProvider({ children }) {
       // hidden because they aren't offered in the current area stay out.
       const ordered = cart.filter((c) => !serviceIds || serviceIds.includes(c.serviceId));
       if (ordered.length === 0) return [];
-      const items = ordered.map(({ serviceId, date, time, issue }) => ({ serviceId, date, time, issue }));
+      const items = ordered.map(({ serviceId, date, time, issue, quantity }) => ({ serviceId, date, time, issue, quantity: quantity || 1 }));
       const created = await api.createOrder({
         items,
         address,

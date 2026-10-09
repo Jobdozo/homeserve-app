@@ -7,7 +7,7 @@ export default function CartBar() {
 
   if (cart.length === 0) return null;
 
-  const total = cart.reduce((sum, item) => sum + (getService(item.serviceId)?.price || 0), 0);
+  const total = cart.reduce((sum, item) => sum + (getService(item.serviceId)?.price || 0) * (item.quantity || 1), 0);
 
   return (
     <div className="sticky bottom-0 flex-shrink-0 border-t border-gray-100 bg-white px-4 py-3 lg:mx-auto lg:w-full lg:max-w-3xl lg:rounded-t-2xl lg:border lg:px-6 lg:shadow-card">

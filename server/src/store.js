@@ -398,7 +398,18 @@ function bookingRef(bookingId) {
   return ref;
 }
 
+const { normalizeQuantity } = require("./quantity");
+
+// Quantity of a booking line (bookingQuantities: id -> { id, quantity }); 1 when none was stored.
+function bookingQuantity(bookingId) {
+  return jsonStore.readAll("bookingQuantities").find((r) => r.id === bookingId)?.quantity || 1;
+}
+
 function mapBooking(b, customer, service) {
+  const quantity = bookingQuantity(b.id);
+  // The booking carries its own copy of the service, named with the count ("Sofa Cleaning (1 Seat) × 10") so every
+  // screen, notification and report shows it without each one needing to know about quantities.
+  if (quantity > 1 && service) service = { ...service, name: `${service.name} × ${quantity}` };
   const statusHistory = {};
   for (const e of b.bookingStatusEvents_on_booking || []) statusHistory[e.status] = e.at;
   return {
@@ -414,6 +425,7 @@ function mapBooking(b, customer, service) {
     address: { label: b.addressLabel, line: b.addressLine, lat: b.addressLat, lng: b.addressLng },
     issue: b.issue,
     amount: b.amount,
+    ...(quantity > 1 ? { quantity } : {}),
     createdAt: b.createdAt,
     statusHistory,
     ...(b.cancelledAt ? { cancelledAt: b.cancelledAt } : {}),
@@ -1585,7 +1597,8 @@ function assertServedAtPincode(service, address) {
 
 // `offerCode` (never a raw discount percentage) is re-validated here server-side
 // on every call — a client can never supply its own discount amount directly.
-async function createBooking({ serviceId, date, time, address, issue, customerId, orderId, offerCode, flatDiscount = 0 }) {
+async function createBooking({ serviceId, date, time, address, issue, customerId, orderId, offerCode, flatDiscount = 0, quantity }) {
+  const qty = normalizeQuantity(quantity);
   const service = await getService(serviceId);
   if (!service) throw new Error("Unknown service");
   assertServedAtPincode(service, address);
@@ -1603,11 +1616,12 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
   }
   const customer = await getCustomerById(customerId);
   if (!customer) throw new Error("Unknown customer");
-  let amount = service.price;
+  const lineTotal = service.price * qty;
+  let amount = lineTotal;
   if (offerCode) {
     const result = validateOffer(offerCode);
     if (!result.valid) throw new Error(result.error);
-    amount = Math.max(0, Math.round(service.price * (1 - result.offer.discountPercent / 100)));
+    amount = Math.max(0, Math.round(lineTotal * (1 - result.offer.discountPercent / 100)));
   }
   if (flatDiscount > 0) {
     amount = Math.max(0, amount - flatDiscount);
@@ -1639,6 +1653,7 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
     }
   );
   const bookingId = booking_insert.id;
+  if (qty > 1) jsonStore.insert("bookingQuantities", { id: bookingId, quantity: qty });
   cacheClear("openBookings");
   await mutate(
     `mutation($bookingId: UUID!, $status: String!, $at: Timestamp!) {
@@ -1648,7 +1663,7 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
   );
 
   if (!orderId) await logActivity("booking", `New booking received: #${bookingRef(bookingId)} — ${service.name}`);
-  const bookingMessage = `${customer.name} requested ${service.name} for ${date}`;
+  const bookingMessage = `${customer.name} requested ${service.name}${qty > 1 ? ` × ${qty}` : ""} for ${date}`;
   await addNotification({
     recipientType: "provider",
     recipientId: service.providerId,
@@ -1700,6 +1715,7 @@ async function createOrder({ items, address, customerId, offerCode, referralCode
         date: item.date,
         time: item.time,
         issue: item.issue,
+        quantity: item.quantity,
         address,
         customerId,
         orderId,

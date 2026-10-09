@@ -60,8 +60,9 @@ export default function CartScreen() {
     () => cart.map((item) => ({ item, service: getService(item.serviceId) })).filter((l) => l.service),
     [cart, services, getService]
   );
-  const total = lines.reduce((sum, l) => sum + l.service.price, 0);
-  const savings = lines.reduce((sum, l) => sum + (l.service.originalPrice ? l.service.originalPrice - l.service.price : 0), 0);
+  const qtyOf = (l) => l.item.quantity || 1;
+  const total = lines.reduce((sum, l) => sum + l.service.price * qtyOf(l), 0);
+  const savings = lines.reduce((sum, l) => sum + (l.service.originalPrice ? (l.service.originalPrice - l.service.price) * qtyOf(l) : 0), 0);
   const offerDiscount = appliedOffer ? Math.round(total * (appliedOffer.discountPercent / 100)) : 0;
   const referralDiscount = appliedReferral ? appliedReferral.discount : 0;
   const creditDiscount = useCredits && referral ? Math.min(referral.balance, total - offerDiscount - referralDiscount) : 0;
@@ -198,6 +199,44 @@ export default function CartScreen() {
                   <span className="text-[13px] font-bold text-brand">₹{service.price}</span>
                   {discountPct(service.price, service.originalPrice) > 0 && (
                     <span className="text-[11px] text-gray-400 line-through">₹{service.originalPrice}</span>
+                  )}
+                </div>
+                <div className="mt-2 flex items-center gap-3">
+                  <div className="inline-flex items-center overflow-hidden rounded-lg border border-gray-200" role="group" aria-label={`Quantity of ${service.name}`}>
+                    <button
+                      type="button"
+                      onClick={() => updateCartItem(item.serviceId, { quantity: Math.max(1, (item.quantity || 1) - 1) })}
+                      disabled={(item.quantity || 1) <= 1}
+                      className="h-8 w-8 text-[16px] font-semibold text-gray-600 hover:bg-gray-50 disabled:text-gray-300"
+                      aria-label="Fewer"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      max="50"
+                      value={item.quantity || 1}
+                      onChange={(e) => {
+                        const n = Math.round(Number(e.target.value));
+                        if (Number.isFinite(n)) updateCartItem(item.serviceId, { quantity: Math.min(50, Math.max(1, n)) });
+                      }}
+                      className="h-8 w-11 border-x border-gray-200 text-center text-[13px] font-semibold text-gray-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      aria-label="Quantity"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => updateCartItem(item.serviceId, { quantity: Math.min(50, (item.quantity || 1) + 1) })}
+                      disabled={(item.quantity || 1) >= 50}
+                      className="h-8 w-8 text-[16px] font-semibold text-gray-600 hover:bg-gray-50 disabled:text-gray-300"
+                      aria-label="More"
+                    >
+                      +
+                    </button>
+                  </div>
+                  {(item.quantity || 1) > 1 && (
+                    <span className="text-[12.5px] font-bold text-gray-900">₹{service.price * (item.quantity || 1)}</span>
                   )}
                 </div>
               </div>
