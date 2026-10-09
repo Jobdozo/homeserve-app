@@ -10,6 +10,7 @@ import CategoryPhoto from "../components/CategoryPhoto";
 import Seo, { SITE_URL } from "../components/Seo";
 import DesktopServiceDetails from "../components/DesktopServiceDetails";
 import Avatar from "../components/Avatar";
+import AddOns from "../components/AddOns";
 
 export default function ServiceDetailsScreen() {
   const { serviceId } = useParams();
@@ -165,6 +166,10 @@ export default function ServiceDetailsScreen() {
               </ul>
             </>
           )}
+
+          <div className="mt-6">
+            <AddOns anchorIds={[service.id]} title={provider ? `Add more from ${provider.name}` : "Add more services"} subtitle="Book together — same provider, same visit" />
+          </div>
 
           <div className="mt-8 hidden items-center gap-5 lg:flex">
             <div>

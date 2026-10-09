@@ -530,15 +530,17 @@ export function AppProvider({ children }) {
     setBookings((prev) => upsertById(prev, booking));
   }, []);
 
+  // likeServiceId: an add-on joins the same visit, so it starts on that cart item's date and time.
   const addToCart = useCallback(
-    (serviceId) => {
+    (serviceId, likeServiceId) => {
       setCart((prev) => {
         if (prev.some((item) => item.serviceId === serviceId)) {
           showToast("Already in your cart");
           return prev;
         }
         showToast("Added to cart");
-        return [...prev, { serviceId, date: todayISO(), time: timeSlots[1], issue: "" }];
+        const like = likeServiceId ? prev.find((item) => item.serviceId === likeServiceId) : null;
+        return [...prev, { serviceId, date: like?.date || todayISO(), time: like?.time || timeSlots[1], issue: "" }];
       });
     },
     [showToast]

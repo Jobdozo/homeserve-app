@@ -3,6 +3,7 @@ import { StarIcon, CheckIcon } from "./icons";
 import { formatCount } from "../utils/format";
 import CategoryPhoto from "./CategoryPhoto";
 import Avatar from "./Avatar";
+import AddOns from "./AddOns";
 
 // Desktop-only service detail page: photo + what's included on the left, a
 // sticky booking card on the right. Same data and cart actions as the phone
@@ -48,6 +49,10 @@ export default function DesktopServiceDetails({ service, provider, category, pct
               </ul>
             </section>
           )}
+
+          <div className="mt-10">
+            <AddOns anchorIds={[service.id]} title={provider ? `Add more from ${provider.name}` : "Add more services"} subtitle="Book together — same provider, same visit" />
+          </div>
 
           <section className="mt-10 rounded-2xl bg-brand-light/60 p-6">
             <p className="text-[16px] font-bold text-brand-dark">Booking through Tikdum is protected</p>

@@ -7,6 +7,7 @@ import ScreenHeader from "../components/ScreenHeader";
 import { CalendarIcon, ClockIcon, MapPinIcon, XIcon } from "../components/icons";
 import { discountPct } from "../utils/format";
 import CategoryIcon from "../components/CategoryIcon";
+import AddOns from "../components/AddOns";
 
 // The map (Leaflet) is only needed when a customer opens it, so it loads on demand.
 const LocationPicker = lazy(() => import("../components/LocationPicker"));
@@ -245,6 +246,8 @@ export default function CartScreen() {
             />
           </div>
         ))}
+
+        <AddOns anchorIds={lines.map((l) => l.service.id)} title="Add more services" subtitle="From the same provider — done in the same visit" />
 
         <div className="lg:rounded-2xl lg:bg-white lg:p-5 lg:shadow-card">
           <h2 className="mb-1.5 text-[13px] font-semibold text-gray-900 lg:mb-3 lg:text-[16px] lg:font-bold">Where do you need the service?</h2>
