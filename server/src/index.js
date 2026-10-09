@@ -657,6 +657,35 @@ app.patch("/api/providers/:id/services/:serviceId", auth.requireAuth("provider")
   res.json({ ...result.service, changeRequest: result.changeRequest });
 }));
 
+// A provider changes the photo of their own service. It shows on that service only.
+const providerActor = (req) => `Provider ${req.user.id}${req.staff ? ` (staff ${req.staff.name})` : ""}`;
+app.post("/api/providers/:id/services/:serviceId/image", auth.requireAuth("provider"), upload.single("file"), ah(async (req, res) => {
+  const drop = () => req.file && require("fs").unlink(req.file.path, () => {});
+  if (req.user.id !== req.params.id) { drop(); return res.status(403).json({ error: "Not your provider account" }); }
+  if (!req.file) return res.status(400).json({ error: "Choose a photo to upload" });
+  try {
+    const service = await store.setProviderServiceImage(req.params.id, req.params.serviceId, `/uploads/${req.file.filename}`, providerActor(req));
+    if (!service) { drop(); return res.status(404).json({ error: "Service not found" }); }
+    rt.service("service:updated", service);
+    res.json(service);
+  } catch (e) {
+    drop();
+    res.status(e.status || 500).json({ error: e.message });
+  }
+}));
+
+app.delete("/api/providers/:id/services/:serviceId/image", auth.requireAuth("provider"), ah(async (req, res) => {
+  if (req.user.id !== req.params.id) return res.status(403).json({ error: "Not your provider account" });
+  try {
+    const service = await store.setProviderServiceImage(req.params.id, req.params.serviceId, null, providerActor(req));
+    if (!service) return res.status(404).json({ error: "Service not found" });
+    rt.service("service:updated", service);
+    res.json(service);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+}));
+
 app.get("/api/providers/:id/earnings", auth.requireAuth("provider", "admin"), ah(async (req, res) => {
   if (req.user.role === "provider" && req.user.id !== req.params.id) {
     return res.status(403).json({ error: "Not your earnings" });

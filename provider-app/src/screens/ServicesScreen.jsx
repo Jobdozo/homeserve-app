@@ -1,17 +1,40 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
-import { PlusIcon, StarIcon } from "../components/icons";
+import { CameraIcon, PlusIcon, StarIcon } from "../components/icons";
 import { formatCount, discountPct } from "../utils/format";
 import Pic from "../components/Pic";
 import { api } from "../api";
+import { compressImage } from "../utils/imageCompress";
 
 const TABS = ["Active", "Pending", "Rejected", "Inactive", "Draft"];
 const TAB_STATUS = { Active: "active", Pending: "pending_approval", Rejected: "rejected", Inactive: "inactive", Draft: "draft" };
 
 export default function ServicesScreen() {
   const navigate = useNavigate();
-  const { services, categories, subcategories, toggleServiceStatus, resubmitService, showToast } = useApp();
+  const { services, categories, subcategories, toggleServiceStatus, setServicePhoto, resubmitService, showToast } = useApp();
+  const [photoBusy, setPhotoBusy] = useState(null);
+  const changePhoto = async (id, file) => {
+    if (!file) return;
+    setPhotoBusy(id);
+    try {
+      await setServicePhoto(id, await compressImage(file, { maxDimension: 1600 }));
+    } catch (e) {
+      showToast(e.message || "Couldn't update the photo");
+    } finally {
+      setPhotoBusy(null);
+    }
+  };
+  const removePhoto = async (id) => {
+    setPhotoBusy(id);
+    try {
+      await setServicePhoto(id, null);
+    } catch (e) {
+      showToast(e.message || "Couldn't remove the photo");
+    } finally {
+      setPhotoBusy(null);
+    }
+  };
   const [tab, setTab] = useState("Active");
   const [changes, setChanges] = useState([]);
   const loadChanges = () => api.listServiceChanges().then(setChanges).catch(() => {});
@@ -96,9 +119,23 @@ export default function ServicesScreen() {
           return (
           <div key={s.id} className="rounded-2xl border border-gray-100 p-3 shadow-card lg:p-4">
           <div className="flex items-center gap-3">
-            <Pic urls={[s.imageUrl, type?.imageUrl, cat?.bannerUrl]} categoryId={s.categoryId} size={56} />
+            <div className="relative flex-shrink-0">
+              <Pic key={s.imageUrl || "none"} urls={[s.imageUrl, type?.imageUrl, cat?.bannerUrl]} categoryId={s.categoryId} size={56} />
+              <label
+                className={`absolute -bottom-1.5 -right-1.5 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-white bg-brand text-white shadow ${photoBusy === s.id ? "opacity-50" : ""}`}
+                title="Change photo"
+              >
+                <CameraIcon width={12} height={12} />
+                <input type="file" accept="image/*" className="hidden" disabled={photoBusy === s.id} onChange={(e) => { changePhoto(s.id, e.target.files?.[0]); e.target.value = ""; }} />
+              </label>
+            </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13.5px] font-semibold text-gray-900">{s.name}</p>
+              {s.imageUrl && (
+                <button onClick={() => removePhoto(s.id)} disabled={photoBusy === s.id} className="text-[10px] font-medium text-gray-400 underline disabled:opacity-50">
+                  Remove my photo
+                </button>
+              )}
               {(cat || type) && (
                 <p className="truncate text-[10.5px] text-gray-400">{[cat?.name, type?.name].filter(Boolean).join(" · ")}</p>
               )}

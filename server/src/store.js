@@ -286,6 +286,16 @@ async function setServiceImage(serviceId, url, actor) {
   return getService(serviceId);
 }
 
+// A provider's own photo for one of their own services. It lives on that service
+// row only (never copied to the catalog or to other providers' services); the
+// admin can still replace or remove it. null puts the type/category picture back.
+async function setProviderServiceImage(providerId, serviceId, url, actor) {
+  const existing = await getService(serviceId);
+  if (!existing) return undefined;
+  if (existing.providerId !== providerId) throw Object.assign(new Error("Not your service"), { status: 403 });
+  return setServiceImage(serviceId, url, actor);
+}
+
 function mapService(s) {
   return {
     id: s.id,
@@ -4159,6 +4169,7 @@ module.exports = {
   listAdminChanges,
   adminUpdateService,
   setServiceImage,
+  setProviderServiceImage,
   adminDeleteService,
   setProviderVerification,
   deleteProvider,

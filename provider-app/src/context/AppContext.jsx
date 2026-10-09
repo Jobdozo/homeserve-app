@@ -548,6 +548,18 @@ export function AppProvider({ children }) {
     api.sendMessage(requestId, text).catch((e) => console.error("Failed to send message", e));
   }, []);
 
+  // Change or remove the photo of one of this provider's own services.
+  const setServicePhoto = useCallback(
+    async (id, file) => {
+      if (!provider) return;
+      const service = file ? await api.uploadServiceImage(provider.id, id, file) : await api.removeServiceImage(provider.id, id);
+      setServices((prev) => upsertById(prev, service));
+      showToast(file ? "Photo updated" : "Photo removed");
+      return service;
+    },
+    [provider, showToast]
+  );
+
   const toggleServiceStatus = useCallback(async (id) => {
     if (!provider) return;
     const current = services.find((s) => s.id === id);
@@ -689,6 +701,7 @@ export function AppProvider({ children }) {
       loadMessages,
       sendMessage,
       toggleServiceStatus,
+      setServicePhoto,
       addService,
       resubmitService,
       requestServiceChange,
@@ -732,6 +745,7 @@ export function AppProvider({ children }) {
       loadMessages,
       sendMessage,
       toggleServiceStatus,
+      setServicePhoto,
       addService,
       resubmitService,
       requestServiceChange,
