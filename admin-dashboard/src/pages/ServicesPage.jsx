@@ -1203,10 +1203,17 @@ function ChangeRequestsPanel({ requests, onReviewed }) {
 
 function CatalogPanel() {
   const { categories, providers, showToast } = useApp();
+  const subs = useSubcategories();
   const [items, setItems] = useState(null);
   const [editing, setEditing] = useState(null); // {} for new, or the item for edit
   const [applying, setApplying] = useState(null); // the item being pushed to a provider
   const [busyId, setBusyId] = useState(null);
+  const [query, setQuery] = useState("");
+  const [catFilter, setCatFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [selected, setSelected] = useState(new Set());
+  const [bulk, setBulk] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const refresh = () => api.listServiceCatalog().then(setItems).catch(() => setItems([]));
   useEffect(() => {
@@ -1214,6 +1221,39 @@ function CatalogPanel() {
   }, []);
 
   const categoryName = (slug) => categories.find((c) => c.id === slug)?.name || slug;
+  const typeName = (id) => subs.find((x) => x.id === id)?.name || "";
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (items || []).filter(
+      (i) =>
+        (!catFilter || i.categorySlug === catFilter) &&
+        (!typeFilter || i.subcategoryId === typeFilter) &&
+        (!q || `${i.name} ${i.tagline || ""}`.toLowerCase().includes(q))
+    );
+  }, [items, query, catFilter, typeFilter]);
+  const typesHere = subs.filter((x) => !catFilter || x.categoryId === catFilter);
+
+  const toggle = (id) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  const selectShown = () => setSelected(new Set(shown.filter((i) => i.active !== false).map((i) => i.id)));
+  const chosen = (items || []).filter((i) => selected.has(i.id));
+
+  const sync = async () => {
+    setSyncing(true);
+    try {
+      const r = await api.syncServiceCatalog();
+      showToast(r.added ? `Added ${r.added} catalog item${r.added === 1 ? "" : "s"} from your services` : "The catalog already has every service");
+      refresh();
+    } catch (e) {
+      showToast(e.message || "Sync failed");
+    }
+    setSyncing(false);
+  };
 
   const toggleActive = async (item) => {
     setBusyId(item.id);
@@ -1233,6 +1273,11 @@ function CatalogPanel() {
     try {
       await api.deleteServiceCatalogItem(item.id);
       showToast("Removed from catalog");
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(item.id);
+        return next;
+      });
       refresh();
     } catch (e) {
       showToast(e.message || "Failed to delete");
@@ -1243,43 +1288,97 @@ function CatalogPanel() {
 
   if (items === null) return <div className="py-16 text-center text-[13px] text-gray-400">Loading…</div>;
 
+  const input = "rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12.5px] outline-none focus:border-brand";
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-[12.5px] text-gray-500">
-          A ready-made list of services. Pick one for any provider and it's added to their page instantly, already filled in.
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="max-w-xl text-[12.5px] text-gray-500">
+          Every unique service is added here automatically. Tick several and add them to a provider in one go.
         </p>
-        <button onClick={() => setEditing({})} className="rounded-lg bg-brand px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-brand-dark">
-          + Add to catalog
-        </button>
+        <div className="flex gap-2">
+          <button onClick={sync} disabled={syncing} className="rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+            {syncing ? "Syncing…" : "↻ Sync from services"}
+          </button>
+          <button onClick={() => setEditing({})} className="rounded-lg bg-brand px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-brand-dark">
+            + Add to catalog
+          </button>
+        </div>
       </div>
 
-      {items.length === 0 && (
-        <div className="rounded-2xl bg-white p-8 text-center shadow-card">
-          <p className="text-[13px] text-gray-500">No catalog items yet — add the first one above.</p>
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-white p-3 shadow-card">
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search the catalog…" className={input + " min-w-[200px] flex-1"} />
+        <select value={catFilter} onChange={(e) => { setCatFilter(e.target.value); setTypeFilter(""); }} className={input}>
+          <option value="">All categories</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className={input}>
+          <option value="">All types</option>
+          {typesHere.map((t) => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
+        <span className="text-[12px] text-gray-400">
+          {shown.length} of {items.length}
+        </span>
+        <button onClick={selectShown} disabled={shown.length === 0} className="text-[12px] font-semibold text-brand disabled:opacity-40">
+          Select all shown
+        </button>
+        {selected.size > 0 && (
+          <button onClick={() => setSelected(new Set())} className="text-[12px] font-semibold text-gray-400">
+            Clear ({selected.size})
+          </button>
+        )}
+      </div>
+
+      {selected.size > 0 && (
+        <div className="sticky top-2 z-10 flex items-center justify-between rounded-2xl bg-gray-900 px-4 py-3 text-white shadow-lg">
+          <span className="text-[13px] font-semibold">{selected.size} selected</span>
+          <button onClick={() => setBulk(true)} className="rounded-lg bg-white px-4 py-2 text-[12.5px] font-bold text-gray-900">
+            Add {selected.size} to a provider →
+          </button>
         </div>
       )}
 
+      {items.length === 0 && (
+        <div className="rounded-2xl bg-white p-8 text-center shadow-card">
+          <p className="text-[13px] text-gray-500">No catalog items yet. Press "Sync from services" to build it from your existing services, or add the first one.</p>
+        </div>
+      )}
+      {items.length > 0 && shown.length === 0 && <div className="rounded-2xl bg-white p-8 text-center text-[13px] text-gray-400 shadow-card">Nothing matches.</div>}
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {items.map((item) => {
+        {shown.map((item) => {
           const pct = discountPct(item.price, item.originalPrice);
           return (
-            <div key={item.id} className={`rounded-2xl bg-white p-4 shadow-card ${item.active === false ? "opacity-60" : ""}`}>
+            <div key={item.id} className={"rounded-2xl bg-white p-4 shadow-card " + (item.active === false ? "opacity-60" : "") + (selected.has(item.id) ? " ring-2 ring-brand" : "")}>
               <div className="flex items-start justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(item.id)}
+                    onChange={() => toggle(item.id)}
+                    disabled={item.active === false}
+                    className="h-4 w-4 flex-shrink-0 accent-brand"
+                    aria-label={"Select " + item.name}
+                  />
                   <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
                     {item.imageUrl ? (
-                      <img src={`${SERVER_URL}${item.imageUrl}`} alt="" className="h-full w-full object-cover" />
+                      <img src={SERVER_URL + item.imageUrl} alt="" className="h-full w-full object-cover" />
                     ) : (
                       <span className="text-[9px] text-gray-300">No photo</span>
                     )}
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-[13.5px] font-bold text-gray-900">{item.name}</p>
-                    <p className="text-[11px] text-gray-400">{categoryName(item.categorySlug)}</p>
+                    <p className="truncate text-[11px] text-gray-400">
+                      {categoryName(item.categorySlug)}
+                      {typeName(item.subcategoryId) && " · " + typeName(item.subcategoryId)}
+                    </p>
                   </div>
                 </div>
-                <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${item.active === false ? "bg-gray-200 text-gray-500" : "bg-emerald-100 text-emerald-700"}`}>
+                <span className={"flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold " + (item.active === false ? "bg-gray-200 text-gray-500" : "bg-emerald-100 text-emerald-700")}>
                   {item.active === false ? "Inactive" : "Active"}
                 </span>
               </div>
@@ -1328,7 +1427,93 @@ function CatalogPanel() {
         <CatalogItemModal item={editing} categories={categories} onClose={() => setEditing(null)} onSaved={refresh} onPhotoChanged={refresh} />
       )}
       {applying && <ApplyCatalogItemModal item={applying} providers={providers} onClose={() => setApplying(null)} onApplied={refresh} />}
+      {bulk && <BulkApplyModal items={chosen} providers={providers} onClose={() => setBulk(false)} onDone={() => { setSelected(new Set()); refresh(); }} />}
     </div>
+  );
+}
+
+// Adds many catalog items to one provider. Sent in small batches (a long request can time out in the
+// browser while the server carries on), one batch at a time, and safe to run again: anything the
+// provider already has is skipped on the server, never duplicated.
+function BulkApplyModal({ items, providers, onClose, onDone }) {
+  const [providerId, setProviderId] = useState("");
+  const [running, setRunning] = useState(false);
+  const [finished, setFinished] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [totals, setTotals] = useState({ added: 0, skipped: 0, failed: [] });
+  const [stopped, setStopped] = useState("");
+
+  const BATCH = 10;
+  const run = async () => {
+    if (!providerId || running) return;
+    setRunning(true);
+    setStopped("");
+    const sum = { added: 0, skipped: 0, failed: [] };
+    try {
+      for (let i = 0; i < items.length; i += BATCH) {
+        const ids = items.slice(i, i + BATCH).map((x) => x.id);
+        const r = await api.applyManyServiceCatalog(ids, providerId);
+        sum.added += r.added.length;
+        sum.skipped += r.skipped.length;
+        sum.failed.push(...r.failed);
+        setTotals({ ...sum, failed: [...sum.failed] });
+        setProgress(Math.min(i + BATCH, items.length));
+      }
+      setFinished(true);
+      onDone();
+    } catch (e) {
+      // The connection dropped or timed out: the server may have finished some of this batch, so
+      // running again is safe — it skips what's already there.
+      setStopped((e.message || "The request failed") + " — press the button again to continue; nothing is duplicated.");
+    }
+    setRunning(false);
+  };
+
+  const input = "w-full rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] outline-none focus:border-brand";
+  return (
+    <Modal title={"Add " + items.length + " services to a provider"} onClose={running ? () => {} : onClose}>
+      <div className="space-y-3">
+        <div>
+          <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Provider</label>
+          <select value={providerId} onChange={(e) => setProviderId(e.target.value)} disabled={running || finished} className={input}>
+            <option value="">Select a provider</option>
+            {providers.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-[10.5px] text-gray-400">Each service is added at its catalog price, in its catalog type. Services the provider already has are skipped.</p>
+        </div>
+
+        {(running || finished || progress > 0) && (
+          <div>
+            <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+              <div className="h-full rounded-full bg-brand transition-all" style={{ width: (items.length ? (progress / items.length) * 100 : 0) + "%" }} />
+            </div>
+            <p className="mt-1.5 text-[12px] text-gray-600">
+              {progress} of {items.length} done · {totals.added} added · {totals.skipped} skipped · {totals.failed.length} failed
+            </p>
+          </div>
+        )}
+        {stopped && <p className="rounded-lg bg-amber-50 p-2.5 text-[12px] text-amber-700">{stopped}</p>}
+        {totals.failed.length > 0 && (
+          <ul className="max-h-28 space-y-0.5 overflow-y-auto rounded-lg bg-red-50 p-2.5 text-[11.5px] text-red-700">
+            {totals.failed.map((f) => (
+              <li key={f.id}>{f.name}: {f.error}</li>
+            ))}
+          </ul>
+        )}
+
+        {finished ? (
+          <button onClick={onClose} className="w-full rounded-lg bg-brand py-2 text-[12.5px] font-semibold text-white">
+            Done
+          </button>
+        ) : (
+          <button onClick={run} disabled={!providerId || running} className="w-full rounded-lg bg-brand py-2 text-[12.5px] font-semibold text-white disabled:opacity-50">
+            {running ? "Adding… please keep this window open" : progress > 0 ? "Continue" : "Add " + items.length + " services"}
+          </button>
+        )}
+      </div>
+    </Modal>
   );
 }
 

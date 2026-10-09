@@ -137,6 +137,106 @@ function setImage(id, url, actor) {
   return updated;
 }
 
+// ---- automatic catalog ----
+const norm = (v) => String(v || "").trim().replace(/\s+/g, " ").toLowerCase();
+
+// Makes sure the catalog has an entry for this service (same category + same name = same entry).
+// A new entry copies the service's price, type, tagline and what's included; an entry that was
+// created automatically and is still missing those picks them up from later edits. Entries a person
+// made or edited by hand are never touched.
+function ensureForService(svc) {
+  if (!svc || !svc.name || !svc.categoryId) return null;
+  const rows = jsonStore.readAll(COLLECTION);
+  const key = norm(svc.name);
+  const existing = rows.find((r) => r.categorySlug === svc.categoryId && norm(r.name) === key);
+  const includes = cleanIncludes(svc.includes);
+  if (existing) {
+    if (existing.source !== "auto") return existing;
+    const patch = {};
+    if (!existing.tagline && svc.tagline) patch.tagline = String(svc.tagline).trim().slice(0, 120);
+    if (!(existing.includes || []).length && includes.length) patch.includes = includes;
+    if (!existing.subcategoryId && svc.subcategoryId) patch.subcategoryId = svc.subcategoryId;
+    return Object.keys(patch).length ? jsonStore.update(COLLECTION, existing.id, patch) : existing;
+  }
+  const price = Math.max(0, Math.round(Number(svc.price) || 0));
+  const original = Math.round(Number(svc.originalPrice) || 0);
+  return jsonStore.insert(COLLECTION, {
+    categorySlug: svc.categoryId,
+    subcategoryId: svc.subcategoryId || null,
+    name: String(svc.name).trim().replace(/\s+/g, " ").slice(0, 80),
+    price,
+    originalPrice: original > price ? original : null,
+    tagline: String(svc.tagline || "").trim().slice(0, 120),
+    includes,
+    active: true,
+    source: "auto",
+    createdAt: new Date().toISOString(),
+  });
+}
+
+// One click: catalog entries for every service that exists today but has none (cheapest price wins
+// when several providers list the same service).
+function syncFromServices(services) {
+  const cheapest = new Map();
+  for (const s of services || []) {
+    if (!s.name || !s.categoryId || s.status === "rejected") continue;
+    const k = `${s.categoryId}|${norm(s.name)}`;
+    const cur = cheapest.get(k);
+    if (!cur || (Number(s.price) || 0) < (Number(cur.price) || 0)) cheapest.set(k, s);
+  }
+  let added = 0;
+  let already = 0;
+  for (const s of cheapest.values()) {
+    const before = jsonStore.readAll(COLLECTION).length;
+    ensureForService(s);
+    if (jsonStore.readAll(COLLECTION).length > before) added++;
+    else already++;
+  }
+  return { services: (services || []).length, unique: cheapest.size, added, already };
+}
+
+// Gives one provider many catalog items at once. Safe to retry: an item the provider already has
+// (same category + name) is skipped, never duplicated. Capped per call so a request stays short;
+// the admin page sends bigger selections in several calls.
+const MAX_BULK = 25;
+async function applyMany(itemIds, providerId, actor) {
+  const ids = [...new Set(Array.isArray(itemIds) ? itemIds : [])];
+  if (ids.length === 0) throw fail(400, "Choose at least one catalog item");
+  if (ids.length > MAX_BULK) throw fail(400, `Add at most ${MAX_BULK} at a time`);
+  const provider = await store.getProvider(providerId);
+  if (!provider) throw fail(404, "Provider not found");
+
+  const have = new Set(
+    (await store.listServices({})).filter((s) => s.providerId === providerId).map((s) => `${s.categoryId}|${norm(s.name)}`)
+  );
+  const rows = jsonStore.readAll(COLLECTION);
+  const out = { added: [], skipped: [], failed: [] };
+  for (const id of ids) {
+    const item = rows.find((r) => r.id === id);
+    if (!item) {
+      out.failed.push({ id, name: "(unknown item)", error: "Catalog item not found" });
+      continue;
+    }
+    if (item.active === false) {
+      out.skipped.push({ id, name: item.name, reason: "inactive" });
+      continue;
+    }
+    const k = `${item.categorySlug}|${norm(item.name)}`;
+    if (have.has(k)) {
+      out.skipped.push({ id, name: item.name, reason: "already has it" });
+      continue;
+    }
+    try {
+      await applyToProvider(id, providerId, {}, actor);
+      have.add(k);
+      out.added.push({ id, name: item.name });
+    } catch (e) {
+      out.failed.push({ id, name: item.name, error: e.message });
+    }
+  }
+  return out;
+}
+
 // The one-click action: create a real, live service on a provider from a
 // catalog template. name/price/originalPrice can be overridden per-provider
 // (e.g. a different local price) without touching the template itself.
@@ -177,4 +277,4 @@ async function applyToProvider(id, providerId, overrides = {}, actor) {
   return finalService;
 }
 
-module.exports = { list, create, update, remove, setImage, applyToProvider };
+module.exports = { list, create, update, remove, setImage, applyToProvider, ensureForService, syncFromServices, applyMany, MAX_BULK };

@@ -895,6 +895,16 @@ async function listProviderServices(providerId) {
   return services.map(mapService);
 }
 
+// Every unique service (category + name) gets a catalog entry, so the Catalog always lists what
+// the platform really offers. Never lets a catalog problem break creating a service.
+function ensureCatalogEntry(service) {
+  try {
+    require("./serviceCatalog").ensureForService(service);
+  } catch (e) {
+    console.error("Catalog auto-add failed:", e.message);
+  }
+}
+
 async function addProviderService(providerId, data) {
   if (data.categorySlug && !isCategoryActive(data.categorySlug)) {
     throw Object.assign(new Error("That category isn't available right now"), { status: 400 });
@@ -938,7 +948,9 @@ async function addProviderService(providerId, data) {
   }
   const provider = await getProvider(providerId);
   await logActivity("service", `${provider?.name || "A provider"} ${getSettings().serviceApprovalRequired ? "submitted a new service for approval" : "added a new service"}: ${data.name}`);
-  return getService(serviceId);
+  const added = await getService(serviceId);
+  if (added?.status === "active") ensureCatalogEntry(added);
+  return added;
 }
 
 // Admin adding a service on a provider's behalf — same categorySlug-based
@@ -972,7 +984,9 @@ async function adminCreateService(providerId, { categorySlug, name, price, origi
       ],
     });
   }
-  return getService(service_insert.id);
+  const created = await getService(service_insert.id);
+  ensureCatalogEntry(created);
+  return created;
 }
 
 const PROVIDER_EDITABLE_SERVICE_KEYS = ["name", "tagline", "price", "originalPrice", "status", "distanceLabel"];
@@ -1287,7 +1301,9 @@ async function reviewService(serviceId, decision, note, actor) {
       ...(decision === "rejected" && note ? [{ field: "reason", from: null, to: note }] : []),
     ],
   });
-  return getService(serviceId);
+  const reviewed = await getService(serviceId);
+  if (decision === "approved") ensureCatalogEntry(reviewed);
+  return reviewed;
 }
 
 // Beyond the basic fields, an admin can also move a service to another
@@ -1347,6 +1363,7 @@ async function adminUpdateService(serviceId, patch, actor) {
       changes,
     });
   }
+  ensureCatalogEntry(updated);
   return updated;
 }
 

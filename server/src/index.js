@@ -825,6 +825,24 @@ app.post("/api/admin/services", auth.requireAuth("admin"), ah(async (req, res) =
 // provider in one click, instead of typing every field from scratch ----
 app.get("/api/admin/service-catalog", auth.requireAuth("admin"), ah(async (req, res) => res.json(serviceCatalog.list())));
 
+// One click: a catalog entry for every service that exists but has none yet.
+app.post("/api/admin/service-catalog/sync", auth.requireAuth("admin"), ah(async (req, res) => {
+  const result = serviceCatalog.syncFromServices(await store.listServices({}));
+  if (result.added) audit(req, "service_catalog.sync", "service_catalog", "all", "Catalog sync", [{ field: "entries added", from: 0, to: result.added }]);
+  res.json(result);
+}));
+
+// Give one provider many catalog items in one go (the admin page sends big selections in batches).
+app.post("/api/admin/service-catalog/apply-many", auth.requireAuth("admin"), ah(async (req, res) => {
+  try {
+    const out = await serviceCatalog.applyMany(req.body?.itemIds, req.body?.providerId, actorOf(req));
+    if (out.added.length) rt.activity((await store.listActivities(1))[0]);
+    res.json(out);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+}));
+
 app.post("/api/admin/service-catalog", auth.requireAuth("admin"), ah(async (req, res) => {
   try {
     res.status(201).json(serviceCatalog.create(req.body || {}, actorOf(req)));

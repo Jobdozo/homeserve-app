@@ -154,6 +154,8 @@ export const api = {
   issueCreditNote: (id, reason) => request(`/admin/accounting/invoices/${id}/credit-note`, { method: "POST", body: JSON.stringify({ reason }) }),
   getAccountingSummary: (month) => request(`/admin/accounting/summary?month=${month}`),
   getEcoExposure: (month) => request(`/admin/accounting/eco-exposure?month=${month}`),
+  syncServiceCatalog: () => request("/admin/service-catalog/sync", { method: "POST" }),
+  applyManyServiceCatalog: (itemIds, providerId) => request("/admin/service-catalog/apply-many", { method: "POST", body: JSON.stringify({ itemIds, providerId }) }),
   listSubcategories: () => request("/subcategories"),
   createSubcategory: (data) => request("/admin/subcategories", { method: "POST", body: JSON.stringify(data) }),
   updateSubcategory: (id, patch) => request(`/admin/subcategories/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
