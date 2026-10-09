@@ -37,6 +37,7 @@ export function AppProvider({ children }) {
   const [requests, setRequests] = useState([]);
   const [services, setServices] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [subcategories, setSubcategories] = useState([]);
   const [messages, setMessages] = useState({});
   // A real zero-state default, not null — the dashboard/earnings screens
   // read straight through this (earnings.thisMonth etc.) with no loading
@@ -203,6 +204,7 @@ export function AppProvider({ children }) {
         api.getWallet().then((d) => !cancelled && setWallet(d)),
         api.listNotifications().then((d) => !cancelled && setNotifications(d)),
         api.listCategories().then((d) => !cancelled && setCategories(d)),
+        api.listSubcategories().then((d) => !cancelled && setSubcategories(d)),
       ].map((p) => p.catch((e) => console.error("Failed to load provider data", e)));
       // Chat threads load lazily per-request (see loadMessages, used by
       // ChatScreen) — prefetching all of them here used to mean one extra
@@ -581,12 +583,13 @@ export function AppProvider({ children }) {
   );
 
   const addService = useCallback(
-    async ({ name, categorySlug, description, price, originalPrice, extraCharges, serviceArea }) => {
+    async ({ name, categorySlug, subcategoryId, description, price, originalPrice, extraCharges, serviceArea }) => {
       if (!provider) return;
       const numericOriginal = Number(originalPrice) || 0;
       const service = await api.addProviderService(provider.id, {
         name,
         categorySlug,
+        ...(subcategoryId ? { subcategoryId } : {}),
         description,
         price: Number(price) || 0,
         ...(numericOriginal > 0 ? { originalPrice: numericOriginal } : {}),
@@ -658,6 +661,7 @@ export function AppProvider({ children }) {
       requests,
       services,
       categories,
+      subcategories,
       messages,
       earnings,
       wallet,
@@ -700,6 +704,7 @@ export function AppProvider({ children }) {
       requests,
       services,
       categories,
+      subcategories,
       messages,
       earnings,
       wallet,

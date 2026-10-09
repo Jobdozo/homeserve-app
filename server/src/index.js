@@ -31,6 +31,7 @@ const otpGuard = require("./otpGuard");
 const loginAttempts = require("./loginAttempts");
 const blockedPhones = require("./blockedPhones");
 const accounting = require("./accounting");
+const subcategories = require("./subcategories");
 auth.setBlockCheck(blockedPhones.isBlocked);
 const liveLocation = require("./liveLocation");
 const push = require("./push");
@@ -400,7 +401,7 @@ app.get("/api/bootstrap", ah(async (req, res) => {
     store.listCategories(),
     store.listServices({ activeOnly: true, pincode }),
   ]);
-  res.json({ providers: providers.map(publicProvider), categories: categories.filter((c) => c.active), services });
+  res.json({ providers: providers.map(publicProvider), categories: categories.filter((c) => c.active), subcategories: subcategories.list(), services });
 }));
 
 // ---- customer's registered address (drives PIN-code catalog visibility) ----
@@ -699,6 +700,38 @@ app.get("/sitemap.xml", ah(async (req, res) => {
 app.get("/api/categories", ah(async (req, res) => {
   const categories = await store.listCategories();
   res.json(access.adminCan(viewerAdmin(req), ["services.view", "customers.view", "providers.view", "bookings.view", "dashboard.view"]) ? categories : categories.filter((c) => c.active));
+}));
+
+// ---- sub-categories (optional level between a category and its services) ----
+app.get("/api/subcategories", ah(async (req, res) => {
+  const isStaff = access.adminCan(viewerAdmin(req), ["services.view", "providers.view", "dashboard.view"]);
+  res.json(subcategories.list({ includeInactive: isStaff }));
+}));
+
+app.post("/api/admin/subcategories", auth.requireAuth("admin"), ah(async (req, res) => {
+  const cats = await store.listCategories();
+  if (!cats.some((c) => c.id === req.body?.categoryId)) return res.status(400).json({ error: "Choose a category" });
+  const sub = subcategories.create({ categoryId: req.body.categoryId, name: req.body.name });
+  audit(req, "subcategory.create", "subcategory", sub.id, sub.name, [{ field: "category", from: null, to: sub.categoryId }]);
+  store.invalidateServices();
+  res.status(201).json(sub);
+}));
+
+app.patch("/api/admin/subcategories/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const before = subcategories.get(req.params.id);
+  const sub = subcategories.update(req.params.id, req.body || {});
+  if (!sub) return res.status(404).json({ error: "Sub-category not found" });
+  const changes = store.diffValues(before, sub, ["name", "active", "sortOrder"]);
+  if (changes.length) audit(req, "subcategory.update", "subcategory", sub.id, sub.name, changes);
+  res.json(sub);
+}));
+
+app.delete("/api/admin/subcategories/:id", auth.requireAuth("admin"), ah(async (req, res) => {
+  const before = subcategories.get(req.params.id);
+  if (!before || !subcategories.remove(req.params.id)) return res.status(404).json({ error: "Sub-category not found" });
+  audit(req, "subcategory.delete", "subcategory", before.id, before.name, [{ field: "deleted", from: false, to: true }]);
+  store.invalidateServices();
+  res.status(204).end();
 }));
 
 app.patch("/api/admin/categories/:id", auth.requireAuth("admin"), ah(async (req, res) => {

@@ -13,6 +13,7 @@ const path = require("path");
 const crypto = require("crypto");
 const jsonStore = require("./jsonStore");
 const store = require("./store");
+const subcategories = require("./subcategories");
 const { UPLOADS_DIR } = require("./uploads");
 
 const COLLECTION = "serviceCatalog";
@@ -68,6 +69,9 @@ function cleanFields(input, { partial = false } = {}) {
   if (!partial || input.price !== undefined) out.price = cleanMoney(input.price, "price");
   if (input.originalPrice !== undefined) {
     out.originalPrice = input.originalPrice === null || input.originalPrice === "" ? null : cleanMoney(input.originalPrice, "original price");
+  }
+  if (input.subcategoryId !== undefined) {
+    out.subcategoryId = input.subcategoryId ? subcategories.validate(String(input.subcategoryId), input.categorySlug) : null;
   }
   if (input.tagline !== undefined) out.tagline = String(input.tagline || "").trim().slice(0, 120);
   if (input.includes !== undefined) out.includes = cleanIncludes(input.includes);
@@ -149,7 +153,9 @@ async function applyToProvider(id, providerId, overrides = {}, actor) {
       ? overrides.originalPrice === null || overrides.originalPrice === "" ? null : cleanMoney(overrides.originalPrice, "original price")
       : item.originalPrice;
 
-  const service = await store.adminCreateService(providerId, { categorySlug: item.categorySlug, name, price, originalPrice }, actor);
+  // A sub-category deleted since the item was saved is simply skipped.
+  const subcategoryId = item.subcategoryId && subcategories.get(item.subcategoryId) ? item.subcategoryId : null;
+  const service = await store.adminCreateService(providerId, { categorySlug: item.categorySlug, name, price, originalPrice, subcategoryId }, actor);
   const patch = {};
   if (item.tagline) patch.tagline = item.tagline;
   if (item.includes?.length) patch.includes = item.includes;

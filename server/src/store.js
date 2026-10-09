@@ -1,6 +1,7 @@
 const { query, mutate } = require("./dataconnect");
 const jsonStore = require("./jsonStore");
 const accounting = require("./accounting");
+const subcategories = require("./subcategories");
 const push = require("./push");
 const fcm = require("./fcm");
 const presence = require("./presence");
@@ -290,6 +291,7 @@ function mapService(s) {
     distanceLabel: s.distanceLabel,
     status: s.status,
     categoryId: s.category?.slug,
+    subcategoryId: subcategories.subcategoryOf(s.id),
     providerId: s.provider?.id,
     highlights: (s.serviceHighlights_on_service || []).map((h) => ({ icon: h.icon, label: h.label })),
     includes: (s.serviceIncludes_on_service || []).map((i) => i.text),
@@ -465,6 +467,7 @@ async function updateCategory(slug, patch, actor) {
   }
   if (patch.active !== undefined) {
     jsonStore.remove("categoryStatus", slug);
+  subcategories.removeForCategory(slug);
     if (!patch.active) jsonStore.insert("categoryStatus", { id: slug, active: false });
   }
   cacheClear("categories");
@@ -897,6 +900,7 @@ async function addProviderService(providerId, data) {
     throw Object.assign(new Error("That category isn't available right now"), { status: 400 });
   }
   const categoryId = (await getCategoryUuidBySlug(data.categorySlug || "ac-repair")) || null;
+  const subcategoryId = subcategories.validate(data.subcategoryId, data.categorySlug || "ac-repair");
   const { service_insert } = await mutate(
     `mutation($providerId: UUID!, $categoryId: UUID, $name: String!, $price: Int!, $originalPrice: Int, $icon: String, $distanceLabel: String, $status: String!) {
       service_insert(data: {
@@ -917,6 +921,7 @@ async function addProviderService(providerId, data) {
     }
   );
   const serviceId = service_insert.id;
+  subcategories.link(serviceId, subcategoryId, data.categorySlug || "ac-repair");
   cacheClear("service");
   const defaultHighlights = [
     { icon: "🧑‍🔧", label: "Experienced Technicians" },
@@ -938,8 +943,9 @@ async function addProviderService(providerId, data) {
 
 // Admin adding a service on a provider's behalf — same categorySlug-based
 // resolution as addProviderService above, just with the admin's own picker.
-async function adminCreateService(providerId, { categorySlug, name, price, originalPrice }, actor) {
+async function adminCreateService(providerId, { categorySlug, name, price, originalPrice, subcategoryId }, actor) {
   const categoryId = (await getCategoryUuidBySlug(categorySlug)) || null;
+  const validSub = subcategories.validate(subcategoryId, categorySlug);
   const { service_insert } = await mutate(
     `mutation($providerId: UUID!, $categoryId: UUID, $name: String!, $price: Int!, $originalPrice: Int) {
       service_insert(data: {
@@ -949,6 +955,7 @@ async function adminCreateService(providerId, { categorySlug, name, price, origi
     }`,
     { providerId, categoryId, name, price: Number(price) || 0, originalPrice: originalPrice ? Number(originalPrice) : null }
   );
+  subcategories.link(service_insert.id, validSub, categorySlug);
   cacheClear("service");
   const provider = await getProvider(providerId);
   await logActivity("service", `Admin added a new service for ${provider?.name || "a provider"}: ${name}`);
@@ -1285,6 +1292,11 @@ async function reviewService(serviceId, decision, note, actor) {
 
 // Beyond the basic fields, an admin can also move a service to another
 // category and rewrite its "what's included" list.
+// Services are cached with their sub-category; call after changing sub-categories.
+function invalidateServices() {
+  cacheClear("service");
+}
+
 async function adminUpdateService(serviceId, patch, actor) {
   const existing = await getService(serviceId);
   if (!existing) return undefined;
@@ -1296,6 +1308,13 @@ async function adminUpdateService(serviceId, patch, actor) {
       id: serviceId,
       categoryId: categoryUuid,
     });
+  }
+  // Sub-category: set explicitly, or dropped when the service moved to a category it doesn't belong to.
+  {
+    const nowCategory = patch.categorySlug !== undefined ? patch.categorySlug : existing.categoryId;
+    if (patch.subcategoryId !== undefined) subcategories.link(serviceId, patch.subcategoryId || null, nowCategory);
+    else if (patch.categorySlug !== undefined && patch.categorySlug !== existing.categoryId) subcategories.reconcile(serviceId, nowCategory);
+    cacheClear("service");
   }
   if (patch.includes !== undefined) {
     const includes = (Array.isArray(patch.includes) ? patch.includes : [])
@@ -1316,7 +1335,7 @@ async function adminUpdateService(serviceId, patch, actor) {
   }
   cacheClear("service");
   const updated = await applyServiceFieldUpdate(serviceId, patch, ADMIN_EDITABLE_SERVICE_KEYS);
-  const trackedKeys = [...ADMIN_EDITABLE_SERVICE_KEYS, "categoryId", "includes"];
+  const trackedKeys = [...ADMIN_EDITABLE_SERVICE_KEYS, "categoryId", "subcategoryId", "includes"];
   const changes = diffValues(existing, updated, trackedKeys);
   if (changes.length > 0) {
     recordAdminChange({
@@ -4065,6 +4084,7 @@ module.exports = {
   updateCustomerProfile,
   deleteCategory,
   listServices,
+  invalidateServices,
   getService,
   listProviderServices,
   listBookings,

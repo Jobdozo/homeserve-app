@@ -97,6 +97,7 @@ export const api = {
   assignOrder: (bookingId, staffId) => request(`/provider/orders/${bookingId}/assign`, { method: "POST", body: JSON.stringify({ staffId }) }),
 
   listCategories: () => request("/categories"),
+  listSubcategories: () => request("/subcategories"),
   getProvider: (id) => request(`/providers/${id}`),
   updateProviderProfile: (id, patch) =>
     request(`/providers/${id}/profile`, { method: "PATCH", body: JSON.stringify(patch) }),

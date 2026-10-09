@@ -6,6 +6,7 @@ import { formatCount, discountPct } from "../utils/format";
 import CategoryIcon from "../components/CategoryIcon";
 import { ChangeHistoryModal } from "../components/ChangeHistory";
 import { CommunicationChargesProvider, ChargesCell } from "../components/CommunicationCharges";
+import useSubcategories, { reloadSubcategories } from "../utils/useSubcategories";
 
 const TABS = [
   { label: "All", status: null },
@@ -76,6 +77,7 @@ function ServicesModule() {
         {[
           ["services", "Services"],
           ["categories", "Categories"],
+          ["subcategories", "Sub-categories"],
           ["catalog", "Catalog"],
           ["changes", `Change requests${pendingChanges.length ? ` (${pendingChanges.length})` : ""}`],
         ].map(([key, label]) => (
@@ -91,6 +93,8 @@ function ServicesModule() {
 
       {view === "categories" ? (
         <CategoriesPanel filter={catFilter} setFilter={setCatFilter} />
+      ) : view === "subcategories" ? (
+        <SubcategoriesPanel />
       ) : view === "catalog" ? (
         <CatalogPanel />
       ) : view === "changes" ? (
@@ -116,6 +120,8 @@ function ServicesPanel({ tab, setTab }) {
   const [busyId, setBusyId] = useState(null);
   const [historyFor, setHistoryFor] = useState(null);
 
+  const allSubs = useSubcategories();
+  const subName = (id) => allSubs.find((x) => x.id === id)?.name || "";
   const providerName = (id) => providers.find((p) => p.id === id)?.name || "—";
   const activeTab = TABS.find((t) => t.label === tab);
   const pendingCount = services.filter((s) => s.status === "pending_approval").length;
@@ -193,7 +199,10 @@ function ServicesPanel({ tab, setTab }) {
                         <p className="mt-1 text-[11px] font-normal text-red-500">Rejected: {s.approvalNote}</p>
                       )}
                     </td>
-                    <td className="px-4 py-3 capitalize text-gray-500">{s.categoryId?.replace(/-/g, " ")}</td>
+                    <td className="px-4 py-3 capitalize text-gray-500">
+                      {s.categoryId?.replace(/-/g, " ")}
+                      {s.subcategoryId && <span className="block text-[11px] normal-case text-gray-400">{subName(s.subcategoryId)}</span>}
+                    </td>
                     <td className="px-4 py-3 text-gray-500">{providerName(s.providerId)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
@@ -266,6 +275,7 @@ function ServicesPanel({ tab, setTab }) {
                               price: String(s.price),
                               originalPrice: s.originalPrice ? String(s.originalPrice) : "",
                               categoryId: s.categoryId || "",
+                              subcategoryId: s.subcategoryId || "",
                               icon: s.icon || "",
                               distanceLabel: s.distanceLabel || "",
                               includesText: (s.includes || []).join("\n"),
@@ -504,6 +514,7 @@ function EditServiceModal({ editing, onClose }) {
         price,
         originalPrice: form.originalPrice.trim() ? Number(form.originalPrice) : null,
         categorySlug: form.categoryId,
+        subcategoryId: form.subcategoryId || null,
         icon: form.icon.trim() || null,
         distanceLabel: form.distanceLabel.trim() || null,
         includes: form.includesText
@@ -536,7 +547,7 @@ function EditServiceModal({ editing, onClose }) {
             <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Category</label>
             <select
               value={form.categoryId}
-              onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+              onChange={(e) => setForm({ ...form, categoryId: e.target.value, subcategoryId: "" })}
               className={input}
             >
               {categories.map((c) => (
@@ -552,6 +563,7 @@ function EditServiceModal({ editing, onClose }) {
             <input value={form.icon} maxLength={8} onChange={(e) => setForm({ ...form, icon: e.target.value })} className={input} />
           </div>
         </div>
+        <SubcategorySelect categoryId={form.categoryId} value={form.subcategoryId} onChange={(v) => setForm({ ...form, subcategoryId: v })} className={input} />
         <div>
           <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Distance label</label>
           <input
@@ -619,6 +631,189 @@ function Modal({ title, onClose, children }) {
         </div>
         {children}
       </div>
+    </div>
+  );
+}
+
+// Sub-categories: an optional level between a category and its services
+// (AC Services -> Window AC / Split AC / VRF AC).
+function SubcategoriesPanel() {
+  const { categories, services, showToast, refreshData } = useApp();
+  const subs = useSubcategories();
+  const [categoryId, setCategoryId] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(null);
+  const [editing, setEditing] = useState(null); // { id, name }
+
+  const current = categoryId || categories[0]?.id || "";
+  const mine = subs.filter((s) => s.categoryId === current).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const count = (id) => services.filter((s) => s.subcategoryId === id).length;
+  const unsorted = services.filter((s) => s.categoryId === current && !s.subcategoryId).length;
+
+  const run = async (key, fn, okMsg) => {
+    setBusy(key);
+    try {
+      await fn();
+      await reloadSubcategories();
+      refreshData?.();
+      if (okMsg) showToast(okMsg);
+    } catch (e) {
+      showToast(e.message || "That didn't work");
+    }
+    setBusy(null);
+  };
+
+  const add = (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    run("new", async () => {
+      await api.createSubcategory({ categoryId: current, name: name.trim() });
+      setName("");
+    }, "Sub-category added");
+  };
+
+  const move = (sub, dir) => {
+    const i = mine.findIndex((s) => s.id === sub.id);
+    const other = mine[i + dir];
+    if (!other) return;
+    run(sub.id, async () => {
+      await api.updateSubcategory(sub.id, { sortOrder: other.sortOrder });
+      await api.updateSubcategory(other.id, { sortOrder: sub.sortOrder });
+    });
+  };
+
+  const input = "rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] outline-none focus:border-brand";
+  return (
+    <div className="space-y-4">
+      <p className="max-w-3xl text-[12px] text-gray-500">
+        Split a category into types — for example AC Services into Window AC, Split AC and VRF AC. Customers then pick a type first, and providers choose
+        their services by type. Categories without sub-categories work exactly as before. Assign each service to a sub-category from <strong>Services → Edit</strong> or
+        in the <strong>Catalog</strong>.
+      </p>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-white p-3 shadow-card">
+        <label className="text-[12px] font-semibold text-gray-600">Category</label>
+        <select value={current} onChange={(e) => setCategoryId(e.target.value)} className={input}>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.icon} {c.name}
+              {c.active === false ? " (inactive)" : ""}
+            </option>
+          ))}
+        </select>
+        <form onSubmit={add} className="flex min-w-[240px] flex-1 gap-2">
+          <input value={name} onChange={(e) => setName(e.target.value.slice(0, 40))} placeholder="New sub-category, e.g. Split AC" className={input + " min-w-0 flex-1"} />
+          <button disabled={!name.trim() || busy === "new"} className="rounded-lg bg-brand px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-50">
+            Add
+          </button>
+        </form>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl bg-white shadow-card">
+        <div className="no-scrollbar overflow-x-auto">
+          <table className="w-full min-w-[560px] text-left text-[12.5px]">
+            <thead>
+              <tr className="border-b border-gray-100 text-gray-400">
+                <th className="px-4 py-3 font-medium">Sub-category</th>
+                <th className="px-4 py-3 font-medium">Services</th>
+                <th className="px-4 py-3 font-medium">Shown to customers</th>
+                <th className="px-4 py-3 font-medium" />
+              </tr>
+            </thead>
+            <tbody>
+              {mine.map((s, i) => (
+                <tr key={s.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
+                  <td className="px-4 py-3 font-semibold text-gray-800">
+                    {editing?.id === s.id ? (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          run(s.id, () => api.updateSubcategory(s.id, { name: editing.name }), "Renamed").then(() => setEditing(null));
+                        }}
+                        className="flex gap-2"
+                      >
+                        <input autoFocus value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value.slice(0, 40) })} className={input + " w-48"} />
+                        <button className="text-[12px] font-semibold text-brand">Save</button>
+                        <button type="button" onClick={() => setEditing(null)} className="text-[12px] text-gray-400">
+                          Cancel
+                        </button>
+                      </form>
+                    ) : (
+                      s.name
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">{count(s.id)}</td>
+                  <td className="px-4 py-3">
+                    <button
+                      disabled={busy === s.id}
+                      onClick={() => run(s.id, () => api.updateSubcategory(s.id, { active: s.active === false }))}
+                      className={"switch" + (s.active !== false ? " on" : "")}
+                      aria-label={"Toggle " + s.name}
+                    >
+                      <span className="switch-knob" />
+                    </button>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="flex gap-3 whitespace-nowrap text-[12px] font-semibold">
+                      <button disabled={i === 0 || busy === s.id} onClick={() => move(s, -1)} className="text-gray-400 disabled:opacity-30" title="Move up">
+                        ↑
+                      </button>
+                      <button disabled={i === mine.length - 1 || busy === s.id} onClick={() => move(s, 1)} className="text-gray-400 disabled:opacity-30" title="Move down">
+                        ↓
+                      </button>
+                      <button onClick={() => setEditing({ id: s.id, name: s.name })} className="text-brand hover:underline">
+                        Rename
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm('Delete "' + s.name + '"? Its ' + count(s.id) + " service(s) stay in the category, without a type.")) {
+                            run(s.id, () => api.deleteSubcategory(s.id), "Sub-category deleted");
+                          }
+                        }}
+                        className="text-red-500 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {mine.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-10 text-center text-gray-400">
+                    No sub-categories in this category yet. Add the first one above.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {mine.length > 0 && unsorted > 0 && (
+        <p className="text-[12px] text-amber-600">
+          {unsorted} service{unsorted === 1 ? " in" : "s in"} this category {unsorted === 1 ? "has" : "have"} no sub-category yet. Customers see {unsorted === 1 ? "it" : "them"} under "All" only — open
+          Services → Edit to assign a type.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function SubcategorySelect({ categoryId, value, onChange, className }) {
+  const subs = useSubcategories().filter((s) => s.categoryId === categoryId && (s.active !== false || s.id === value));
+  if (subs.length === 0) return null;
+  return (
+    <div>
+      <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Sub-category</label>
+      <select value={value || ""} onChange={(e) => onChange(e.target.value)} className={className}>
+        <option value="">None</option>
+        {subs.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name}
+            {s.active === false ? " (hidden)" : ""}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -1176,6 +1371,7 @@ function CatalogItemModal({ item, categories, onClose, onSaved, onPhotoChanged }
   const isNew = !item.id;
   const [form, setForm] = useState({
     categorySlug: item.categorySlug || "",
+    subcategoryId: item.subcategoryId || "",
     name: item.name || "",
     price: item.price != null ? String(item.price) : "",
     originalPrice: item.originalPrice != null ? String(item.originalPrice) : "",
@@ -1192,6 +1388,7 @@ function CatalogItemModal({ item, categories, onClose, onSaved, onPhotoChanged }
     setSaving(true);
     const payload = {
       categorySlug: form.categorySlug,
+      subcategoryId: form.subcategoryId || null,
       name: form.name.trim(),
       price,
       originalPrice: form.originalPrice.trim() ? Number(form.originalPrice) : null,
@@ -1217,7 +1414,7 @@ function CatalogItemModal({ item, categories, onClose, onSaved, onPhotoChanged }
         {!isNew && <CatalogPhotoField item={item} onChanged={onPhotoChanged} />}
         <div>
           <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Category</label>
-          <select value={form.categorySlug} onChange={(e) => setForm({ ...form, categorySlug: e.target.value })} className={input}>
+          <select value={form.categorySlug} onChange={(e) => setForm({ ...form, categorySlug: e.target.value, subcategoryId: "" })} className={input}>
             <option value="">Select a category</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
@@ -1226,6 +1423,7 @@ function CatalogItemModal({ item, categories, onClose, onSaved, onPhotoChanged }
             ))}
           </select>
         </div>
+        <SubcategorySelect categoryId={form.categorySlug} value={form.subcategoryId} onChange={(v) => setForm({ ...form, subcategoryId: v })} className={input} />
         <div>
           <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Name</label>
           <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. AC Gas Refill" className={input} />

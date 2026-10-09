@@ -7,6 +7,7 @@ import CategoryPhoto from "./CategoryPhoto";
 import CategoryBannerImage from "./CategoryBannerImage";
 import CategoryIcon from "./CategoryIcon";
 import ComingSoon from "./ComingSoon";
+import SubcategoryChips from "./SubcategoryChips";
 
 const SORTS = [
   { id: "popular", label: "Popular" },
@@ -19,7 +20,7 @@ const SORTS = [
 // Desktop-only category page: photo banner, sort bar, 4-column service grid and
 // a strip of other categories. The mobile list in CategoryServicesScreen is
 // untouched.
-export default function DesktopCategoryPage({ category, displayList, aggregate, hasAny, catalogReady }) {
+export default function DesktopCategoryPage({ category, displayList, aggregate, hasAny, catalogReady, chips = [], activeSub = "", onSub, totalCount }) {
   const navigate = useNavigate();
   const { categories, homeLayout } = useApp();
   const [sort, setSort] = useState("popular");
@@ -83,6 +84,9 @@ export default function DesktopCategoryPage({ category, displayList, aggregate, 
           </div>
         ) : (
           <>
+            {/* Type (sub-category) */}
+            {chips.length > 0 && <SubcategoryChips chips={chips} value={activeSub} onChange={onSub} total={totalCount} className="pt-8" />}
+
             {/* Sort bar */}
             <div className="flex items-center justify-between gap-6 pb-6 pt-8">
               <div className="flex flex-wrap items-center gap-2">

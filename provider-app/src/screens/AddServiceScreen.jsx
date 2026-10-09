@@ -6,10 +6,13 @@ import { CameraIcon, XIcon } from "../components/icons";
 
 export default function AddServiceScreen() {
   const navigate = useNavigate();
-  const { categories, addService, showToast } = useApp();
+  const { categories, subcategories, addService, showToast } = useApp();
 
   const [name, setName] = useState("");
   const [categorySlug, setCategorySlug] = useState("");
+  const [subcategoryId, setSubcategoryId] = useState("");
+  // Types of this category (e.g. Window AC / Split AC / VRF AC), if the team set any up.
+  const types = subcategories.filter((x) => x.categoryId === categorySlug && x.active !== false);
 
   // categories load async (fetched alongside the rest of this provider's
   // data) — default the select once they arrive instead of hardcoding a
@@ -40,7 +43,11 @@ export default function AddServiceScreen() {
       showToast("Please fill in service name and price");
       return;
     }
-    addService({ name: name.trim(), categorySlug, description, price, originalPrice, extraCharges, serviceArea });
+    if (types.length > 0 && !subcategoryId) {
+      showToast("Choose the type of service");
+      return;
+    }
+    addService({ name: name.trim(), categorySlug, subcategoryId, description, price, originalPrice, extraCharges, serviceArea });
     navigate("/services", { replace: true });
   };
 
@@ -63,7 +70,10 @@ export default function AddServiceScreen() {
             <Field label="Category">
               <select
                 value={categorySlug}
-                onChange={(e) => setCategorySlug(e.target.value)}
+                onChange={(e) => {
+                  setCategorySlug(e.target.value);
+                  setSubcategoryId("");
+                }}
                 className="w-full bg-transparent text-[13.5px] text-gray-800 outline-none"
               >
                 {categories.map((c) => (
@@ -73,6 +83,18 @@ export default function AddServiceScreen() {
                 ))}
               </select>
             </Field>
+            {types.length > 0 && (
+              <Field label="Type">
+                <select value={subcategoryId} onChange={(e) => setSubcategoryId(e.target.value)} className="w-full bg-transparent text-[13.5px] text-gray-800 outline-none">
+                  <option value="">Choose a type</option>
+                  {types.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
             <Field label="Service Description">
               <textarea
                 value={description}

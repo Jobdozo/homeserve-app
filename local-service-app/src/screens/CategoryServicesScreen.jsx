@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import useIsDesktop from "../utils/useIsDesktop";
 import { useApp } from "../context/AppContext";
@@ -10,19 +10,25 @@ import CartBar from "../components/CartBar";
 import Seo from "../components/Seo";
 import ComingSoon from "../components/ComingSoon";
 import DesktopCategoryPage from "../components/DesktopCategoryPage";
+import SubcategoryChips from "../components/SubcategoryChips";
+import { chipsFor } from "../utils/subcategories";
 
 export default function CategoryServicesScreen() {
   const { categoryId } = useParams();
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
-  const { categories, services, catalogReady } = useApp();
+  const { categories, subcategories, services, catalogReady } = useApp();
+  const [sub, setSub] = useState("");
 
   const category = categories.find((c) => c.id === categoryId);
   // Ratings/reviews stay computed from every provider's listing (real
   // activity shouldn't shrink because two providers happen to share a
   // name) — only the cards shown below are deduped by name.
   const inCategory = useMemo(() => services.filter((s) => s.categoryId === categoryId), [services, categoryId]);
-  const displayList = useMemo(() => dedupeByName(inCategory), [inCategory]);
+  const chips = useMemo(() => chipsFor(subcategories, categoryId, inCategory), [subcategories, categoryId, inCategory]);
+  // A chip the customer picked earlier may vanish (hidden by admin): fall back to All.
+  const activeSub = chips.some((c) => c.id === sub) ? sub : "";
+  const displayList = useMemo(() => dedupeByName(activeSub ? inCategory.filter((s) => s.subcategoryId === activeSub) : inCategory), [inCategory, activeSub]);
 
   const aggregate = useMemo(() => {
     const rated = inCategory.filter((s) => s.reviewCount > 0);
@@ -60,6 +66,10 @@ export default function CategoryServicesScreen() {
         aggregate={aggregate}
         hasAny={inCategory.length > 0}
         catalogReady={catalogReady}
+        chips={chips}
+        activeSub={activeSub}
+        onSub={setSub}
+        totalCount={dedupeByName(inCategory).length}
       />
     </div>
     )}
@@ -84,6 +94,8 @@ export default function CategoryServicesScreen() {
             )}
           </div>
         </div>
+
+        <SubcategoryChips chips={chips} value={activeSub} onChange={setSub} total={dedupeByName(inCategory).length} className="mt-4" />
 
         {inCategory.length === 0 ? (
           catalogReady ? (

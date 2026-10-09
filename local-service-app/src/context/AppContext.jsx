@@ -60,6 +60,7 @@ export function AppProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(true);
   const [providers, setProviders] = useState({});
   const [categories, setCategories] = useState([]);
+  const [subcategories, setSubcategories] = useState([]);
   const [services, setServices] = useState([]);
   const [banners, setBanners] = useState([]);
   const [homeLayout, setHomeLayout] = useState({ sections: [], bookingCounts: {} });
@@ -286,6 +287,7 @@ export function AppProvider({ children }) {
       if (reqId !== catalogReq.current) return; // a newer PIN's request superseded this one
       setProviders(Object.fromEntries(boot.providers.map((p) => [p.id, p])));
       setCategories(boot.categories);
+      setSubcategories(boot.subcategories || []);
       setServices(boot.services);
       setCatalogPin(pincode || "");
       if (layout) {
@@ -635,6 +637,7 @@ export function AppProvider({ children }) {
       logout,
       providers,
       categories,
+      subcategories,
       services,
       banners,
       homeLayout,
@@ -691,6 +694,7 @@ export function AppProvider({ children }) {
       logout,
       providers,
       categories,
+      subcategories,
       services,
       banners,
       homeLayout,
