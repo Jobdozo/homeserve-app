@@ -1,4 +1,5 @@
 import CategoryPhoto from "./CategoryPhoto";
+import { typeIllustration } from "../utils/illustrations";
 
 // Long names such as "Installation/uninstallation" may wrap after a slash or hyphen (and, as a last
 // resort, anywhere) instead of spilling over the next tile.
@@ -24,7 +25,7 @@ export function TypeTile({ name, imageUrl, categoryId, active, onClick, classNam
           (active ? "border-brand" : "border-transparent")
         }
       >
-        <CategoryPhoto categoryId={categoryId} imageUrl={imageUrl} size={64} rounded="rounded-xl" />
+        <CategoryPhoto categoryId={categoryId} imageUrl={imageUrl} fallbackSrc={name === "All" ? null : typeIllustration(name, categoryId)} size={64} rounded="rounded-xl" />
       </span>
       <span className={"w-full min-w-0 text-[11.5px] leading-tight [overflow-wrap:anywhere] " + (active ? "font-bold text-brand-dark" : "font-medium text-gray-700")}>{softBreak(name)}</span>
       {sub && <span className="-mt-1 text-[10.5px] text-gray-400">{sub}</span>}

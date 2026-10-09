@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { SERVER_URL } from "../api";
 import CategoryIcon from "./CategoryIcon";
+import { categoryIllustration } from "../utils/illustrations";
 
 // Real branded photos for categories that have one (public/category-photos/) —
 // falls back to the vivid CategoryIcon card for any category without a photo
@@ -21,9 +22,10 @@ const PHOTOS = {
 
 // imageUrl = a photo the admin uploaded for this specific service; it wins over
 // the category picture, and if it fails to load the category picture takes over.
-export default function CategoryPhoto({ categoryId, imageUrl, size = 96, rounded = "rounded-none", className = "" }) {
+export default function CategoryPhoto({ categoryId, imageUrl, fallbackSrc, size = 96, rounded = "rounded-none", className = "" }) {
   const [failed, setFailed] = useState(false);
-  const photo = imageUrl && !failed ? `${SERVER_URL}${imageUrl}` : PHOTOS[categoryId];
+  // An uploaded picture wins; then a drawing for this particular type; then the category photo or drawing.
+  const photo = imageUrl && !failed ? `${SERVER_URL}${imageUrl}` : fallbackSrc || PHOTOS[categoryId] || categoryIllustration(categoryId);
   if (photo) {
     return (
       <img

@@ -7,6 +7,7 @@ import CategoryIcon from "./CategoryIcon";
 import CategoryPhoto from "./CategoryPhoto";
 import { useApp } from "../context/AppContext";
 import { chipsFor } from "../utils/subcategories";
+import { typeIllustration } from "../utils/illustrations";
 
 // Gradient per admin-selectable banner colour (literal classes so Tailwind keeps them).
 const BANNER_GRADIENTS = {
@@ -181,7 +182,7 @@ function TypeCarousel({ section, category, chips }) {
             className="w-32 flex-shrink-0 overflow-hidden rounded-2xl bg-white text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.98] lg:w-56"
           >
             <div className="h-24 overflow-hidden lg:h-36">
-              <CategoryPhoto categoryId={category.id} imageUrl={c.imageUrl} size={96} />
+              <CategoryPhoto categoryId={category.id} imageUrl={c.imageUrl} fallbackSrc={typeIllustration(c.name, category.id)} size={96} />
             </div>
             <div className="p-2.5 lg:p-4">
               <p className="text-[12.5px] font-semibold text-gray-900 lg:text-[15px]">{c.name}</p>
