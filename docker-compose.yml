@@ -18,13 +18,13 @@ services:
       ADMIN_PHONES: ${ADMIN_PHONES}
       MSG91_AUTH_KEY: ${MSG91_AUTH_KEY}
       MSG91_WHATSAPP_NUMBER: ${MSG91_WHATSAPP_NUMBER}
-      MSG91_OTP_TEMPLATE: ${MSG91_OTP_TEMPLATE}
-      MSG91_OTP_TEMPLATE_LANG: ${MSG91_OTP_TEMPLATE_LANG}
+      MSG91_OTP_TEMPLATE: ${MSG91_OTP_TEMPLATE:-otp}
+      MSG91_OTP_TEMPLATE_LANG: ${MSG91_OTP_TEMPLATE_LANG:-en}
       # Image Studio (Super Admin -> Services & Categories -> Image Studio). Models are picked automatically unless set.
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-}
       GEMINI_TEXT_MODEL: ${GEMINI_TEXT_MODEL:-}
-      MSG91_OTP_HAS_BUTTON: ${MSG91_OTP_HAS_BUTTON}
+      MSG91_OTP_HAS_BUTTON: ${MSG91_OTP_HAS_BUTTON:-}
       # Shared secret MSG91 sends as the x-webhook-secret header on inbound WhatsApp.
       WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
@@ -101,7 +101,7 @@ services:
       GITHUB_REPO: ${GITHUB_REPO:-Jobdozo/homeserve-app}
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_PRIVATE_KEY_FILE: /app/secrets/github-app.pem
-      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       ENGINEERING_MODEL: ${ENGINEERING_MODEL:-claude-sonnet-5-5}
       AGENT_STATE_DIR: /app/state
     volumes:

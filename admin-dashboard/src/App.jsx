@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAndroidBackButton } from "./utils/useAndroidBackButton";
 import { AppProvider, useApp } from "./context/AppContext";
@@ -5,27 +6,28 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/Layout";
 import LoginScreen from "./screens/LoginScreen";
 import LogoMark from "./components/LogoMark";
-import DashboardPage from "./pages/DashboardPage";
-import CustomersPage from "./pages/CustomersPage";
-import ProvidersPage from "./pages/ProvidersPage";
-import ServicesPage from "./pages/ServicesPage";
-import HomeLayoutPage from "./pages/HomeLayoutPage";
-import LocationsPage from "./pages/LocationsPage";
-import MonitoringPage from "./pages/MonitoringPage";
-import ComplaintsPage from "./pages/ComplaintsPage";
-import BookingsPage from "./pages/BookingsPage";
-import ReviewsPage from "./pages/ReviewsPage";
-import DisputesPage from "./pages/DisputesPage";
-import PaymentsPage from "./pages/PaymentsPage";
-import ReportsPage from "./pages/ReportsPage";
-import AuditLogsPage from "./pages/AuditLogsPage";
-import SettingsPage from "./pages/SettingsHubPage";
-import DataManagementPage from "./pages/DataManagementPage";
-import NotificationsPage from "./pages/NotificationsPage";
-import UserManagementPage from "./pages/UserManagementPage";
-import AiAgentsPage from "./pages/AiAgentsPage";
-import InboxPage from "./pages/InboxPage";
-import AccountingPage from "./pages/AccountingPage";
+// Each page is downloaded the first time it's opened, so the admin site starts faster.
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const CustomersPage = lazy(() => import("./pages/CustomersPage"));
+const ProvidersPage = lazy(() => import("./pages/ProvidersPage"));
+const ServicesPage = lazy(() => import("./pages/ServicesPage"));
+const HomeLayoutPage = lazy(() => import("./pages/HomeLayoutPage"));
+const LocationsPage = lazy(() => import("./pages/LocationsPage"));
+const MonitoringPage = lazy(() => import("./pages/MonitoringPage"));
+const ComplaintsPage = lazy(() => import("./pages/ComplaintsPage"));
+const BookingsPage = lazy(() => import("./pages/BookingsPage"));
+const ReviewsPage = lazy(() => import("./pages/ReviewsPage"));
+const DisputesPage = lazy(() => import("./pages/DisputesPage"));
+const PaymentsPage = lazy(() => import("./pages/PaymentsPage"));
+const ReportsPage = lazy(() => import("./pages/ReportsPage"));
+const AuditLogsPage = lazy(() => import("./pages/AuditLogsPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsHubPage"));
+const DataManagementPage = lazy(() => import("./pages/DataManagementPage"));
+const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
+const UserManagementPage = lazy(() => import("./pages/UserManagementPage"));
+const AiAgentsPage = lazy(() => import("./pages/AiAgentsPage"));
+const InboxPage = lazy(() => import("./pages/InboxPage"));
+const AccountingPage = lazy(() => import("./pages/AccountingPage"));
 
 function NoAccess() {
   return (
@@ -86,11 +88,19 @@ function AppRoutes() {
     <Routes>
       <Route element={<Layout />}>
         {routes.map(([path, page, perm]) => (
-          <Route key={path} path={path} element={can(perm) ? page : <NoAccess />} />
+          <Route key={path} path={path} element={can(perm) ? <Suspense fallback={<PageLoading />}>{page}</Suspense> : <NoAccess />} />
         ))}
       </Route>
       <Route path="*" element={landing ? <Navigate to={landing} replace /> : <NoAccess />} />
     </Routes>
+  );
+}
+
+function PageLoading() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center">
+      <span className="h-6 w-6 animate-spin rounded-full border-2 border-gray-200 border-t-brand" aria-label="Loading" />
+    </div>
   );
 }
 
