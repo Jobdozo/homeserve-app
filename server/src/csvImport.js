@@ -2,6 +2,7 @@
 // valid ones, reporting every problem row by its line number so a bad file
 // never half-fails silently.
 const store = require("./store");
+const subcategories = require("./subcategories");
 
 const MAX_ROWS = 2000;
 const MAX_ERRORS_RETURNED = 200;
@@ -156,7 +157,9 @@ const MODULES = {
   },
 
   services: {
-    columns: ["provider_phone", "category", "name", "price", "original_price"],
+    // Optional: original_price, sub_category (the type, e.g. Waxing — created if it is new),
+    // tagline, includes (what's included, items separated by |).
+    columns: ["provider_phone", "category", "name", "price", "original_price", "sub_category", "tagline", "includes"],
     required: ["provider_phone", "category", "name", "price"],
     async prepare() {
       const [providers, categories] = await Promise.all([store.listProviders(), store.listCategories()]);
@@ -187,18 +190,38 @@ const MODULES = {
         originalPrice = Number(rawOriginal);
         if (originalPrice < price) return { error: "original_price can't be lower than price" };
       }
+      const subcategoryName = (row.sub_category || "").trim().replace(/\s+/g, " ");
+      if (subcategoryName.length > 40) return { error: "sub_category is longer than 40 characters" };
+      const tagline = (row.tagline || "").trim();
+      if (tagline.length > 120) return { error: "tagline is longer than 120 characters" };
+      const includes = (row.includes || "").split("|").map((t) => t.trim()).filter(Boolean);
+      if (includes.length > 12) return { error: "includes has more than 12 items" };
+      if (includes.some((t) => t.length > 100)) return { error: "an item in includes is longer than 100 characters" };
       const dupKey = `${provider.id}|${category.id}|${name.toLowerCase()}`;
       if (ctx.seen.has(dupKey)) return { error: `"${name}" is listed more than once for ${provider.name}` };
       ctx.seen.add(dupKey);
-      return { data: { providerId: provider.id, categorySlug: category.id, name, price, originalPrice } };
+      return { data: { providerId: provider.id, categorySlug: category.id, name, price, originalPrice, subcategoryName, tagline, includes } };
     },
-    create: (d) =>
-      store.adminCreateService(d.providerId, {
+    async create(d) {
+      // The type is matched by name inside the category, and created the first time it is seen.
+      let subcategoryId = null;
+      if (d.subcategoryName) {
+        const wanted = d.subcategoryName.toLowerCase();
+        const existing = subcategories.list({ includeInactive: true, categoryId: d.categorySlug }).find((x) => x.name.toLowerCase() === wanted);
+        subcategoryId = (existing || subcategories.create({ categoryId: d.categorySlug, name: d.subcategoryName })).id;
+      }
+      const service = await store.adminCreateService(d.providerId, {
         categorySlug: d.categorySlug,
         name: d.name,
         price: d.price,
         originalPrice: d.originalPrice,
-      }),
+        subcategoryId,
+      });
+      if (d.tagline || d.includes.length) {
+        await store.adminUpdateService(service.id, { ...(d.tagline ? { tagline: d.tagline } : {}), ...(d.includes.length ? { includes: d.includes } : {}) });
+      }
+      return service;
+    },
   },
 };
 

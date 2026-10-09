@@ -22,9 +22,9 @@ const IMPORTS = {
   },
   services: {
     label: "Services",
-    columns: "provider_phone, category, name, price, original_price (optional)",
+    columns: "provider_phone, category, name, price, original_price (optional), sub_category (optional — the type, created if new), tagline (optional), includes (optional — items separated by |)",
     template:
-      "provider_phone,category,name,price,original_price\n+919811122233,AC Repair,AC Gas Refilling,599,699\n+919811122233,AC Repair,AC Installation,799,\n",
+      "provider_phone,category,name,price,original_price,sub_category,tagline,includes\n+919811122233,Salon & Spa,Classic Haircut,299,399,Hair,Cut and style at home,Consultation|Haircut|Blow dry\n+919811122233,Salon & Spa,Full Arms Waxing,349,,Waxing,Smooth wax finish,Disposable strips|Skin-safe wax\n+919811122233,AC Repair,AC Gas Refilling,599,699,,,\n",
   },
 };
 
