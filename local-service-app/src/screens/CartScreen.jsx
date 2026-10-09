@@ -20,6 +20,7 @@ export default function CartScreen() {
     bookings,
     getService,
     updateCartItem,
+    setCartSchedule,
     removeFromCart,
     checkout,
     appliedOffer,
@@ -60,6 +61,13 @@ export default function CartScreen() {
     () => cart.map((item) => ({ item, service: getService(item.serviceId) })).filter((l) => l.service),
     [cart, services, getService]
   );
+  const schedule = { date: lines[0]?.item.date || "", time: lines[0]?.item.time || timeSlots[1] };
+  useEffect(() => {
+    if (lines.length > 1 && lines.some((l) => l.item.date !== lines[0].item.date || l.item.time !== lines[0].item.time)) {
+      setCartSchedule({ date: lines[0].item.date, time: lines[0].item.time });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines.map((l) => l.item.date + l.item.time).join("|")]);
   const qtyOf = (l) => l.item.quantity || 1;
   const total = lines.reduce((sum, l) => sum + l.service.price * qtyOf(l), 0);
   const savings = lines.reduce((sum, l) => sum + (l.service.originalPrice ? (l.service.originalPrice - l.service.price) * qtyOf(l) : 0), 0);
@@ -186,6 +194,39 @@ export default function CartScreen() {
       {/* Desktop: items and checkout details on the left, a sticky order summary on the right. */}
       <div className="flex flex-1 flex-col lg:mx-auto lg:grid lg:w-full lg:max-w-6xl lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-10 lg:px-8 lg:pb-16">
       <div className="flex-1 space-y-3 px-4 pb-6 lg:space-y-5 lg:px-0 lg:pb-0">
+        <div className="rounded-2xl border border-gray-100 p-3 shadow-card lg:bg-white lg:p-5">
+          <h2 className="text-[13px] font-semibold text-gray-900 lg:text-[16px] lg:font-bold">When do you need the service?</h2>
+          <p className="mt-0.5 text-[11.5px] text-gray-400">One date and time for everything in your cart</p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-2">
+              <CalendarIcon width={14} height={14} className="flex-shrink-0 text-gray-400" />
+              <input
+                type="date"
+                value={schedule.date}
+                min={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => e.target.value && setCartSchedule({ date: e.target.value })}
+                className="w-full bg-transparent text-[12px] text-gray-800 outline-none"
+                aria-label="Service date"
+              />
+            </div>
+            <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-2">
+              <ClockIcon width={14} height={14} className="flex-shrink-0 text-gray-400" />
+              <select
+                value={schedule.time}
+                onChange={(e) => setCartSchedule({ time: e.target.value })}
+                className="w-full bg-transparent text-[12px] text-gray-800 outline-none"
+                aria-label="Service time"
+              >
+                {timeSlots.map((slot) => (
+                  <option key={slot} value={slot}>
+                    {slot}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
         {lines.map(({ item, service }) => (
           <div
             key={item.serviceId}
@@ -247,33 +288,6 @@ export default function CartScreen() {
               >
                 <XIcon width={14} height={14} />
               </button>
-            </div>
-
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-2">
-                <CalendarIcon width={14} height={14} className="flex-shrink-0 text-gray-400" />
-                <input
-                  type="date"
-                  value={item.date}
-                  min={new Date().toISOString().slice(0, 10)}
-                  onChange={(e) => updateCartItem(item.serviceId, { date: e.target.value })}
-                  className="w-full bg-transparent text-[12px] text-gray-800 outline-none"
-                />
-              </div>
-              <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-2">
-                <ClockIcon width={14} height={14} className="flex-shrink-0 text-gray-400" />
-                <select
-                  value={item.time}
-                  onChange={(e) => updateCartItem(item.serviceId, { time: e.target.value })}
-                  className="w-full bg-transparent text-[12px] text-gray-800 outline-none"
-                >
-                  {timeSlots.map((slot) => (
-                    <option key={slot} value={slot}>
-                      {slot}
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
 
             <textarea

@@ -539,12 +539,17 @@ export function AppProvider({ children }) {
           return prev;
         }
         showToast("Added to cart");
-        const like = likeServiceId ? prev.find((item) => item.serviceId === likeServiceId) : null;
+        const like = (likeServiceId && prev.find((item) => item.serviceId === likeServiceId)) || prev[0] || null;
         return [...prev, { serviceId, date: like?.date || todayISO(), time: like?.time || timeSlots[1], issue: "", quantity: 1 }];
       });
     },
     [showToast]
   );
+
+  // One date and time for the whole cart: the provider is booked for a single visit.
+  const setCartSchedule = useCallback((patch) => {
+    setCart((prev) => prev.map((item) => ({ ...item, ...patch })));
+  }, []);
 
   const updateCartItem = useCallback((serviceId, patch) => {
     setCart((prev) => prev.map((item) => (item.serviceId === serviceId ? { ...item, ...patch } : item)));
@@ -664,6 +669,7 @@ export function AppProvider({ children }) {
       cart,
       addToCart,
       updateCartItem,
+      setCartSchedule,
       removeFromCart,
       checkout,
       appliedOffer,
@@ -721,6 +727,7 @@ export function AppProvider({ children }) {
       cart,
       addToCart,
       updateCartItem,
+      setCartSchedule,
       removeFromCart,
       checkout,
       appliedOffer,
