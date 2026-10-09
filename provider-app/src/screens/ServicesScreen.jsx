@@ -19,6 +19,7 @@ export default function ServicesScreen() {
     setPhotoBusy(id);
     try {
       await setServicePhoto(id, await compressImage(file, { maxDimension: 1600 }));
+      loadChanges();
     } catch (e) {
       showToast(e.message || "Couldn't update the photo");
     } finally {
@@ -29,6 +30,7 @@ export default function ServicesScreen() {
     setPhotoBusy(id);
     try {
       await setServicePhoto(id, null);
+      loadChanges();
     } catch (e) {
       showToast(e.message || "Couldn't remove the photo");
     } finally {
@@ -241,8 +243,9 @@ export default function ServicesScreen() {
   );
 }
 
-const FIELD_LABELS = { name: "Name", tagline: "Tagline", price: "Price", originalPrice: "Original price", distanceLabel: "Distance" };
-const showValue = (field, v) => (v === null || v === "" ? "—" : field === "price" || field === "originalPrice" ? `₹${v}` : String(v));
+const FIELD_LABELS = { name: "Name", tagline: "Tagline", price: "Price", originalPrice: "Original price", distanceLabel: "Distance", photo: "Photo" };
+const showValue = (field, v) =>
+  field === "photo" ? (v ? "new photo" : "no photo") : v === null || v === "" ? "—" : field === "price" || field === "originalPrice" ? `₹${v}` : String(v);
 
 // Live services are changed by request only: the current details stay live
 // until an admin approves what's proposed here.

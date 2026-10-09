@@ -370,6 +370,7 @@ function ruleFor(method, path) {
   if (/^\/provider\/(capacity|wallet)$/.test(path) || /^\/providers\/[^/]+\/earnings$/.test(path)) return { needs: null };
   if (/^\/provider\/ads/.test(path)) return { needs: "ads.manage" };
   if (/^\/provider\/kyc-documents/.test(path)) return { needs: "profile.edit" };
+  if (/^\/provider\/profile-changes$/.test(path)) return { needs: "profile.edit" };
   if (/^\/provider\/service-changes$/.test(path)) return { needs: ["services.view", "services.manage"] };
   if (/^\/provider\/notification-prefs$/.test(path)) return { needs: write ? "profile.edit" : null };
   if (/^\/providers\/[^/]+\/(coverage|profile|photo)$/.test(path)) return { needs: "profile.edit" };

@@ -42,7 +42,11 @@ function ServicesModule() {
   const { categories, services, refreshData } = useApp();
   const [view, setView] = useState("services");
   const [pendingChanges, setPendingChanges] = useState([]);
-  const loadChanges = () => api.listServiceChanges("pending").then(setPendingChanges).catch(() => {});
+  const [pendingProfileChanges, setPendingProfileChanges] = useState([]);
+  const loadChanges = () => {
+    api.listServiceChanges("pending").then(setPendingChanges).catch(() => {});
+    api.listProviderChanges("pending").then(setPendingProfileChanges).catch(() => {});
+  };
   useEffect(() => {
     loadChanges();
   }, []);
@@ -81,7 +85,7 @@ function ServicesModule() {
           ["subcategories", "Sub-categories"],
           ["catalog", "Catalog"],
           ["images", "Image Studio"],
-          ["changes", `Change requests${pendingChanges.length ? ` (${pendingChanges.length})` : ""}`],
+          ["changes", `Change requests${pendingChanges.length + pendingProfileChanges.length ? ` (${pendingChanges.length + pendingProfileChanges.length})` : ""}`],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -102,13 +106,28 @@ function ServicesModule() {
       ) : view === "catalog" ? (
         <CatalogPanel />
       ) : view === "changes" ? (
-        <ChangeRequestsPanel
-          requests={pendingChanges}
-          onReviewed={() => {
-            loadChanges();
-            refreshData();
-          }}
-        />
+        <div className="space-y-8">
+          <section>
+            <h2 className="mb-3 text-[15px] font-bold text-gray-900">Service changes ({pendingChanges.length})</h2>
+            <ChangeRequestsPanel
+              requests={pendingChanges}
+              onReviewed={() => {
+                loadChanges();
+                refreshData();
+              }}
+            />
+          </section>
+          <section>
+            <h2 className="mb-3 text-[15px] font-bold text-gray-900">Profile, logo &amp; service area changes ({pendingProfileChanges.length})</h2>
+            <ProviderChangesPanel
+              requests={pendingProfileChanges}
+              onReviewed={() => {
+                loadChanges();
+                refreshData();
+              }}
+            />
+          </section>
+        </div>
       ) : (
         <ServicesPanel tab={tab} setTab={setTab} />
       )}
@@ -1060,12 +1079,147 @@ function CategoriesPanel({ filter, setFilter }) {
   );
 }
 
-const CHANGE_LABELS = { name: "Name", tagline: "Tagline", price: "Price (₹)", originalPrice: "Original price (₹)", distanceLabel: "Distance label" };
+const CHANGE_LABELS = { name: "Name", tagline: "Tagline", price: "Price (₹)", originalPrice: "Original price (₹)", distanceLabel: "Distance label", photo: "Photo" };
+
+// Before → after for a photo change (null = no photo / photo removed).
+function PhotoChange({ from, to }) {
+  const pic = (url, label) =>
+    url ? (
+      <a href={SERVER_URL + url} target="_blank" rel="noreferrer" className="block h-16 w-16 overflow-hidden rounded-lg border border-gray-200" title={label}>
+        <img src={SERVER_URL + url} alt={label} className="h-full w-full object-cover" />
+      </a>
+    ) : (
+      <span className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-gray-200 text-[10px] text-gray-400">{label}</span>
+    );
+  return (
+    <span className="flex items-center gap-2">
+      {pic(from, from ? "Current" : "No photo")}
+      <span className="text-gray-400">→</span>
+      {pic(to, to ? "New" : "Removed")}
+    </span>
+  );
+}
 const showChange = (v) => (v === null || v === undefined || v === "" ? "—" : String(v));
 
 // Provider-submitted modifications to a live service: the service keeps its
 // current details until one of these is approved (as proposed, or after the
 // admin edits the proposed values), or rejected.
+const PROFILE_LABELS = {
+  name: "Name",
+  category: "Category",
+  businessName: "Business name",
+  experience: "Experience",
+  serviceArea: "Service area",
+  email: "Email",
+  gstNumber: "GST number",
+  photo: "Profile photo / logo",
+  pincodes: "PIN codes",
+};
+const showProfileValue = (v) => (Array.isArray(v) ? (v.length ? v.join(", ") : "—") : showChange(v));
+
+// A verified provider's profile, logo and service-area changes: nothing goes live until approved here.
+function ProviderChangesPanel({ requests, onReviewed }) {
+  const { providers, showToast } = useApp();
+  const [rejecting, setRejecting] = useState({});
+  const [busyId, setBusyId] = useState(null);
+
+  const review = async (r, decision, note) => {
+    setBusyId(r.id);
+    try {
+      await api.reviewProviderChange(r.id, decision, note);
+      showToast(decision === "approved" ? "Changes approved and applied" : "Changes rejected");
+      onReviewed();
+    } catch (err) {
+      showToast(err.message || "Action failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (requests.length === 0) {
+    return <p className="rounded-2xl bg-white py-10 text-center text-sm text-gray-400 shadow-card">No profile changes waiting for review.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {requests.map((r) => {
+        const provider = providers.find((p) => p.id === r.providerId);
+        return (
+          <div key={r.id} className="rounded-2xl bg-white p-4 shadow-card">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[13.5px] font-semibold text-gray-900">{provider?.name || r.providerName || "Provider"}</p>
+                <p className="text-[11.5px] text-gray-400">
+                  {provider?.phone ? `${provider.phone} · ` : ""}requested{" "}
+                  {new Date(r.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                </p>
+              </div>
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10.5px] font-semibold text-blue-700">pending</span>
+            </div>
+            <div className="mt-3 space-y-1.5">
+              {Object.entries(r.changes).map(([field, c]) => (
+                <div key={field} className="grid grid-cols-[150px_1fr] items-center gap-2 text-[12px]">
+                  <span className="font-medium text-gray-500">{PROFILE_LABELS[field] || field}</span>
+                  {field === "photo" ? (
+                    <PhotoChange from={c.from} to={c.to} />
+                  ) : (
+                    <span>
+                      <span className="text-red-500 line-through decoration-red-300">{showProfileValue(c.from)}</span>
+                      {" → "}
+                      <span className="font-semibold text-emerald-600">{showProfileValue(c.to)}</span>
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            {rejecting[r.id] !== undefined ? (
+              <div className="mt-3 space-y-2">
+                <input
+                  value={rejecting[r.id]}
+                  onChange={(e) => setRejecting({ ...rejecting, [r.id]: e.target.value })}
+                  placeholder="Reason for the provider (optional)"
+                  className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-[12px] outline-none focus:border-brand"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setRejecting((p) => { const n = { ...p }; delete n[r.id]; return n; })}
+                    className="flex-1 rounded-lg border border-gray-200 py-2 text-[12px] font-semibold text-gray-500"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={busyId === r.id}
+                    onClick={() => review(r, "rejected", rejecting[r.id].trim())}
+                    className="flex-1 rounded-lg bg-red-600 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
+                  >
+                    Reject changes
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  disabled={busyId === r.id}
+                  onClick={() => review(r, "approved")}
+                  className="rounded-lg bg-brand px-3.5 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={() => setRejecting({ ...rejecting, [r.id]: "" })}
+                  className="rounded-lg border border-red-200 px-3.5 py-2 text-[12px] font-semibold text-red-600"
+                >
+                  Reject
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ChangeRequestsPanel({ requests, onReviewed }) {
   const { providers, showToast } = useApp();
   const [editing, setEditing] = useState({});
@@ -1116,7 +1270,9 @@ function ChangeRequestsPanel({ requests, onReviewed }) {
               {Object.entries(r.changes).map(([field, c]) => (
                 <div key={field} className="grid grid-cols-[110px_1fr] items-center gap-2 text-[12px]">
                   <span className="font-medium text-gray-500">{CHANGE_LABELS[field] || field}</span>
-                  {edits ? (
+                  {field === "photo" ? (
+                    <PhotoChange from={c.from} to={c.to} />
+                  ) : edits ? (
                     <input
                       value={edits[field] ?? ""}
                       onChange={(e) => setEditing({ ...editing, [r.id]: { ...edits, [field]: e.target.value } })}
@@ -1179,7 +1335,7 @@ function ChangeRequestsPanel({ requests, onReviewed }) {
                         delete n[r.id];
                         return n;
                       }
-                      return { ...p, [r.id]: Object.fromEntries(Object.entries(r.changes).map(([k, c]) => [k, c.to ?? ""])) };
+                      return { ...p, [r.id]: Object.fromEntries(Object.entries(r.changes).filter(([k]) => k !== "photo").map(([k, c]) => [k, c.to ?? ""])) };
                     })
                   }
                   className="rounded-lg border border-gray-200 px-3.5 py-2 text-[12px] font-semibold text-gray-600"

@@ -4,6 +4,7 @@ import DeleteAccountModal from "../components/DeleteAccountModal";
 import { useApp } from "../context/AppContext";
 import { CameraIcon, ChevronRightIcon, StarIcon, ShieldCheckIcon, EditIcon, LogoutIcon } from "../components/icons";
 import Avatar from "../components/Avatar";
+import PendingProfileChanges from "../components/PendingProfileChanges";
 import { compressImage } from "../utils/imageCompress";
 
 const verificationBadges = {
@@ -112,6 +113,9 @@ export default function ProfileScreen() {
         </div>
       </div>
 
+      <div className="mx-4 mt-4 lg:mx-0 lg:mt-0">
+        <PendingProfileChanges />
+      </div>
       <div className="mx-4 mt-5 rounded-2xl border border-gray-100 p-4 lg:mx-0 lg:mt-0 lg:bg-white lg:p-6">
         <h2 className="mb-3 text-[13px] font-bold text-gray-900 lg:text-[15px]">Business Information</h2>
         <InfoRow label="Business Name" value={providerProfile.businessName} />

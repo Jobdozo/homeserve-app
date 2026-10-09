@@ -213,6 +213,9 @@ export const api = {
     if (entityId) q.set("entityId", entityId);
     return request(`/admin/change-log?${q.toString()}`);
   },
+  listProviderChanges: (status) => request(`/admin/provider-changes${status ? `?status=${status}` : ""}`),
+  reviewProviderChange: (id, decision, note) =>
+    request(`/admin/provider-changes/${id}/review`, { method: "POST", body: JSON.stringify({ decision, note }) }),
   listServiceChanges: (status) => request(`/admin/service-changes${status ? `?status=${status}` : ""}`),
   reviewServiceChange: (id, decision, note, edits) =>
     request(`/admin/service-changes/${id}/review`, { method: "POST", body: JSON.stringify({ decision, note, edits }) }),

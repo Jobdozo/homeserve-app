@@ -36,6 +36,7 @@ export function AppProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(true);
   const [requests, setRequests] = useState([]);
   const [services, setServices] = useState([]);
+  const [profileChangeTick, setProfileChangeTick] = useState(0);
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [messages, setMessages] = useState({});
@@ -571,6 +572,12 @@ export function AppProvider({ children }) {
     async (file) => {
       if (!provider) return;
       const updated = file ? await api.uploadProfilePhoto(provider.id, file) : await api.removeProfilePhoto(provider.id);
+      if (updated.changeRequest) {
+        // A verified account's photo waits for Tikdum approval; the current one stays until then.
+        setProfileChangeTick((n) => n + 1);
+        showToast("Photo sent to Tikdum for approval");
+        return updated;
+      }
       setProvider((prev) => (prev ? { ...prev, photoUrl: updated.photoUrl || null } : prev));
       showToast(file ? "Profile photo updated" : "Profile photo removed");
       return updated;
@@ -583,8 +590,9 @@ export function AppProvider({ children }) {
     async (id, file) => {
       if (!provider) return;
       const service = file ? await api.uploadServiceImage(provider.id, id, file) : await api.removeServiceImage(provider.id, id);
-      setServices((prev) => upsertById(prev, service));
-      showToast(file ? "Photo updated" : "Photo removed");
+      const { changeRequest, ...current } = service;
+      setServices((prev) => upsertById(prev, current));
+      showToast(changeRequest ? "Photo sent to Tikdum for approval" : file ? "Photo updated" : "Photo removed");
       return service;
     },
     [provider, showToast]
@@ -648,9 +656,10 @@ export function AppProvider({ children }) {
   const updateProfile = useCallback(
     async (patch) => {
       if (!provider) return;
-      const updated = await api.updateProviderProfile(provider.id, patch);
+      const { changeRequest, ...updated } = await api.updateProviderProfile(provider.id, patch);
       setProvider(updated);
-      showToast("Profile updated");
+      if (changeRequest) setProfileChangeTick((n) => n + 1);
+      showToast(changeRequest ? "Changes sent to Tikdum for approval" : "Profile updated");
       return updated;
     },
     [provider, showToast]
@@ -687,9 +696,10 @@ export function AppProvider({ children }) {
   const updateCoverage = useCallback(
     async (pincodes) => {
       if (!provider) return;
-      const coverage = await api.updateCoverage(provider.id, pincodes);
+      const { changeRequest, ...coverage } = await api.updateCoverage(provider.id, pincodes);
       setProvider((prev) => (prev ? { ...prev, coverage } : prev));
-      showToast("Service area updated");
+      if (changeRequest) setProfileChangeTick((n) => n + 1);
+      showToast(changeRequest ? "PIN codes sent to Tikdum for approval" : "Service area updated");
       return coverage;
     },
     [provider, showToast]
@@ -734,6 +744,7 @@ export function AppProvider({ children }) {
       toggleServiceStatus,
       setServicePhoto,
       setProfilePhoto,
+      profileChangeTick,
       addService,
       resubmitService,
       requestServiceChange,
@@ -780,6 +791,7 @@ export function AppProvider({ children }) {
       toggleServiceStatus,
       setServicePhoto,
       setProfilePhoto,
+      profileChangeTick,
       addService,
       resubmitService,
       requestServiceChange,

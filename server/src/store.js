@@ -320,11 +320,18 @@ async function setServiceImage(serviceId, url, actor) {
 // A provider's own photo for one of their own services. It lives on that service
 // row only (never copied to the catalog or to other providers' services); the
 // admin can still replace or remove it. null puts the type/category picture back.
+// Returns { service, changeRequest }. A live service's photo waits for Super Admin approval (Business Rules:
+// service changes need approval); a service still under review takes it directly, it isn't public yet.
 async function setProviderServiceImage(providerId, serviceId, url, actor) {
   const existing = await getService(serviceId);
   if (!existing) return undefined;
   if (existing.providerId !== providerId) throw Object.assign(new Error("Not your service"), { status: 403 });
-  return setServiceImage(serviceId, url, actor);
+  const live = existing.status === "active" || existing.status === "inactive";
+  if (live && getSettings().serviceChangeApprovalRequired) {
+    const changeRequest = await submitServiceChange(providerId, existing, {}, { photo: url });
+    return { service: existing, changeRequest };
+  }
+  return { service: await setServiceImage(serviceId, url, actor), changeRequest: null };
 }
 
 function mapService(s) {
@@ -944,6 +951,128 @@ async function updateProviderProfile(providerId, patch) {
   return getProvider(providerId);
 }
 
+// ---- a verified provider's profile, logo and service area change only with Super Admin approval.
+// Requests wait in jsonStore "providerChangeRequests", one pending per provider (a newer one is merged in). ----
+
+function providerChangesNeedApproval(provider) {
+  return provider?.verificationStatus === "approved";
+}
+
+function listProviderChanges({ providerId, status } = {}) {
+  return jsonStore
+    .readAll("providerChangeRequests")
+    .filter((r) => (!providerId || r.providerId === providerId) && (!status || r.status === status))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+// Same rules as saving the list directly: full 6-digit PINs, prefixes an admin already set are kept, a maximum count.
+function cleanProviderPincodes(list, current) {
+  const cleaned = [...new Set((Array.isArray(list) ? list : []).map((p) => String(p).trim()).filter(Boolean))];
+  for (const pin of cleaned) {
+    if (!/^\d{6}$/.test(pin) && !current.includes(pin)) {
+      throw Object.assign(new Error(`"${pin}" is not a valid 6-digit PIN code`), { status: 400 });
+    }
+  }
+  const max = getSettings().pinMaxPerProvider;
+  if (cleaned.length > max) throw Object.assign(new Error(`A provider can cover at most ${max} PIN codes`), { status: 400 });
+  return cleaned;
+}
+
+async function submitProviderChange(providerId, raw = {}) {
+  const provider = await getProvider(providerId);
+  if (!provider) throw Object.assign(new Error("Provider not found"), { status: 404 });
+  const changes = {};
+  for (const key of EDITABLE_PROVIDER_FIELDS) {
+    if (raw[key] === undefined) continue;
+    const to = raw[key] === null ? null : String(raw[key]).trim() || null;
+    const from = provider[key] ?? null;
+    if (from !== to) changes[key] = { from, to };
+  }
+  if (changes.name && !changes.name.to) throw Object.assign(new Error("Name is required"), { status: 400 });
+  if (raw.photo !== undefined && (provider.photoUrl || null) !== raw.photo) {
+    changes.photo = { from: provider.photoUrl || null, to: raw.photo };
+  }
+  if (raw.pincodes !== undefined) {
+    const current = provider.coverage?.pincodes || [];
+    const to = cleanProviderPincodes(raw.pincodes, current);
+    if (JSON.stringify([...to].sort()) !== JSON.stringify([...current].sort())) changes.pincodes = { from: current, to };
+  }
+  if (Object.keys(changes).length === 0) throw Object.assign(new Error("Nothing was changed"), { status: 400 });
+  for (const old of listProviderChanges({ providerId, status: "pending" })) {
+    for (const [key, c] of Object.entries(old.changes || {})) {
+      if (!(key in changes)) changes[key] = c;
+      else if (key === "photo" && c.to && c.to !== changes.photo.to) deleteUploadedFile(c.to);
+    }
+    jsonStore.remove("providerChangeRequests", old.id);
+  }
+  const request = jsonStore.insert("providerChangeRequests", {
+    providerId,
+    providerName: provider.name,
+    changes,
+    status: "pending",
+    note: null,
+    createdAt: new Date().toISOString(),
+    resolvedAt: null,
+  });
+  await logActivity("provider", `${provider.name} requested profile changes (awaiting approval)`);
+  return request;
+}
+
+async function reviewProviderChange(requestId, decision, { note } = {}, actor) {
+  if (!["approved", "rejected"].includes(decision)) {
+    throw Object.assign(new Error("decision must be approved or rejected"), { status: 400 });
+  }
+  const request = jsonStore.readAll("providerChangeRequests").find((r) => r.id === requestId);
+  if (!request) return undefined;
+  if (request.status !== "pending") throw Object.assign(new Error("This request has already been reviewed"), { status: 409 });
+  const provider = await getProvider(request.providerId);
+  if (!provider) {
+    jsonStore.remove("providerChangeRequests", requestId);
+    throw Object.assign(new Error("The provider no longer exists"), { status: 404 });
+  }
+  const { photo, pincodes, ...fieldChanges } = request.changes;
+  const show = (v) => (Array.isArray(v) ? v.join(", ") : v);
+  const list = [
+    ...Object.entries(fieldChanges).map(([field, c]) => ({ field, from: c.from, to: c.to })),
+    ...(photo ? [{ field: "profile photo", from: photo.from ? "photo" : "none", to: photo.to ? "new photo" : "removed" }] : []),
+    ...(pincodes ? [{ field: "PIN codes", from: show(pincodes.from), to: show(pincodes.to) }] : []),
+  ];
+  if (decision === "approved") {
+    const fields = Object.fromEntries(Object.entries(fieldChanges).map(([k, c]) => [k, c.to ?? ""]));
+    if (Object.keys(fields).length) await updateProviderProfile(request.providerId, fields);
+    if (photo) await setProviderPhoto(request.providerId, photo.to, actor);
+    if (pincodes) updateProviderCoverage(request.providerId, { pincodes: pincodes.to }, { allowServeAllAreas: false });
+    recordAdminChange({ actor, action: "provider.change_approved", entityType: "provider", entityId: request.providerId, entityName: provider.name, changes: list });
+  } else {
+    if (photo?.to) deleteUploadedFile(photo.to);
+    recordAdminChange({
+      actor,
+      action: "provider.change_rejected",
+      entityType: "provider",
+      entityId: request.providerId,
+      entityName: provider.name,
+      changes: [...list, ...(note ? [{ field: "reason", from: null, to: note }] : [])],
+    });
+  }
+  const resolved = jsonStore.update("providerChangeRequests", requestId, { status: decision, note: note || null, resolvedAt: new Date().toISOString() });
+  await logActivity("provider", `Profile changes for ${provider.name} ${decision} by admin`);
+  try {
+    await addNotification({
+      recipientType: "provider",
+      recipientId: request.providerId,
+      type: "account",
+      title: decision === "approved" ? "Profile changes approved" : "Profile changes rejected",
+      message:
+        decision === "approved"
+          ? "Your profile changes were approved and are now live."
+          : `Your profile changes were rejected.${note ? ` Reason: ${note}` : ""} Your profile keeps its current details.`,
+    });
+  } catch (e) {
+    console.error("Profile change notification failed:", e);
+  }
+  return resolved;
+}
+
 // ---- services ----
 
 async function listServices({ activeOnly = false, pincode } = {}) {
@@ -1168,17 +1297,27 @@ function cleanServiceChange(patch) {
   return out;
 }
 
-async function submitServiceChange(providerId, service, rawPatch) {
+// extra.photo: a newly uploaded photo url (or null to remove the photo) — it waits for approval like the rest.
+async function submitServiceChange(providerId, service, rawPatch, extra = {}) {
   const proposed = cleanServiceChange(rawPatch);
   const changes = {};
   for (const [key, to] of Object.entries(proposed)) {
     const from = service[key] ?? null;
     if (JSON.stringify(from) !== JSON.stringify(to ?? null)) changes[key] = { from, to };
   }
+  if (extra.photo !== undefined && (service.imageUrl || null) !== extra.photo) {
+    changes.photo = { from: service.imageUrl || null, to: extra.photo };
+  }
   if (Object.keys(changes).length === 0) {
     throw Object.assign(new Error("Nothing was changed"), { status: 400 });
   }
+  // One pending request per service: a newer submission is merged into the older one (its own values win), so
+  // sending a new price doesn't throw away a photo that is still waiting, and vice versa.
   for (const old of listServiceChanges({ serviceId: service.id, status: "pending" })) {
+    for (const [key, c] of Object.entries(old.changes || {})) {
+      if (!(key in changes)) changes[key] = c;
+      else if (key === "photo" && c.to && c.to !== changes.photo.to) deleteUploadedFile(c.to);
+    }
     jsonStore.remove("serviceChangeRequests", old.id);
   }
   const request = jsonStore.insert("serviceChangeRequests", {
@@ -1215,11 +1354,16 @@ async function reviewServiceChange(requestId, decision, { note, edits } = {}, ac
 
   let applied = null;
   if (decision === "approved") {
+    const { photo, ...fieldChanges } = request.changes;
     const proposed = {};
-    for (const [key, change] of Object.entries(request.changes)) proposed[key] = change.to;
+    for (const [key, change] of Object.entries(fieldChanges)) proposed[key] = change.to;
     const merged = { ...proposed, ...cleanServiceChange(Object.fromEntries(Object.entries(edits || {}).filter(([k]) => SERVICE_CHANGE_KEYS.includes(k)))) };
     const updated = await applyServiceFieldUpdate(request.serviceId, merged, ADMIN_EDITABLE_SERVICE_KEYS);
     applied = diffValues(service, updated, SERVICE_CHANGE_KEYS);
+    if (photo) {
+      await setServiceImage(request.serviceId, photo.to, actor);
+      applied = [...(applied || []), { field: "photo", from: photo.from ? "photo" : "none", to: photo.to ? "new photo" : "removed" }];
+    }
     recordAdminChange({
       actor,
       action: "service.change_approved",
@@ -1229,6 +1373,7 @@ async function reviewServiceChange(requestId, decision, { note, edits } = {}, ac
       changes: applied,
     });
   } else {
+    if (request.changes.photo?.to) deleteUploadedFile(request.changes.photo.to); // the rejected upload is not kept
     recordAdminChange({
       actor,
       action: "service.change_rejected",
@@ -4354,6 +4499,10 @@ module.exports = {
   adminUpdateService,
   setServiceImage,
   setProviderServiceImage,
+  providerChangesNeedApproval,
+  listProviderChanges,
+  submitProviderChange,
+  reviewProviderChange,
   setProviderPhoto,
   adminDeleteService,
   setProviderVerification,

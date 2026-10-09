@@ -453,12 +453,20 @@ app.delete("/api/customer/address/office", auth.requireAuth("customer"), ah(asyn
 // ---- provider service-area coverage (PIN codes; serveAllAreas is admin-only) ----
 app.patch("/api/providers/:id/coverage", auth.requireAuth("provider"), ah(async (req, res) => {
   if (req.params.id !== req.user.id) return res.status(403).json({ error: "Not your profile" });
+  // Turning requests on/off and working hours are day-to-day running and stay direct; for a verified provider the
+  // service area (PIN codes) is what customers see, so it waits for Super Admin approval.
+  let changeRequest = null;
+  let pincodes = req.body?.pincodes;
+  if (pincodes !== undefined && store.providerChangesNeedApproval(await store.getProvider(req.params.id))) {
+    changeRequest = await store.submitProviderChange(req.params.id, { pincodes });
+    pincodes = undefined;
+  }
   const coverage = store.updateProviderCoverage(
     req.params.id,
-    { pincodes: req.body?.pincodes, acceptingRequests: req.body?.acceptingRequests, schedule: req.body?.schedule },
+    { pincodes, acceptingRequests: req.body?.acceptingRequests, schedule: req.body?.schedule },
     { allowServeAllAreas: false }
   );
-  res.json(coverage);
+  res.json(changeRequest ? { ...coverage, changeRequest } : coverage);
 }));
 
 app.patch("/api/admin/providers/:id/coverage", auth.requireAuth("admin"), ah(async (req, res) => {
@@ -574,8 +582,10 @@ app.patch("/api/providers/:id/profile", auth.requireAuth("provider"), ah(async (
   if (req.user.id !== req.params.id) return res.status(403).json({ error: "Not your provider account" });
   const existing = await store.getProvider(req.params.id);
   if (!existing) return res.status(404).json({ error: "Provider not found" });
-  if (existing.verificationStatus === "approved") {
-    return res.status(403).json({ error: "Your account is verified — contact support to change account information" });
+  // A verified provider's changes wait for Super Admin approval; the profile keeps its details until then.
+  if (store.providerChangesNeedApproval(existing)) {
+    const changeRequest = await store.submitProviderChange(req.params.id, req.body || {});
+    return res.json({ ...existing, changeRequest });
   }
   const provider = await store.updateProviderProfile(req.params.id, req.body || {});
   if (!provider) return res.status(404).json({ error: "Provider not found" });
@@ -686,6 +696,17 @@ app.post("/api/providers/:id/photo", auth.requireAuth("provider"), upload.single
   const drop = () => req.file && require("fs").unlink(req.file.path, () => {});
   if (req.user.id !== req.params.id) { drop(); return res.status(403).json({ error: "Not your provider account" }); }
   if (!req.file) return res.status(400).json({ error: "Choose a photo to upload" });
+  const current = await store.getProvider(req.params.id);
+  if (!current) { drop(); return res.status(404).json({ error: "Provider not found" }); }
+  if (store.providerChangesNeedApproval(current)) {
+    try {
+      const changeRequest = await store.submitProviderChange(req.params.id, { photo: `/uploads/${req.file.filename}` });
+      return res.json({ ...current, changeRequest });
+    } catch (e) {
+      drop();
+      return res.status(e.status || 500).json({ error: e.message });
+    }
+  }
   const provider = await store.setProviderPhoto(req.params.id, `/uploads/${req.file.filename}`, `Provider ${req.user.id}${req.staff ? ` (staff ${req.staff.name})` : ""}`);
   if (!provider) { drop(); return res.status(404).json({ error: "Provider not found" }); }
   io.emit("provider:updated", publicProvider(provider));
@@ -694,6 +715,12 @@ app.post("/api/providers/:id/photo", auth.requireAuth("provider"), upload.single
 
 app.delete("/api/providers/:id/photo", auth.requireAuth("provider"), ah(async (req, res) => {
   if (req.user.id !== req.params.id) return res.status(403).json({ error: "Not your provider account" });
+  const current = await store.getProvider(req.params.id);
+  if (!current) return res.status(404).json({ error: "Provider not found" });
+  if (store.providerChangesNeedApproval(current)) {
+    const changeRequest = await store.submitProviderChange(req.params.id, { photo: null });
+    return res.json({ ...current, changeRequest });
+  }
   const provider = await store.setProviderPhoto(req.params.id, null, `Provider ${req.user.id}${req.staff ? ` (staff ${req.staff.name})` : ""}`);
   if (!provider) return res.status(404).json({ error: "Provider not found" });
   io.emit("provider:updated", publicProvider(provider));
@@ -707,10 +734,10 @@ app.post("/api/providers/:id/services/:serviceId/image", auth.requireAuth("provi
   if (req.user.id !== req.params.id) { drop(); return res.status(403).json({ error: "Not your provider account" }); }
   if (!req.file) return res.status(400).json({ error: "Choose a photo to upload" });
   try {
-    const service = await store.setProviderServiceImage(req.params.id, req.params.serviceId, `/uploads/${req.file.filename}`, providerActor(req));
-    if (!service) { drop(); return res.status(404).json({ error: "Service not found" }); }
-    rt.service("service:updated", service);
-    res.json(service);
+    const result = await store.setProviderServiceImage(req.params.id, req.params.serviceId, `/uploads/${req.file.filename}`, providerActor(req));
+    if (!result) { drop(); return res.status(404).json({ error: "Service not found" }); }
+    if (!result.changeRequest) rt.service("service:updated", result.service);
+    res.json({ ...result.service, changeRequest: result.changeRequest });
   } catch (e) {
     drop();
     res.status(e.status || 500).json({ error: e.message });
@@ -720,10 +747,10 @@ app.post("/api/providers/:id/services/:serviceId/image", auth.requireAuth("provi
 app.delete("/api/providers/:id/services/:serviceId/image", auth.requireAuth("provider"), ah(async (req, res) => {
   if (req.user.id !== req.params.id) return res.status(403).json({ error: "Not your provider account" });
   try {
-    const service = await store.setProviderServiceImage(req.params.id, req.params.serviceId, null, providerActor(req));
-    if (!service) return res.status(404).json({ error: "Service not found" });
-    rt.service("service:updated", service);
-    res.json(service);
+    const result = await store.setProviderServiceImage(req.params.id, req.params.serviceId, null, providerActor(req));
+    if (!result) return res.status(404).json({ error: "Service not found" });
+    if (!result.changeRequest) rt.service("service:updated", result.service);
+    res.json({ ...result.service, changeRequest: result.changeRequest });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
@@ -1229,6 +1256,27 @@ app.patch("/api/services/:id", auth.requireAuth("admin"), ah(async (req, res) =>
   rt.service("service:updated", service);
   rt.activity((await store.listActivities(1))[0]);
   res.json(service);
+}));
+
+// ---- provider profile / logo / service-area approval ----
+app.get("/api/provider/profile-changes", auth.requireAuth("provider"), ah(async (req, res) => {
+  res.json(store.listProviderChanges({ providerId: req.user.id }));
+}));
+
+app.get("/api/admin/provider-changes", auth.requireAuth("admin"), ah(async (req, res) => {
+  res.json(store.listProviderChanges({ status: req.query.status }));
+}));
+
+app.post("/api/admin/provider-changes/:id/review", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { decision, note } = req.body || {};
+  const result = await store.reviewProviderChange(req.params.id, decision, { note }, actorOf(req));
+  if (!result) return res.status(404).json({ error: "Change request not found" });
+  if (decision === "approved") {
+    const provider = await store.getProvider(result.providerId);
+    io.emit("provider:updated", publicProvider(provider));
+  }
+  rt.activity((await store.listActivities(1))[0]);
+  res.json(result);
 }));
 
 // ---- service modification approval ----

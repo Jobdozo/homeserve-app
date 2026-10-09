@@ -2,11 +2,13 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
+import PendingProfileChanges from "../components/PendingProfileChanges";
 
 export default function EditProfileScreen() {
   const navigate = useNavigate();
   const { provider, categories, updateProfile, updateCoverage, showToast } = useApp();
-  const locked = provider.verificationStatus === "approved";
+  const verified = provider.verificationStatus === "approved";
+  const locked = false;
 
   const [name, setName] = useState(provider.name || "");
   const [category, setCategory] = useState(
@@ -50,17 +52,19 @@ export default function EditProfileScreen() {
       <ScreenHeader title="Edit Profile" />
 
       <div className="flex-1 space-y-5 px-4 pb-6 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-10">
-        {locked && (
+        {verified && (
           <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-700">
             <span className="text-xl">✅</span>
             <div>
               <p className="text-[13.5px] font-bold">Account verified</p>
               <p className="mt-0.5 text-[12px] leading-snug">
-                Your account information is locked. Contact support if something needs to change.
+                Changes you save here — details, photo and PIN codes — are sent to Tikdum for approval. Your profile keeps its current details until they are approved.
               </p>
             </div>
           </div>
         )}
+
+        <PendingProfileChanges />
 
         <div>
           <h2 className="mb-2 text-[13px] font-bold text-gray-900">Basic Information</h2>
@@ -170,12 +174,10 @@ export default function EditProfileScreen() {
   );
 }
 
-// Always editable, regardless of verification lock — a provider's service
-// area is an ongoing operational choice, not an identity fact worth locking
-// down for fraud prevention the way name/category/business info are.
+// Always editable. For a verified account a new list waits for Tikdum approval before customers see it.
 function PincodeCoverage({ provider, updateCoverage }) {
   const coverage = provider.coverage || { pincodes: [], serveAllAreas: false };
-  const [input, setInput] = useState(coverage.pincodes.join(", "));
+  const [input, setInput] = useState((coverage.pincodes || []).join(", "));
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
