@@ -33,7 +33,7 @@ export default function AddOns({ anchorIds, title = "Add more services", subtitl
   const likeId = cart[0]?.serviceId;
 
   return (
-    <section>
+    <section className="min-w-0 max-w-full">
       <h2 className="text-[15px] font-bold text-gray-900 lg:text-lg">{title}</h2>
       {subtitle && <p className="mt-0.5 text-[11.5px] text-gray-400 lg:text-[13px]">{subtitle}</p>}
       <div className="no-scrollbar -mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-1 lg:mx-0 lg:px-0">

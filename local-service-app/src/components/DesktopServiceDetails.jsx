@@ -27,7 +27,7 @@ export default function DesktopServiceDetails({ service, provider, category, pct
         </nav>
       </div>
 
-      <div className="mx-auto grid max-w-6xl grid-cols-[1.15fr_1fr] items-start gap-12 px-8 pt-6">
+      <div className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] items-start gap-12 px-8 pt-6">
         {/* Left: photo + details */}
         <div>
           <div className="h-[420px] overflow-hidden rounded-3xl bg-gray-100">

@@ -183,7 +183,7 @@ export default function CartScreen() {
       <ScreenHeader title="Your Cart" subtitle={`${lines.length} service${lines.length > 1 ? "s" : ""}`} maxWidth="lg:max-w-6xl" />
 
       {/* Desktop: items and checkout details on the left, a sticky order summary on the right. */}
-      <div className="flex flex-1 flex-col lg:mx-auto lg:grid lg:w-full lg:max-w-6xl lg:grid-cols-[1fr_380px] lg:items-start lg:gap-10 lg:px-8 lg:pb-16">
+      <div className="flex flex-1 flex-col lg:mx-auto lg:grid lg:w-full lg:max-w-6xl lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-10 lg:px-8 lg:pb-16">
       <div className="flex-1 space-y-3 px-4 pb-6 lg:space-y-5 lg:px-0 lg:pb-0">
         {lines.map(({ item, service }) => (
           <div
