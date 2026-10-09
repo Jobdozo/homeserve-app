@@ -5,6 +5,7 @@
 // writing a credentials file is inconvenient) — never hardcoded here.
 const { initializeApp, applicationDefault, cert } = require("firebase-admin/app");
 const { getDataConnect } = require("firebase-admin/data-connect");
+const { addListLimits } = require("./listLimits");
 
 function loadCredential() {
   if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
@@ -23,8 +24,9 @@ const connectorConfig = {
 
 const dc = getDataConnect(connectorConfig, app);
 
+// List queries are asked for up to 5000 rows (see listLimits.js) — without it Data Connect stops at 100.
 async function query(gql, variables) {
-  const { data } = await dc.executeGraphqlRead(gql, { variables });
+  const { data } = await dc.executeGraphqlRead(addListLimits(gql), { variables });
   return data;
 }
 
