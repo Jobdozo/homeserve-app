@@ -40,6 +40,11 @@ body {
   background: #15803D;
 }
 
+/* On a phone this wrapper adds nothing; on a computer it holds the top bar and the page beside the menu. */
+.app-main {
+  display: contents;
+}
+
 .app-body {
   flex: 1;
   display: flex;
@@ -82,24 +87,35 @@ body {
 }
 
 @media (min-width: 1024px) {
+  /* A real web app: the menu on the left, the page filling the rest and scrolling on its own. */
   .app-shell {
-    height: auto;
-    min-height: 100dvh;
-    background: #eef6ef;
+    flex-direction: row;
+    height: 100dvh;
+    overflow: hidden;
+    background: #f6f5fc;
+  }
+  .app-main {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
   .app-body {
-    justify-content: center;
     overflow-y: auto;
-    padding: 28px 16px 48px;
+    justify-content: center;
+    padding-bottom: 48px;
   }
   .phone-frame {
-    max-width: 720px;
-    flex: none;
+    max-width: 1240px;
+    flex: 1;
     height: auto;
-    min-height: calc(100dvh - 56px - 76px);
-    border-radius: 20px;
-    border: 1px solid #eaf5ea;
-    box-shadow: 0 4px 28px -10px rgba(15, 60, 30, 0.1);
+    min-height: 0;
+    background: transparent;
+    overflow: visible;
+  }
+  .phone-frame.frame-narrow {
+    max-width: 860px;
   }
   .phone-frame .screen {
     overflow: visible;

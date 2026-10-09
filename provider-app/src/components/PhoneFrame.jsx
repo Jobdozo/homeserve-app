@@ -1,6 +1,7 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import BottomNav from "./BottomNav";
 import DesktopHeader from "./DesktopHeader";
+import DesktopSidebar from "./DesktopSidebar";
 import Toast from "./Toast";
 import OfflineBanner from "./OfflineBanner";
 import { useApp } from "../context/AppContext";
@@ -24,35 +25,46 @@ function ConnectionBanner() {
   );
 }
 
+// Phone: one column with the bottom bar. Computer: menu on the left, a slim bar on top, the page filling the rest.
 export function MainLayout() {
   const { loading } = useApp();
+  const { pathname } = useLocation();
+  // The profile menu is one long column, so it keeps a comfortable reading width on a big screen.
+  const narrow = pathname === "/profile";
   return (
     <div className="app-shell">
-      <DesktopHeader />
-      <div className="app-body">
-        <div className="phone-frame">
-          <OfflineBanner />
-          <ConnectionBanner />
-          <div className="screen no-scrollbar">{loading ? <LoadingState /> : <Outlet />}</div>
-          <BottomNav />
-          <Toast />
+      <DesktopSidebar />
+      <div className="app-main">
+        <DesktopHeader />
+        <div className="app-body">
+          <div className={"phone-frame" + (narrow ? " frame-narrow" : "")}>
+            <OfflineBanner />
+            <ConnectionBanner />
+            <div className="screen no-scrollbar">{loading ? <LoadingState /> : <Outlet />}</div>
+            <BottomNav />
+            <Toast />
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
+// Detail pages (a request, add a service, settings…) read best in a narrower column.
 export function DetailLayout() {
   const { loading } = useApp();
   return (
     <div className="app-shell">
-      <DesktopHeader />
-      <div className="app-body">
-        <div className="phone-frame">
-          <OfflineBanner />
-          <ConnectionBanner />
-          <div className="screen no-scrollbar">{loading ? <LoadingState /> : <Outlet />}</div>
-          <Toast />
+      <DesktopSidebar />
+      <div className="app-main">
+        <DesktopHeader />
+        <div className="app-body">
+          <div className="phone-frame frame-narrow">
+            <OfflineBanner />
+            <ConnectionBanner />
+            <div className="screen no-scrollbar">{loading ? <LoadingState /> : <Outlet />}</div>
+            <Toast />
+          </div>
         </div>
       </div>
     </div>

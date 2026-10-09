@@ -57,7 +57,7 @@ export default function RequestsScreen() {
         ))}
       </div>
 
-      <div className="flex-1 space-y-3 px-4 py-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 lg:px-0 lg:py-6">
+      <div className="flex-1 space-y-3 px-4 py-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 lg:px-0 lg:py-6 xl:grid-cols-3">
         {filtered.length === 0 && (
           <div className="mt-10 flex flex-col items-center gap-2 text-center lg:col-span-2">
             <span className="text-3xl">📭</span>
