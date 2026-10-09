@@ -3,6 +3,7 @@ import { api } from "../api";
 import { useApp } from "../context/AppContext";
 import { DownloadIcon } from "../components/icons";
 import { columnsFromRows, downloadCsv, stamp, toCsv } from "../utils/csv";
+import useSubcategories from "../utils/useSubcategories";
 
 const IMPORTS = {
   categories: {
@@ -30,6 +31,7 @@ const IMPORTS = {
 
 export default function DataManagementPage() {
   const { providers, services, bookings, categories, showToast, can } = useApp();
+  const subcategories = useSubcategories();
   const [busy, setBusy] = useState(null);
 
   const exporters = [
@@ -87,6 +89,23 @@ export default function DataManagementPage() {
         ["Status", "status"],
         ["Rating", "rating"],
         ["Reviews", "reviewCount"],
+      ],
+    },
+    {
+      // Exactly the columns of the Services import, so a file exported here can be edited and imported again.
+      key: "services-import",
+      label: "Services (import format)",
+      note: "Same columns as the Services import — includes the type, tagline and what's included",
+      load: async () => services,
+      columns: [
+        ["provider_phone", (s) => providers.find((p) => p.id === s.providerId)?.phone || ""],
+        ["category", "categoryId"],
+        ["name", "name"],
+        ["price", "price"],
+        ["original_price", (s) => s.originalPrice || ""],
+        ["sub_category", (s) => subcategories.find((x) => x.id === s.subcategoryId)?.name || ""],
+        ["tagline", (s) => s.tagline || ""],
+        ["includes", (s) => (s.includes || []).join("|")],
       ],
     },
     {
