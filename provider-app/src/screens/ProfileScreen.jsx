@@ -36,7 +36,7 @@ export default function ProfileScreen() {
   ];
 
   return (
-    <div className="flex flex-1 flex-col pb-4 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-16 lg:pt-8">
+    <div className="flex flex-1 flex-col pb-4 lg:px-8 lg:pb-12 lg:pt-8">
       <div className="flex items-center justify-between px-4 pt-1 lg:px-0 lg:pt-0">
         <h1 className="text-lg font-bold text-gray-900 lg:text-2xl">Profile</h1>
         {can("profile.edit") && (
@@ -54,7 +54,9 @@ export default function ProfileScreen() {
           Signed in as <b>{staff.name}</b> · {staff.role}
         </p>
       )}
-      <div className="mx-4 mt-4 flex items-center gap-3 lg:mx-0 lg:mt-6">
+      <div className="lg:mt-6 lg:grid lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start lg:gap-6">
+      <div className="flex flex-col lg:gap-4">
+      <div className="mx-4 mt-4 flex items-center gap-3 lg:mx-0 lg:mt-0 lg:rounded-2xl lg:border lg:border-gray-100 lg:bg-white lg:p-6">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-light text-3xl lg:h-20 lg:w-20 lg:text-4xl">
           {providerProfile.avatar}
         </div>
@@ -70,7 +72,7 @@ export default function ProfileScreen() {
         </div>
       </div>
 
-      <div className="mx-4 mt-5 rounded-2xl border border-gray-100 p-4 lg:mx-0 lg:p-6">
+      <div className="mx-4 mt-5 rounded-2xl border border-gray-100 p-4 lg:mx-0 lg:mt-0 lg:bg-white lg:p-6">
         <h2 className="mb-3 text-[13px] font-bold text-gray-900 lg:text-[15px]">Business Information</h2>
         <InfoRow label="Business Name" value={providerProfile.businessName} />
         <InfoRow label="Experience" value={providerProfile.experience} />
@@ -80,14 +82,16 @@ export default function ProfileScreen() {
         <InfoRow label="GST Number" value={providerProfile.gstNumber} last />
       </div>
 
-      <div className="mx-4 mt-4 divide-y divide-gray-100 rounded-2xl border border-gray-100 lg:mx-0">
+      </div>
+      <div>
+      <div className="mx-4 mt-4 divide-y divide-gray-100 rounded-2xl border border-gray-100 lg:mx-0 lg:mt-0 lg:grid lg:grid-cols-2 lg:gap-3 lg:divide-y-0 lg:border-0">
         {menuItems.filter((item) => !item.perm || can(item.perm)).map((item) => (
           <button
             key={item.label}
             onClick={() =>
               item.path ? navigate(item.path) : item.href ? window.open(item.href, "_blank") : showToast(`${item.label} coming soon`)
             }
-            className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50 lg:px-5 lg:py-4"
+            className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50 lg:rounded-2xl lg:border lg:border-gray-100 lg:bg-white lg:px-5 lg:py-5 lg:hover:border-brand/40 lg:hover:shadow-sm"
           >
             <span className="text-lg">{item.icon}</span>
             <span className="flex-1 text-[13px] font-medium text-gray-700">{item.label}</span>
@@ -103,15 +107,17 @@ export default function ProfileScreen() {
 
       <button
         onClick={logout}
-        className="mx-4 mt-4 flex items-center justify-center gap-2 rounded-2xl border border-red-200 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 lg:mx-0"
+        className="mx-4 mt-4 flex items-center justify-center gap-2 rounded-2xl border border-red-200 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 lg:mx-0 lg:w-full lg:max-w-[240px]"
       >
         <LogoutIcon width={16} height={16} /> Logout
       </button>
       {!staff && (
-        <button onClick={() => setDeleting(true)} className="mx-4 mt-3 py-2 text-center text-[12.5px] font-medium text-gray-400 underline lg:mx-0">
+        <button onClick={() => setDeleting(true)} className="mx-4 mt-3 block py-2 text-center text-[12.5px] font-medium text-gray-400 underline lg:mx-0 lg:text-left">
           Delete account
         </button>
       )}
+      </div>
+      </div>
       {deleting && <DeleteAccountModal onClose={() => setDeleting(false)} />}
     </div>
   );

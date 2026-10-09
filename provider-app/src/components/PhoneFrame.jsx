@@ -1,4 +1,4 @@
-import { Outlet, useLocation } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 import BottomNav from "./BottomNav";
 import DesktopHeader from "./DesktopHeader";
 import DesktopSidebar from "./DesktopSidebar";
@@ -28,16 +28,13 @@ function ConnectionBanner() {
 // Phone: one column with the bottom bar. Computer: menu on the left, a slim bar on top, the page filling the rest.
 export function MainLayout() {
   const { loading } = useApp();
-  const { pathname } = useLocation();
-  // The profile menu is one long column, so it keeps a comfortable reading width on a big screen.
-  const narrow = pathname === "/profile";
   return (
     <div className="app-shell">
       <DesktopSidebar />
       <div className="app-main">
         <DesktopHeader />
         <div className="app-body">
-          <div className={"phone-frame" + (narrow ? " frame-narrow" : "")}>
+          <div className="phone-frame">
             <OfflineBanner />
             <ConnectionBanner />
             <div className="screen no-scrollbar">{loading ? <LoadingState /> : <Outlet />}</div>
