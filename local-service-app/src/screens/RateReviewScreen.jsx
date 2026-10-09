@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { StarIcon } from "../components/icons";
+import Avatar from "../components/Avatar";
 
 export default function RateReviewScreen() {
   const { bookingId } = useParams();
@@ -44,8 +45,8 @@ export default function RateReviewScreen() {
         <p className="text-[12.5px] text-gray-400">Your feedback helps us improve</p>
 
         <div className="mt-5 flex items-center gap-3 rounded-2xl bg-gray-50 px-4 py-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-light text-lg">
-            {provider?.avatar}
+          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-brand-light text-lg">
+            <Avatar provider={provider} fallback="" />
           </div>
           <div>
             <p className="text-[13px] font-semibold text-gray-900">{provider?.name}</p>

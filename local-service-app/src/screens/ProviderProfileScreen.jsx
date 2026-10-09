@@ -7,6 +7,7 @@ import { StarIcon, ShieldCheckIcon } from "../components/icons";
 import { formatCount, discountPct } from "../utils/format";
 import CategoryIcon from "../components/CategoryIcon";
 import Seo from "../components/Seo";
+import Avatar from "../components/Avatar";
 
 export default function ProviderProfileScreen() {
   const { providerId } = useParams();
@@ -80,8 +81,8 @@ export default function ProviderProfileScreen() {
 
       <div className="flex-1 px-4 pb-8 lg:mx-auto lg:w-full lg:max-w-3xl lg:px-8 lg:pb-16">
         <div className="flex items-center gap-3">
-          <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-3xl">
-            {provider.avatar}
+          <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-light text-3xl">
+            <Avatar provider={provider} fallback="" />
           </span>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">

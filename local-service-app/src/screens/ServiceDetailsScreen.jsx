@@ -9,6 +9,7 @@ import { formatCount, discountPct } from "../utils/format";
 import CategoryPhoto from "../components/CategoryPhoto";
 import Seo, { SITE_URL } from "../components/Seo";
 import DesktopServiceDetails from "../components/DesktopServiceDetails";
+import Avatar from "../components/Avatar";
 
 export default function ServiceDetailsScreen() {
   const { serviceId } = useParams();
@@ -115,7 +116,7 @@ export default function ServiceDetailsScreen() {
               onClick={() => navigate(`/provider/${provider.id}`)}
               className="mt-1.5 flex items-center gap-1.5 text-[12.5px] text-gray-500 hover:text-brand"
             >
-              <span>{provider.avatar}</span> by <span className="font-semibold underline">{provider.name}</span>
+              <span className="flex h-5 w-5 items-center justify-center overflow-hidden rounded-full bg-brand-light text-[12px]"><Avatar provider={provider} fallback="" /></span> by <span className="font-semibold underline">{provider.name}</span>
             </button>
           )}
           {(service.tagline || service.description) && (
