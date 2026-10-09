@@ -2805,13 +2805,14 @@ function deleteBanner(id) {
 // ---- home screen layout (CMS) ----
 // Configurable customer-home sections + richer banner placements. Stored as flat
 // JSON (see jsonStore.js) so no schema migration is needed.
-const HOME_SECTION_TYPES = ["categories", "services", "most_booked", "category"];
+const HOME_SECTION_TYPES = ["categories", "services", "most_booked", "category", "lowest_per_category"];
 
 // First-run layout matching the launch design: category carousel, most booked,
 // the three themed rows, then the full service-card list (banners are
 // interleaved after its 3rd and 5th items by banner placement).
 const DEFAULT_HOME_SECTIONS = [
   { key: "categories", type: "categories", title: "Service Categories", enabled: true, limit: 10 },
+  { key: "lowest_per_category", type: "lowest_per_category", title: "Lowest prices by category", enabled: true, limit: 12 },
   { key: "most_booked", type: "most_booked", title: "Most Booked Services", enabled: true, limit: 8 },
   { key: "cleaning", type: "category", title: "Cleaning Essentials", match: "clean", enabled: true, limit: 8 },
   { key: "appliance", type: "category", title: "Appliance Repair & Services", match: "appliance, repair", enabled: true, limit: 8 },
@@ -2819,10 +2820,35 @@ const DEFAULT_HOME_SECTIONS = [
   { key: "services", type: "services", title: "Services For You", enabled: true, limit: 12 },
 ];
 
+// One-time additions to a layout that was saved before a section existed. Each runs once, ever,
+// so a section the team later hides or deletes is never put back.
+function runHomeSectionMigrations(sections) {
+  const done = new Set(jsonStore.readAll("homeLayoutMigrations").map((m) => m.id));
+  if (!done.has("2026-10-lowest-per-category")) {
+    if (!sections.some((s) => s.type === "lowest_per_category")) {
+      // Goes in right after the category carousel; everything below moves down one place.
+      const ordered = [...sections].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const at = Math.max(ordered.findIndex((s) => s.type === "categories") + 1, 0);
+      ordered.forEach((s, i) => {
+        const order = i >= at ? i + 1 : i;
+        if (s.order !== order) jsonStore.update("homeSections", s.id, { order });
+      });
+      jsonStore.insert("homeSections", { key: "lowest_per_category", type: "lowest_per_category", title: "Lowest prices by category", enabled: true, limit: 12, order: at });
+    }
+    jsonStore.insert("homeLayoutMigrations", { id: "2026-10-lowest-per-category", at: new Date().toISOString() });
+    sections = jsonStore.readAll("homeSections");
+  }
+  return sections;
+}
+
 function listHomeSections() {
   let sections = jsonStore.readAll("homeSections");
   if (sections.length === 0) {
     sections = DEFAULT_HOME_SECTIONS.map((s, i) => jsonStore.insert("homeSections", { ...s, order: i }));
+    // A fresh layout already contains the newest sections.
+    jsonStore.insert("homeLayoutMigrations", { id: "2026-10-lowest-per-category", at: new Date().toISOString() });
+  } else {
+    sections = runHomeSectionMigrations(sections);
   }
   return sections.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }

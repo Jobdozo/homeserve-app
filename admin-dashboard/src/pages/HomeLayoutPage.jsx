@@ -13,6 +13,7 @@ const SECTION_TYPES = [
   { value: "categories", label: "Service category carousel" },
   { value: "services", label: "Service cards (banners can sit inside)" },
   { value: "most_booked", label: "Most booked services" },
+  { value: "lowest_per_category", label: "One service per category (the lowest price)" },
   { value: "category", label: "Themed row (a category or keywords)" },
 ];
 const TYPE_LABEL = Object.fromEntries(SECTION_TYPES.map((t) => [t.value, t.label]));

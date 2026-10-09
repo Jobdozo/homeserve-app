@@ -194,6 +194,71 @@ function TypeCarousel({ section, category, chips }) {
   );
 }
 
+// The cheapest service of each category — one card per category, like the "popular
+// in each category" rows on Urban Company. Ties go to the better reviewed service.
+function lowestPerCategory(categories, services, limit) {
+  const out = [];
+  for (const c of categories) {
+    const mine = dedupeByName(services.filter((s) => s.categoryId === c.id && Number(s.price) > 0));
+    if (mine.length === 0) continue;
+    const best = [...mine].sort((a, b) => a.price - b.price || b.reviewCount - a.reviewCount)[0];
+    out.push({ category: c, service: best, more: mine.length - 1 });
+  }
+  return out.slice(0, limit);
+}
+
+function LowestCard({ category, service, more }) {
+  const navigate = useNavigate();
+  const pct = discountPct(service.price, service.originalPrice);
+  return (
+    <button
+      onClick={() => navigate(`/find-service/${service.id}`)}
+      className="relative w-40 flex-shrink-0 overflow-hidden rounded-2xl bg-white text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.98] lg:w-56"
+    >
+      {pct > 0 && (
+        <span className="absolute left-2 top-2 z-10 rounded-full bg-emerald-500 px-2 py-0.5 text-[9.5px] font-bold text-white">{pct}% OFF</span>
+      )}
+      <div className="h-28 overflow-hidden lg:h-40">
+        <CategoryPhoto categoryId={service.categoryId} imageUrl={service.imageUrl} size={96} />
+      </div>
+      <div className="p-2.5 lg:p-4">
+        <p className="text-[10.5px] font-semibold uppercase tracking-wide text-brand lg:text-[11.5px]">{category.name}</p>
+        <p className="mt-0.5 text-[12.5px] font-semibold leading-snug text-gray-900 lg:text-[15px]">{service.name}</p>
+        <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-500 lg:text-[13px]">
+          {service.reviewCount > 0 ? (
+            <>
+              <StarIcon filled width={12} height={12} /> {service.rating} ({formatCount(service.reviewCount)})
+            </>
+          ) : (
+            <span className="text-gray-400">New</span>
+          )}
+        </div>
+        <div className="mt-1 flex items-center gap-1.5">
+          <span className="text-[13px] font-bold text-gray-900 lg:text-[15px]">₹{service.price}</span>
+          {pct > 0 && <span className="text-[10.5px] text-gray-400 line-through lg:text-[12px]">₹{service.originalPrice}</span>}
+        </div>
+        {more > 0 && <p className="mt-1 text-[10.5px] text-gray-400 lg:text-[12px]">+{more} more in {category.name}</p>}
+      </div>
+    </button>
+  );
+}
+
+function LowestPerCategory({ section, categories, services }) {
+  const navigate = useNavigate();
+  const items = lowestPerCategory(categories, services, section.limit || 12);
+  if (items.length === 0) return null;
+  return (
+    <>
+      <SectionHeader title={section.title} onSeeAll={() => navigate("/categories")} />
+      <Carousel>
+        {items.map((it) => (
+          <LowestCard key={it.category.id} {...it} />
+        ))}
+      </Carousel>
+    </>
+  );
+}
+
 function ServiceCarousel({ section, items, counts, seeAll }) {
   if (items.length === 0) return null;
   return (
@@ -269,6 +334,9 @@ export default function HomeSections({ sections, services, categories, banners, 
         const limit = section.limit || 8;
         if (section.type === "categories") {
           return <CategoryCarousel key={section.id} section={section} categories={categories} />;
+        }
+        if (section.type === "lowest_per_category") {
+          return <LowestPerCategory key={section.id} section={section} categories={categories} services={services} />;
         }
         if (section.type === "most_booked") {
           const items = dedupeByName(
