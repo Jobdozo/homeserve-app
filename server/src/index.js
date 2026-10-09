@@ -1392,9 +1392,11 @@ app.post("/api/orders/:orderId/respond", auth.requireAuth("provider"), ah(async 
   }
   const bookings = [];
   const failed = [];
-  for (const b of mine) {
+  const me = await store.getProvider(req.user.id);
+  const notice = mine.length > 1 ? `${me?.name || "The provider"} accepted your order of ${mine.length} services` : undefined;
+  for (const [i, b] of mine.entries()) {
     try {
-      const booking = await store.updateBookingStatus(b.id, "Accepted");
+      const booking = await store.updateBookingStatus(b.id, "Accepted", mine.length > 1 ? { customerMessage: i === 0 ? notice : null } : undefined);
       if (req.staff && !staff.assignmentFor(b.id)) await staff.assignOrder(req.user.id, booking, req.staff.id, { name: req.staff.name });
       rt.booking("booking:updated", booking);
       bookings.push(booking);
@@ -1699,7 +1701,7 @@ app.get("/api/bookings/:id/otp", auth.requireAuth("customer"), ah(async (req, re
   const booking = await store.getBooking(req.params.id);
   if (!booking) return res.status(404).json({ error: "Booking not found" });
   if (booking.customerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
-  res.json(store.getBookingOtpsForCustomer(req.params.id));
+  res.json(await store.getBookingOtpsForCustomer(req.params.id));
 }));
 
 app.post("/api/bookings/:id/otp/verify", auth.requireAuth("provider"), ah(async (req, res) => {
@@ -1707,7 +1709,7 @@ app.post("/api/bookings/:id/otp/verify", auth.requireAuth("provider"), ah(async 
   if (!booking) return res.status(404).json({ error: "Booking not found" });
   if (booking.providerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
   const updated = await store.verifyBookingOtp(req.params.id, req.body?.type, req.body?.code);
-  rt.booking("booking:updated", updated);
+  for (const sibling of await store.orderGroup(updated)) rt.booking("booking:updated", sibling.id === updated.id ? updated : sibling);
   rt.activity((await store.listActivities(1))[0]);
   res.json(maskCompleted(updated));
 }));

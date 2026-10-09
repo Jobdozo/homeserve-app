@@ -23,7 +23,7 @@ const statusStyles = {
 export default function BookingDetailsScreen() {
   const { bookingId } = useParams();
   const navigate = useNavigate();
-  const { getBooking, getService, getProvider, cancelBooking, advanceBookingStatus, showToast } = useApp();
+  const { getBooking, getService, getProvider, cancelBooking, advanceBookingStatus, showToast, bookings } = useApp();
 
   const booking = getBooking(bookingId);
   const [liveLocation, setLiveLocation] = useState(null);
@@ -66,6 +66,9 @@ export default function BookingDetailsScreen() {
   const currentIdx = STATUS_STEPS.indexOf(booking.status);
   const isCancelled = booking.status === "Cancelled" || booking.status === "Rejected";
   const isLiveProvider = provider?.live;
+  // The other services booked in the same order from this provider: one request, one Request ID, one code.
+  const others = booking.orderId ? bookings.filter((o) => o.orderId === booking.orderId && o.providerId === booking.providerId && o.id !== booking.id) : [];
+  const requestTotal = others.reduce((sum, o) => sum + (o.amount || 0), booking.amount);
 
   const handleCancel = async () => {
     await cancelBooking(booking.id);
@@ -82,7 +85,7 @@ export default function BookingDetailsScreen() {
     <div className="flex flex-1 flex-col">
       <ScreenHeader
         title="Booking Details"
-        subtitle={booking.orderId ? `#${booking.ref || booking.id} · Order #${booking.orderId}` : `#${booking.ref || booking.id}`}
+        subtitle={`Request ID: #${booking.ref || booking.id}`}
         right={
           <span className={`rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${statusStyles[booking.status]}`}>
             {booking.status}
@@ -161,6 +164,29 @@ export default function BookingDetailsScreen() {
             </div>
           )}
         </div>
+
+        {others.length > 0 && (
+          <div>
+            <h2 className="mb-2 text-[13px] font-bold text-gray-900">Services in this request ({others.length + 1})</h2>
+            <div className="divide-y divide-gray-100 rounded-2xl border border-gray-100 text-[12.5px]">
+              {[booking, ...others].map((o) => (
+                <button
+                  key={o.id}
+                  onClick={() => o.id !== booking.id && navigate(`/booking/${o.id}`)}
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
+                >
+                  <span className="min-w-0 truncate text-gray-800">{getService(o.serviceId)?.name || o.service?.name}</span>
+                  <span className="flex-shrink-0 font-semibold text-gray-900">₹{o.amount}</span>
+                </button>
+              ))}
+              <div className="flex items-center justify-between px-3 py-2.5 font-bold text-gray-900">
+                <span>Total</span>
+                <span>₹{requestTotal}</span>
+              </div>
+            </div>
+            <p className="mt-1.5 text-[11px] text-gray-400">One code starts and finishes all of these together.</p>
+          </div>
+        )}
 
         {/* Booking info */}
         <div>

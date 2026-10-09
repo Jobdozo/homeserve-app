@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { StarIcon } from "./icons";
 import CategoryPhoto from "./CategoryPhoto";
+import { groupBookings } from "../utils/groupBookings";
 
 const ACTIVE = ["Pending", "Accepted", "In Progress"];
 const CLOSED = ["Cancelled", "Rejected"];
@@ -55,12 +56,15 @@ export default function DesktopBookings() {
     { label: "Spent on completed jobs", value: `₹${stats.spent}`, tone: "text-gray-900" },
   ];
 
-  const rebook = (serviceId) => {
-    addToCart(serviceId);
+  const rebook = (serviceIds) => {
+    serviceIds.forEach((id) => addToCart(id));
     navigate("/cart");
   };
 
-  const renderRow = (b) => {
+  // An order with several services from one provider shows as one row: one Request ID, the total, the services listed.
+  const renderGroup = (g) => renderRow(g.first, g.count > 1 ? g : null);
+
+  const renderRow = (b, g) => {
     const service = getService(b.serviceId);
     if (!service) return null;
     const provider = getProvider(b.providerId);
@@ -85,7 +89,7 @@ export default function DesktopBookings() {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3">
-            <p className="truncate text-[17px] font-bold text-gray-900">{service.name}</p>
+            <p className="truncate text-[17px] font-bold text-gray-900">{g ? `${g.count} services` : service.name}</p>
             <span className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ${statusStyles[b.status] || "bg-gray-100 text-gray-600"}`}>
               {b.status}
             </span>
@@ -97,10 +101,11 @@ export default function DesktopBookings() {
             {provider?.name ? `${provider.name} · ` : ""}
             {b.address?.line || "—"}
           </p>
+          {g && <p className="mt-0.5 line-clamp-2 text-[13px] text-gray-500">{g.items.map((i) => getService(i.serviceId)?.name).filter(Boolean).join(" · ")}</p>}
           <p className="mt-0.5 text-[12px] text-gray-400">Request ID: #{b.ref || b.id}</p>
         </div>
         <div className="flex flex-shrink-0 flex-col items-end gap-3">
-          <p className="text-[20px] font-extrabold text-gray-900">₹{b.amount}</p>
+          <p className="text-[20px] font-extrabold text-gray-900">₹{g ? g.total : b.amount}</p>
           <div className="flex items-center gap-2">
             {canChat && (
               <button onClick={stop(() => navigate(`/chat/${b.id}`))} className="rounded-lg border border-gray-200 px-3.5 py-1.5 text-[13px] font-semibold text-gray-700 hover:border-brand hover:text-brand">
@@ -113,7 +118,7 @@ export default function DesktopBookings() {
               </button>
             )}
             {canRebook && (
-              <button onClick={stop(() => rebook(service.id))} className="rounded-lg bg-brand px-3.5 py-1.5 text-[13px] font-semibold text-white hover:bg-brand-dark">
+              <button onClick={stop(() => rebook(g ? g.items.map((i) => i.serviceId) : [service.id]))} className="rounded-lg bg-brand px-3.5 py-1.5 text-[13px] font-semibold text-white hover:bg-brand-dark">
                 Book again
               </button>
             )}
@@ -176,14 +181,14 @@ export default function DesktopBookings() {
             {upcoming.length > 0 && (
               <section className="mb-10">
                 <h2 className="mb-4 text-[20px] font-extrabold tracking-tight text-gray-900">Upcoming &amp; active</h2>
-                <div className="space-y-4">{upcoming.map(renderRow)}</div>
+                <div className="space-y-4">{groupBookings(upcoming).map(renderGroup)}</div>
               </section>
             )}
 
             {past.length > 0 && (
               <section>
                 {tab === "All" && <h2 className="mb-4 text-[20px] font-extrabold tracking-tight text-gray-900">Past bookings</h2>}
-                <div className="space-y-4">{past.map(renderRow)}</div>
+                <div className="space-y-4">{groupBookings(past).map(renderGroup)}</div>
               </section>
             )}
 

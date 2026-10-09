@@ -92,7 +92,7 @@ export default function BookingsScreen() {
             <div key={group.orderId} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-card lg:p-4">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-[11.5px] font-semibold text-gray-500">
-                  Order #{group.orderId} · {group.items.length} services
+                  Request ID #{group.items[0].ref || group.orderId} · {group.items.length} services
                 </p>
                 <p className="text-[12.5px] font-bold text-gray-900">
                   ₹{group.items.reduce((sum, b) => sum + b.amount, 0)}

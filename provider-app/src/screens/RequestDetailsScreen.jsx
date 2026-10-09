@@ -12,7 +12,7 @@ const LOCATION_TRACKED_STATUSES = ["Pending", "Accepted", "In Progress"];
 export default function RequestDetailsScreen() {
   const { requestId } = useParams();
   const navigate = useNavigate();
-  const { getRequest, acceptRequest, rejectRequest, swapRequest, showToast, can, staff, setRequestAssignee } = useApp();
+  const { getRequest, requests, acceptRequest, rejectRequest, swapRequest, showToast, can, staff, setRequestAssignee } = useApp();
   const request = getRequest(requestId);
   const [liveLocation, setLiveLocation] = useState(null);
   const [swapOpen, setSwapOpen] = useState(false);
@@ -60,6 +60,9 @@ export default function RequestDetailsScreen() {
   }
 
   const customer = request.customer;
+  // One request: every service of this order that was booked with this provider.
+  const siblings = request.orderId ? requests.filter((r) => r.orderId === request.orderId && r.id !== request.id) : [];
+  const requestTotal = siblings.reduce((sum, r) => sum + (r.amount || 0), request.amount || 0);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -80,6 +83,29 @@ export default function RequestDetailsScreen() {
           </div>
           <p className="text-lg font-extrabold text-brand">₹{request.amount}</p>
         </div>
+
+        {siblings.length > 0 && (
+          <div>
+            <h2 className="mb-2 text-[13px] font-bold text-gray-900">Services in this request ({siblings.length + 1})</h2>
+            <div className="divide-y divide-gray-100 rounded-2xl border border-gray-100 text-[12.5px]">
+              {[request, ...siblings].map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => r.id !== request.id && navigate(`/requests/${r.id}`)}
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
+                >
+                  <span className="min-w-0 truncate text-gray-800">{r.service?.name}</span>
+                  <span className="flex-shrink-0 font-semibold text-gray-900">₹{r.amount}</span>
+                </button>
+              ))}
+              <div className="flex items-center justify-between px-3 py-2.5 font-bold text-gray-900">
+                <span>Total</span>
+                <span>₹{requestTotal}</span>
+              </div>
+            </div>
+            <p className="mt-1.5 text-[11px] text-gray-400">One code starts and finishes all of these together.</p>
+          </div>
+        )}
 
         {!["Rejected", "Cancelled", "Swapped"].includes(request.status) &&
           (request.assignedStaff || (can("orders.assign") && request.status !== "Completed")) && (

@@ -153,7 +153,7 @@ function OrderCard({ group }) {
             <span className="truncate">{r.address?.line}</span>
           </div>
           <div className="mt-1 flex items-center justify-between">
-            <span className="text-[10.5px] text-gray-400">{r.date} · {r.time}</span>
+            <span className="text-[10.5px] text-gray-400">Request ID: #{r.ref} · {r.date} · {r.time}</span>
             <span className="text-[13px] font-bold text-brand">₹{group.total}</span>
           </div>
         </div>

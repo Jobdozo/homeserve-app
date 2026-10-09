@@ -376,6 +376,21 @@ function generateRefCode() {
   return L() + L() + D() + D() + L() + L() + D() + D();
 }
 
+// One Request ID for a whole order (a cart): every booking of the order shows the code of the
+// order's lead booking — the first one of the order that was ever read. orderId -> lead booking id.
+let leadByOrder = null;
+function refBookingId(b) {
+  if (!b?.orderId) return b?.id;
+  if (!leadByOrder) leadByOrder = new Map(jsonStore.readAll("orderLeads").map((r) => [r.id, r.bookingId]));
+  let lead = leadByOrder.get(b.orderId);
+  if (!lead) {
+    lead = b.id;
+    leadByOrder.set(b.orderId, lead);
+    jsonStore.insert("orderLeads", { id: b.orderId, bookingId: lead });
+  }
+  return lead;
+}
+
 function bookingRef(bookingId) {
   if (!bookingId) return undefined;
   loadBookingRefs();
@@ -415,7 +430,7 @@ function mapBooking(b, customer, service) {
   for (const e of b.bookingStatusEvents_on_booking || []) statusHistory[e.status] = e.at;
   return {
     id: b.id,
-    ref: bookingRef(b.id),
+    ref: bookingRef(refBookingId(b)),
     ...(b.orderId ? { orderId: b.orderId } : {}),
     serviceId: b.service?.id,
     providerId: b.provider?.id,
@@ -1779,7 +1794,9 @@ async function createOrder({ items, address, customerId, offerCode, referralCode
   return created;
 }
 
-async function updateBookingStatus(id, status) {
+// opts.customerMessage: undefined = the usual message, a string = that message instead, null = tell the customer nothing
+// (used when several bookings of one order change together and the customer gets a single notice).
+async function updateBookingStatus(id, status, opts = {}) {
   const existing = await fetchBookingWithRelations(id);
   if (!existing) return undefined;
   const now = new Date().toISOString();
@@ -1802,13 +1819,13 @@ async function updateBookingStatus(id, status) {
   cacheClear("openBookings");
   const provider = await getProvider(existing.providerId);
   const serviceName = existing.service?.name || "Service";
-  await logActivity("booking", `Booking #${bookingRef(id)} (${serviceName}) marked ${status}`);
+  await logActivity("booking", `Booking #${bookingRef(refBookingId(existing))} (${serviceName}) marked ${status}`);
 
   // The customer is handed a fresh 4-digit code the moment a provider
   // accepts — the provider asks for it in person once they've actually
   // reached the customer, so "Accepted" isn't itself proof of arrival.
   if (status === "Accepted") {
-    ensureBookingOtp(id, "start");
+    ensureBookingOtp(await otpOwnerId(existing, "start"), "start");
     // Tikdum's job is delivering the customer to the provider, so the fee is
     // charged the moment the provider takes the request — not after the job.
     // A wallet-side failure must not undo the acceptance; the Completed step
@@ -1826,13 +1843,13 @@ async function updateBookingStatus(id, status) {
     Completed: `Your ${serviceName} service is complete — rate your experience`,
     Rejected: `${provider?.name || "The provider"} couldn't accept your ${serviceName} request`,
   };
-  if (customerMessages[status]) {
+  if (customerMessages[status] && opts.customerMessage !== null) {
     await addNotification({
       recipientType: "customer",
       recipientId: existing.customerId,
       type: "booking",
       title: `Booking ${status}`,
-      message: customerMessages[status],
+      message: opts.customerMessage || customerMessages[status],
       bookingId: id,
     });
   }
@@ -3679,7 +3696,7 @@ async function deductWalletCommission(providerId, booking, bookingId) {
   // GST tax invoice for the fee. The money has already moved, so a failure here
   // must not undo it — it shows up under "fees without an invoice" in Accounting.
   try {
-    accounting.recordFee({ provider: await getProvider(providerId), bookingId, bookingRef: bookingRef(bookingId), fee, at: new Date().toISOString() });
+    accounting.recordFee({ provider: await getProvider(providerId), bookingId, bookingRef: bookingRef(refBookingId(booking)), fee, at: new Date().toISOString() });
   } catch (e) {
     console.error(`Tax invoice for booking ${bookingId} failed:`, e);
   }
@@ -4037,9 +4054,34 @@ function ensureBookingOtp(bookingId, type) {
   });
 }
 
-function getBookingOtpsForCustomer(bookingId) {
-  const start = getBookingOtp(bookingId, "start");
-  const complete = getBookingOtp(bookingId, "complete");
+// The bookings of one order that go to one provider are ONE job: they are started and finished with a single
+// code. A booking that isn't part of an order is a group of one.
+async function orderGroup(booking) {
+  if (!booking?.orderId) return [booking];
+  const mine = await listBookings({ customerId: booking.customerId });
+  const group = mine.filter((b) => b.orderId === booking.orderId && b.providerId === booking.providerId);
+  return group.some((b) => b.id === booking.id) ? group : [...group, booking];
+}
+
+// Whose OTP record stands for the whole group: the smallest booking id that already has one, otherwise the
+// smallest one that is still live — the same answer for every booking of the group, whichever is asked.
+function pickOtpOwner(group, type) {
+  const ids = group.map((b) => b.id).sort();
+  const withOtp = ids.find((id) => getBookingOtp(id, type));
+  if (withOtp) return withOtp;
+  const live = group.filter((b) => !["Cancelled", "Rejected", "Swapped"].includes(b.status)).map((b) => b.id).sort();
+  return live[0] || ids[0];
+}
+
+async function otpOwnerId(booking, type) {
+  return pickOtpOwner(await orderGroup(booking), type);
+}
+
+async function getBookingOtpsForCustomer(bookingId) {
+  const booking = await fetchBookingWithRelations(bookingId);
+  const group = await orderGroup(booking);
+  const start = getBookingOtp(pickOtpOwner(group, "start"), "start");
+  const complete = getBookingOtp(pickOtpOwner(group, "complete"), "complete");
   return {
     start: start ? { code: start.code, verified: !!start.verifiedAt } : null,
     complete: complete ? { code: complete.code, verified: !!complete.verifiedAt } : null,
@@ -4050,7 +4092,10 @@ async function verifyBookingOtp(bookingId, type, code) {
   if (type !== "start" && type !== "complete") {
     throw Object.assign(new Error("Invalid OTP type"), { status: 400 });
   }
-  const otp = getBookingOtp(bookingId, type);
+  const booking = await fetchBookingWithRelations(bookingId);
+  if (!booking) throw Object.assign(new Error("Booking not found"), { status: 404 });
+  const group = await orderGroup(booking);
+  const otp = getBookingOtp(pickOtpOwner(group, type), type);
   if (!otp) {
     throw Object.assign(new Error("No OTP has been generated for this step yet"), { status: 400 });
   }
@@ -4062,14 +4107,23 @@ async function verifyBookingOtp(bookingId, type, code) {
   }
   jsonStore.update("bookingOtps", otp.id, { verifiedAt: new Date().toISOString() });
 
-  if (type === "start") {
-    const booking = await updateBookingStatus(bookingId, "In Progress");
-    // The completion code only appears once the job has actually started —
-    // generating both up front would let it leak to the customer too early.
-    ensureBookingOtp(bookingId, "complete");
-    return booking;
+  // One code moves every booking of the group that is at the right step; the customer gets one notice.
+  const from = type === "start" ? "Accepted" : "In Progress";
+  const to = type === "start" ? "In Progress" : "Completed";
+  const moving = group.filter((b) => b.id === bookingId || b.status === from);
+  const notice =
+    moving.length > 1
+      ? type === "start"
+        ? `Your ${moving.length} services are now in progress`
+        : `Your ${moving.length} services are complete — rate your experience`
+      : undefined;
+  for (let i = 0; i < moving.length; i++) {
+    await updateBookingStatus(moving[i].id, to, moving.length > 1 ? { customerMessage: i === 0 ? notice : null } : undefined);
   }
-  return updateBookingStatus(bookingId, "Completed");
+  // The completion code only appears once the job has actually started —
+  // generating both up front would let it leak to the customer too early.
+  if (type === "start") ensureBookingOtp(pickOtpOwner(group, "complete"), "complete");
+  return fetchBookingWithRelations(bookingId);
 }
 
 // ---- Service Provider Agreement acceptance (jsonStore-backed — a signed
@@ -4336,6 +4390,7 @@ module.exports = {
   listJobCheckpoints,
   addJobCheckpoint,
   getBookingOtpsForCustomer,
+  orderGroup,
   verifyBookingOtp,
   getCustomerReferralInfo,
   applyReferralCode,
