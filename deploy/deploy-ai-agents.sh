@@ -50,7 +50,7 @@ for k in AGENT_KEY_OPERATIONS AGENT_KEY_REPORTING AGENT_KEY_COMPLAINTS AGENT_KEY
 done
 
 echo "== 3/4 Build & restart (server, admin-dashboard, agents)"
-docker compose -p homeserve up -d --build server admin-dashboard agents
+bash "$(dirname "$0")/build-images.sh" server admin-dashboard agents
 
 echo "== 4/4 Health check"
 for i in $(seq 1 30); do
