@@ -288,7 +288,9 @@ export function AppProvider({ children }) {
       setProviders(Object.fromEntries(boot.providers.map((p) => [p.id, p])));
       setCategories(boot.categories);
       setSubcategories(boot.subcategories || []);
-      setServices(boot.services);
+      // A service with no picture of its own shows its type's picture (the one drawn or uploaded for the type).
+      const typePicture = new Map((boot.subcategories || []).filter((x) => x.imageUrl).map((x) => [x.id, x.imageUrl]));
+      setServices(boot.services.map((x) => (x.imageUrl || !typePicture.has(x.subcategoryId) ? x : { ...x, imageUrl: typePicture.get(x.subcategoryId) })));
       setCatalogPin(pincode || "");
       if (layout) {
         setBanners(layout.banners || []);

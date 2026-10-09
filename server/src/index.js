@@ -32,6 +32,7 @@ const loginAttempts = require("./loginAttempts");
 const blockedPhones = require("./blockedPhones");
 const accounting = require("./accounting");
 const subcategories = require("./subcategories");
+const imageStudio = require("./imageStudio");
 auth.setBlockCheck(blockedPhones.isBlocked);
 const liveLocation = require("./liveLocation");
 const push = require("./push");
@@ -700,6 +701,31 @@ app.get("/sitemap.xml", ah(async (req, res) => {
 app.get("/api/categories", ah(async (req, res) => {
   const categories = await store.listCategories();
   res.json(access.adminCan(viewerAdmin(req), ["services.view", "customers.view", "providers.view", "bookings.view", "dashboard.view"]) ? categories : categories.filter((c) => c.active));
+}));
+
+// ---- Image Studio (Gemini-drawn pictures, approved by a person before use) ----
+app.get("/api/admin/images/status", auth.requireAuth("admin"), ah(async (req, res) => res.json(await imageStudio.status())));
+
+app.get("/api/admin/images/candidates", auth.requireAuth("admin"), (req, res) => {
+  res.json(imageStudio.listCandidates({ status: req.query.status, targetType: req.query.targetType, targetId: req.query.targetId }));
+});
+
+app.post("/api/admin/images/generate", auth.requireAuth("admin"), ah(async (req, res) => {
+  try {
+    const made = imageStudio.enqueue(req.body?.targets, actorOf(req));
+    res.status(202).json({ queued: made.length, candidates: made });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+}));
+
+app.post("/api/admin/images/candidates/:id/settle", auth.requireAuth("admin"), ah(async (req, res) => {
+  const status = req.body?.status;
+  if (!["approved", "rejected"].includes(status)) return res.status(400).json({ error: "status must be approved or rejected" });
+  const row = imageStudio.settle(req.params.id, status, actorOf(req));
+  if (!row) return res.status(404).json({ error: "Picture not found" });
+  audit(req, "image." + status, row.targetType, row.targetId, row.name, [{ field: "AI picture", from: null, to: status }]);
+  res.json(row);
 }));
 
 // ---- sub-categories (optional level between a category and its services) ----

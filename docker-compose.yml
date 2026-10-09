@@ -20,6 +20,10 @@ services:
       MSG91_WHATSAPP_NUMBER: ${MSG91_WHATSAPP_NUMBER}
       MSG91_OTP_TEMPLATE: ${MSG91_OTP_TEMPLATE}
       MSG91_OTP_TEMPLATE_LANG: ${MSG91_OTP_TEMPLATE_LANG}
+      # Image Studio (Super Admin -> Services & Categories -> Image Studio). Models are picked automatically unless set.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-}
+      GEMINI_TEXT_MODEL: ${GEMINI_TEXT_MODEL:-}
       MSG91_OTP_HAS_BUTTON: ${MSG91_OTP_HAS_BUTTON}
       # Shared secret MSG91 sends as the x-webhook-secret header on inbound WhatsApp.
       WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET}

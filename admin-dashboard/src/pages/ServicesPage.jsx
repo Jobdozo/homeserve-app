@@ -7,6 +7,7 @@ import CategoryIcon from "../components/CategoryIcon";
 import { ChangeHistoryModal } from "../components/ChangeHistory";
 import { CommunicationChargesProvider, ChargesCell } from "../components/CommunicationCharges";
 import useSubcategories, { reloadSubcategories } from "../utils/useSubcategories";
+import ImageStudioPanel from "./ImageStudioPanel";
 
 const TABS = [
   { label: "All", status: null },
@@ -79,6 +80,7 @@ function ServicesModule() {
           ["categories", "Categories"],
           ["subcategories", "Sub-categories"],
           ["catalog", "Catalog"],
+          ["images", "Image Studio"],
           ["changes", `Change requests${pendingChanges.length ? ` (${pendingChanges.length})` : ""}`],
         ].map(([key, label]) => (
           <button
@@ -95,6 +97,8 @@ function ServicesModule() {
         <CategoriesPanel filter={catFilter} setFilter={setCatFilter} />
       ) : view === "subcategories" ? (
         <SubcategoriesPanel />
+      ) : view === "images" ? (
+        <ImageStudioPanel />
       ) : view === "catalog" ? (
         <CatalogPanel />
       ) : view === "changes" ? (
