@@ -88,6 +88,7 @@ function list() {
 
 function create(input, actor) {
   const data = cleanFields(input);
+  store.catalogChanged();
   const row = jsonStore.insert(COLLECTION, {
     ...data,
     originalPrice: data.originalPrice ?? null,
@@ -105,6 +106,7 @@ function update(id, input, actor) {
   const data = cleanFields(input, { partial: true });
   if (input.active !== undefined) data.active = Boolean(input.active);
   const updated = jsonStore.update(COLLECTION, id, data);
+  store.catalogChanged();
   const changes = diff(existing, updated, ["categorySlug", "name", "price", "originalPrice", "tagline", "includes", "active"]);
   if (changes.length) store.recordAdminChange({ actor, action: "service_catalog.update", entityType: "service_catalog", entityId: id, entityName: updated.name, changes });
   return updated;
@@ -115,6 +117,7 @@ function remove(id, actor) {
   if (!existing) return false;
   if (existing.imageUrl) deleteUploadedFile(existing.imageUrl);
   jsonStore.remove(COLLECTION, id);
+  store.catalogChanged();
   store.recordAdminChange({ actor, action: "service_catalog.delete", entityType: "service_catalog", entityId: id, entityName: existing.name });
   return true;
 }
@@ -125,6 +128,7 @@ function setImage(id, url, actor) {
   if (!existing) return undefined;
   const previous = existing.imageUrl || null;
   const updated = jsonStore.update(COLLECTION, id, { imageUrl: url || null });
+  store.catalogChanged(); // every matching service without its own photo shows this one straight away
   if (previous && previous !== url) deleteUploadedFile(previous);
   store.recordAdminChange({
     actor,

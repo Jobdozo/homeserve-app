@@ -334,10 +334,32 @@ async function setProviderServiceImage(providerId, serviceId, url, actor) {
   return { service: await setServiceImage(serviceId, url, actor), changeRequest: null };
 }
 
+// A service with no photo of its own shows the photo of its catalog entry (same category + same name),
+// so a picture uploaded to the catalog appears on every matching service at once. Kept in memory and
+// rebuilt when the catalog changes (catalogChanged, called by serviceCatalog.js).
+let catalogPhotoIndex = null;
+const catalogKey = (categorySlug, name) => `${categorySlug}|${String(name || "").trim().replace(/\s+/g, " ").toLowerCase()}`;
+function catalogPhotoFor(categorySlug, name) {
+  if (!categorySlug || !name) return null;
+  if (!catalogPhotoIndex) {
+    catalogPhotoIndex = new Map();
+    for (const r of jsonStore.readAll("serviceCatalog")) if (r.imageUrl) catalogPhotoIndex.set(catalogKey(r.categorySlug, r.name), r.imageUrl);
+  }
+  return catalogPhotoIndex.get(catalogKey(categorySlug, name)) || null;
+}
+
+function catalogChanged() {
+  catalogPhotoIndex = null;
+  cacheClear("service");
+}
+
 function mapService(s) {
+  const ownPhoto = serviceImageUrl(s.id);
+  const catalogPhoto = ownPhoto ? null : catalogPhotoFor(s.category?.slug, s.name);
   return {
     id: s.id,
-    imageUrl: serviceImageUrl(s.id),
+    imageUrl: ownPhoto || catalogPhoto,
+    ...(catalogPhoto ? { imageFromCatalog: true } : {}),
     name: s.name,
     icon: s.icon,
     tagline: s.tagline,
@@ -4477,6 +4499,7 @@ module.exports = {
   deleteCategory,
   listServices,
   invalidateServices,
+  catalogChanged,
   getService,
   listProviderServices,
   listBookings,

@@ -398,6 +398,8 @@ async function shrinkImage(file, maxSide = 1200) {
 function ServicePhotoField({ service }) {
   const { setServiceImage, showToast } = useApp();
   const [imageUrl, setImageUrl] = useState(service.imageUrl || null);
+  // true when the picture shown is borrowed from the service's catalog entry (it has none of its own)
+  const [fromCatalog, setFromCatalog] = useState(Boolean(service.imageFromCatalog));
   const [busy, setBusy] = useState(false);
 
   const change = async (file) => {
@@ -410,6 +412,7 @@ function ServicePhotoField({ service }) {
     try {
       const updated = await setServiceImage(service.id, await shrinkImage(file));
       setImageUrl(updated.imageUrl);
+      setFromCatalog(Boolean(updated.imageFromCatalog));
     } catch (err) {
       showToast(err.message || "Could not upload the photo");
     }
@@ -421,6 +424,7 @@ function ServicePhotoField({ service }) {
     try {
       const updated = await setServiceImage(service.id, null);
       setImageUrl(updated.imageUrl);
+      setFromCatalog(Boolean(updated.imageFromCatalog));
     } catch (err) {
       showToast(err.message || "Could not remove the photo");
     }
@@ -440,17 +444,18 @@ function ServicePhotoField({ service }) {
         </div>
         <div className="flex flex-col items-start gap-1.5">
           <label className={`cursor-pointer rounded-lg border border-gray-200 px-2.5 py-1 text-[11.5px] font-semibold text-gray-600 ${busy ? "pointer-events-none opacity-50" : ""}`}>
-            {busy ? "Working…" : imageUrl ? "Replace photo" : "Upload photo"}
+            {busy ? "Working…" : imageUrl && !fromCatalog ? "Replace photo" : "Upload photo"}
             <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={busy} onChange={(e) => { change(e.target.files?.[0]); e.target.value = ""; }} />
           </label>
-          {imageUrl && (
+          {fromCatalog && <span className="text-[10.5px] font-medium text-gray-400">Photo from the catalog</span>}
+          {imageUrl && !fromCatalog && (
             <button onClick={remove} disabled={busy} className="text-[11.5px] font-semibold text-red-500 disabled:opacity-50">
               Remove
             </button>
           )}
         </div>
       </div>
-      <p className="mt-1 text-[10.5px] text-gray-400">Shown on this service in the customer app. Without one, the category picture is used.</p>
+      <p className="mt-1 text-[10.5px] text-gray-400">Shown on this service in the customer app. Without its own photo it uses its catalog entry's photo, then the category picture.</p>
     </div>
   );
 }

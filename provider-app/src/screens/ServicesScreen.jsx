@@ -133,7 +133,7 @@ export default function ServicesScreen() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13.5px] font-semibold text-gray-900">{s.name}</p>
-              {s.imageUrl && (
+              {s.imageUrl && !s.imageFromCatalog && (
                 <button onClick={() => removePhoto(s.id)} disabled={photoBusy === s.id} className="text-[10px] font-medium text-gray-400 underline disabled:opacity-50">
                   Remove my photo
                 </button>
