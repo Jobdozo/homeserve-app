@@ -15,6 +15,7 @@ const jsonStore = require("./jsonStore");
 const store = require("./store");
 const subcategories = require("./subcategories");
 const { UPLOADS_DIR } = require("./uploads");
+const dup = require("./duplicates");
 
 const COLLECTION = "serviceCatalog";
 const fail = (status, message) => Object.assign(new Error(message), { status });
@@ -86,8 +87,16 @@ function list() {
   return jsonStore.readAll(COLLECTION).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// One catalog entry per service name in a category.
+function assertUnique(categorySlug, name, exceptId) {
+  const key = dup.normName(name);
+  const clash = jsonStore.readAll(COLLECTION).find((r) => r.id !== exceptId && r.categorySlug === categorySlug && dup.normName(r.name) === key);
+  if (clash) throw fail(409, `The catalog already has "${clash.name}" in this category`);
+}
+
 function create(input, actor) {
   const data = cleanFields(input);
+  assertUnique(data.categorySlug, data.name);
   store.catalogChanged();
   const row = jsonStore.insert(COLLECTION, {
     ...data,
@@ -104,6 +113,7 @@ function update(id, input, actor) {
   const existing = jsonStore.readAll(COLLECTION).find((r) => r.id === id);
   if (!existing) return undefined;
   const data = cleanFields(input, { partial: true });
+  if (data.name !== undefined || data.categorySlug !== undefined) assertUnique(data.categorySlug ?? existing.categorySlug, data.name ?? existing.name, id);
   if (input.active !== undefined) data.active = Boolean(input.active);
   const updated = jsonStore.update(COLLECTION, id, data);
   store.catalogChanged();
@@ -281,4 +291,41 @@ async function applyToProvider(id, providerId, overrides = {}, actor) {
   return finalService;
 }
 
-module.exports = { list, create, update, remove, setImage, applyToProvider, ensureForService, syncFromServices, applyMany, MAX_BULK };
+// ---- duplicate entries: the same name twice in one category ----
+function duplicateEntries() {
+  return dup.duplicateGroups(jsonStore.readAll(COLLECTION), (r) => (r.categorySlug && r.name ? `${r.categorySlug}|${dup.normName(r.name)}` : null));
+}
+
+// Keeps one entry per group (one made by hand, then one with a photo and details) and fills its gaps from the others.
+function mergeDuplicates(actor) {
+  let removed = 0;
+  for (const group of duplicateEntries()) {
+    const keep = dup.pickKeeper(
+      group,
+      (r) => (r.source !== "auto" ? 1000 : 0) + (r.imageUrl ? 100 : 0) + ((r.includes || []).length ? 10 : 0) + (r.tagline ? 1 : 0),
+      (r) => r.createdAt || ""
+    );
+    const patch = {};
+    for (const d of group) {
+      if (d.id === keep.id) continue;
+      if (!keep.imageUrl && !patch.imageUrl && d.imageUrl) patch.imageUrl = d.imageUrl;
+      else if (d.imageUrl && d.imageUrl !== keep.imageUrl && d.imageUrl !== patch.imageUrl) deleteUploadedFile(d.imageUrl);
+      if (!keep.tagline && !patch.tagline && d.tagline) patch.tagline = d.tagline;
+      if (!(keep.includes || []).length && !patch.includes && (d.includes || []).length) patch.includes = d.includes;
+      if (!keep.subcategoryId && !patch.subcategoryId && d.subcategoryId) patch.subcategoryId = d.subcategoryId;
+      jsonStore.remove(COLLECTION, d.id);
+      removed++;
+    }
+    if (Object.keys(patch).length) jsonStore.update(COLLECTION, keep.id, patch);
+    store.recordAdminChange({ actor, action: "service_catalog.merge_duplicates", entityType: "service_catalog", entityId: keep.id, entityName: keep.name, changes: [{ field: "copies", from: group.length, to: 1 }] });
+  }
+  store.catalogChanged();
+  return { removed };
+}
+
+// After two types are merged, catalog entries that pointed at the removed one point at the kept one.
+function replaceSubcategory(fromId, toId) {
+  for (const r of jsonStore.readAll(COLLECTION).filter((x) => x.subcategoryId === fromId)) jsonStore.update(COLLECTION, r.id, { subcategoryId: toId });
+}
+
+module.exports = { list, create, update, remove, setImage, applyToProvider, ensureForService, syncFromServices, applyMany, duplicateEntries, mergeDuplicates, replaceSubcategory, MAX_BULK };

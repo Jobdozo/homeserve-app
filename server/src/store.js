@@ -451,6 +451,7 @@ function bookingRef(bookingId) {
 }
 
 const { normalizeQuantity } = require("./quantity");
+const dup = require("./duplicates");
 const { describeGroup, sameServiceName, pincodeFromLine } = require("./orderGroups");
 
 // Quantity of a booking line (bookingQuantities: id -> { id, quantity }); 1 when none was stored.
@@ -647,6 +648,10 @@ async function deleteCategory(slug, actor) {
 
 async function createCategory({ name, icon }, actor) {
   const slug = slugify(name);
+  const existing = await listCategories();
+  if (existing.some((c) => dup.normName(c.name) === dup.normName(name) || c.id === slug)) {
+    throw Object.assign(new Error(`A category called "${String(name).trim()}" already exists`), { status: 409 });
+  }
   await mutate(
     `mutation($slug: String!, $name: String!, $icon: String) { category_insert(data: { slug: $slug, name: $name, icon: $icon }) }`,
     { slug, name, icon: icon || null }
@@ -1146,7 +1151,20 @@ function ensureCatalogEntry(service) {
   }
 }
 
+// A provider can't have the same service twice in one category (names compared ignoring case and spacing).
+// exceptId: the service being renamed or moved, which may keep its own name.
+async function assertNoDuplicateService(providerId, categorySlug, name, exceptId) {
+  if (!providerId || !categorySlug || !name) return;
+  const key = dup.normName(name);
+  const clash = (await listProviderServices(providerId)).find((s) => s.id !== exceptId && s.categoryId === categorySlug && dup.normName(s.name) === key);
+  if (!clash) return;
+  const hint =
+    clash.status === "inactive" ? " It is switched off — turn it on instead." : clash.status === "rejected" ? " It was rejected — edit and resubmit it instead." : clash.status === "pending_approval" ? " It is waiting for approval." : "";
+  throw Object.assign(new Error(`"${clash.name}" is already listed in this category.${hint}`), { status: 409 });
+}
+
 async function addProviderService(providerId, data) {
+  await assertNoDuplicateService(providerId, data.categorySlug || "ac-repair", data.name);
   if (data.categorySlug && !isCategoryActive(data.categorySlug)) {
     throw Object.assign(new Error("That category isn't available right now"), { status: 400 });
   }
@@ -1197,6 +1215,7 @@ async function addProviderService(providerId, data) {
 // Admin adding a service on a provider's behalf — same categorySlug-based
 // resolution as addProviderService above, just with the admin's own picker.
 async function adminCreateService(providerId, { categorySlug, name, price, originalPrice, subcategoryId }, actor) {
+  await assertNoDuplicateService(providerId, categorySlug, name);
   const categoryId = (await getCategoryUuidBySlug(categorySlug)) || null;
   const validSub = subcategories.validate(subcategoryId, categorySlug);
   const { service_insert } = await mutate(
@@ -1327,6 +1346,7 @@ async function submitServiceChange(providerId, service, rawPatch, extra = {}) {
     const from = service[key] ?? null;
     if (JSON.stringify(from) !== JSON.stringify(to ?? null)) changes[key] = { from, to };
   }
+  if (changes.name) await assertNoDuplicateService(providerId, service.categoryId, changes.name.to, service.id);
   if (extra.photo !== undefined && (service.imageUrl || null) !== extra.photo) {
     changes.photo = { from: service.imageUrl || null, to: extra.photo };
   }
@@ -1380,6 +1400,7 @@ async function reviewServiceChange(requestId, decision, { note, edits } = {}, ac
     const proposed = {};
     for (const [key, change] of Object.entries(fieldChanges)) proposed[key] = change.to;
     const merged = { ...proposed, ...cleanServiceChange(Object.fromEntries(Object.entries(edits || {}).filter(([k]) => SERVICE_CHANGE_KEYS.includes(k)))) };
+    if (merged.name) await assertNoDuplicateService(service.providerId, service.categoryId, merged.name, service.id);
     const updated = await applyServiceFieldUpdate(request.serviceId, merged, ADMIN_EDITABLE_SERVICE_KEYS);
     applied = diffValues(service, updated, SERVICE_CHANGE_KEYS);
     if (photo) {
@@ -1573,6 +1594,9 @@ function invalidateServices() {
 async function adminUpdateService(serviceId, patch, actor) {
   const existing = await getService(serviceId);
   if (!existing) return undefined;
+  if (patch.name !== undefined || patch.categorySlug !== undefined) {
+    await assertNoDuplicateService(existing.providerId, patch.categorySlug ?? existing.categoryId, patch.name ?? existing.name, serviceId);
+  }
 
   if (patch.categorySlug !== undefined && patch.categorySlug !== existing.categoryId) {
     const categoryUuid = await getCategoryUuidBySlug(patch.categorySlug);
@@ -1626,6 +1650,74 @@ async function adminUpdateService(serviceId, patch, actor) {
 
 // Refuses if any booking references the service — deleting those would wipe
 // customers' and providers' order history; deactivate the service instead.
+// ---- duplicate services: the same name twice for one provider in one category ----
+async function findDuplicateServices() {
+  const { services } = await query(`query { services { ${SERVICE_FIELDS} } }`, {});
+  const { bookings } = await query(`query { bookings { id service { id } } }`, {});
+  const booked = new Map();
+  for (const b of bookings) if (b.service) booked.set(b.service.id, (booked.get(b.service.id) || 0) + 1);
+  const all = services.map(mapService);
+  return dup
+    .duplicateGroups(all, (x) => (x.providerId && x.categoryId && x.name ? `${x.providerId}|${x.categoryId}|${dup.normName(x.name)}` : null))
+    .map((g) => {
+      // keep the live one, then the one with the most bookings, then one with its own photo
+      const keep = dup.pickKeeper(g, (x) => (x.status === "active" ? 1000 : 0) + (booked.get(x.id) || 0) * 10 + (serviceImageUrl(x.id) ? 1 : 0));
+      return { keep, drop: g.filter((x) => x.id !== keep.id), bookings: g.reduce((n, x) => n + (booked.get(x.id) || 0), 0) };
+    });
+}
+
+// Folds every copy into the one kept: its bookings, reviews, photo, type and ads move over, then the copy is deleted.
+async function mergeDuplicateServices(actor) {
+  const groups = await findDuplicateServices();
+  let removed = 0;
+  let movedBookings = 0;
+  for (const { keep, drop } of groups) {
+    let keeper = keep;
+    for (const d of drop) {
+      const { bookings } = await query(`query($id: UUID!) { bookings(where: { serviceId: { eq: $id } }) { id } }`, { id: d.id });
+      for (const b of bookings) {
+        await mutate(`mutation($id: UUID!, $serviceId: UUID!) { booking_update(id: $id, data: { serviceId: $serviceId }) }`, { id: b.id, serviceId: keeper.id });
+        movedBookings++;
+      }
+      const merged = dup.mergeRatings(keeper, d);
+      if (merged.reviewCount !== (keeper.reviewCount || 0)) {
+        await mutate(`mutation($id: UUID!, $rating: Float!, $reviewCount: Int!) { service_update(id: $id, data: { rating: $rating, reviewCount: $reviewCount }) }`, { id: keeper.id, ...merged });
+        keeper = { ...keeper, ...merged };
+      }
+      const dropPhoto = serviceImageUrl(d.id);
+      if (dropPhoto && !serviceImageUrl(keeper.id)) {
+        jsonStore.remove("serviceImages", d.id); // the file now belongs to the kept service, so it isn't deleted below
+        jsonStore.insert("serviceImages", { id: keeper.id, url: dropPhoto, updatedAt: new Date().toISOString() });
+      }
+      const dropType = subcategories.subcategoryOf(d.id);
+      if (dropType && !subcategories.subcategoryOf(keeper.id)) {
+        try {
+          subcategories.link(keeper.id, dropType, keeper.categoryId);
+        } catch (e) {
+          console.error("Could not move the type while merging", e.message);
+        }
+      }
+      subcategories.link(d.id, null);
+      for (const a of jsonStore.readAll("providerAds").filter((x) => x.serviceId === d.id)) jsonStore.update("providerAds", a.id, { serviceId: keeper.id });
+      for (const c of listServiceChanges({ serviceId: d.id })) jsonStore.remove("serviceChangeRequests", c.id);
+      await adminDeleteService(d.id, actor);
+      removed++;
+    }
+    recordAdminChange({
+      actor,
+      action: "service.merge_duplicates",
+      entityType: "service",
+      entityId: keep.id,
+      entityName: keep.name,
+      changes: [{ field: "copies", from: drop.length + 1, to: 1 }],
+    });
+  }
+  cacheClear("service");
+  cacheClear("openBookings");
+  if (removed) await logActivity("service", `Merged duplicate services: ${removed} cop${removed === 1 ? "y" : "ies"} removed, ${movedBookings} booking${movedBookings === 1 ? "" : "s"} moved`);
+  return { groups: groups.length, removed, movedBookings };
+}
+
 async function adminDeleteService(serviceId, actor) {
   const existing = await getService(serviceId);
   if (!existing) return false;
@@ -4499,6 +4591,8 @@ module.exports = {
   deleteCategory,
   listServices,
   invalidateServices,
+  findDuplicateServices,
+  mergeDuplicateServices,
   catalogChanged,
   getService,
   listProviderServices,

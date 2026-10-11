@@ -1258,6 +1258,28 @@ app.patch("/api/services/:id", auth.requireAuth("admin"), ah(async (req, res) =>
   res.json(service);
 }));
 
+// ---- duplicates: find them, and merge them (services keep their bookings, reviews and photos) ----
+app.get("/api/admin/duplicates", auth.requireAuth("admin"), ah(async (req, res) => {
+  const providers = await store.listProviders();
+  const providerName = (id) => providers.find((p) => p.id === id)?.name || "Provider";
+  res.json({
+    services: (await store.findDuplicateServices()).map((g) => ({ name: g.keep.name, provider: providerName(g.keep.providerId), categoryId: g.keep.categoryId, copies: g.drop.length + 1, bookings: g.bookings })),
+    catalog: serviceCatalog.duplicateEntries().map((g) => ({ name: g[0].name, categoryId: g[0].categorySlug, copies: g.length })),
+    types: subcategories.duplicateTypes().map((g) => ({ name: g[0].name, categoryId: g[0].categoryId, copies: g.length })),
+  });
+}));
+
+app.post("/api/admin/duplicates/merge", auth.requireAuth("admin"), ah(async (req, res) => {
+  const actor = actorOf(req);
+  const types = subcategories.mergeDuplicates();
+  for (const [fromId, toId] of types.replaced) serviceCatalog.replaceSubcategory(fromId, toId);
+  store.invalidateServices();
+  const catalog = serviceCatalog.mergeDuplicates(actor);
+  const services = await store.mergeDuplicateServices(actor);
+  rt.activity((await store.listActivities(1))[0]);
+  res.json({ services, catalog, types: { removed: types.removed } });
+}));
+
 // ---- provider profile / logo / service-area approval ----
 app.get("/api/provider/profile-changes", auth.requireAuth("provider"), ah(async (req, res) => {
   res.json(store.listProviderChanges({ providerId: req.user.id }));

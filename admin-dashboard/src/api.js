@@ -213,6 +213,8 @@ export const api = {
     if (entityId) q.set("entityId", entityId);
     return request(`/admin/change-log?${q.toString()}`);
   },
+  getDuplicates: () => request("/admin/duplicates"),
+  mergeDuplicates: () => request("/admin/duplicates/merge", { method: "POST" }),
   listProviderChanges: (status) => request(`/admin/provider-changes${status ? `?status=${status}` : ""}`),
   reviewProviderChange: (id, decision, note) =>
     request(`/admin/provider-changes/${id}/review`, { method: "POST", body: JSON.stringify({ decision, note }) }),

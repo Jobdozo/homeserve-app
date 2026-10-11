@@ -99,6 +99,34 @@ function removeForCategory(categoryId) {
   for (const s of jsonStore.readAll(SUBS).filter((x) => x.categoryId === categoryId)) remove(s.id);
 }
 
+// ---- duplicate types: the same name twice in one category ----
+const { duplicateGroups, pickKeeper, normName } = require("./duplicates");
+function duplicateTypes() {
+  return duplicateGroups(jsonStore.readAll(SUBS), (t) => (t.categoryId && t.name ? `${t.categoryId}|${normName(t.name)}` : null));
+}
+
+// Keeps one type per group (one with a picture, then the first in order); services and the picture move over.
+// Returns the ids that were replaced so callers can update anything else pointing at them.
+function mergeDuplicates() {
+  const replaced = [];
+  for (const group of duplicateTypes()) {
+    const keep = pickKeeper(group, (t) => (t.imageUrl ? 100 : 0) + (t.active !== false ? 10 : 0), (t) => String(t.sortOrder ?? 99999).padStart(6, "0") + (t.createdAt || ""));
+    let keepImage = keep.imageUrl || null;
+    for (const d of group) {
+      if (d.id === keep.id) continue;
+      jsonStore.writeAll(LINKS, jsonStore.readAll(LINKS).map((l) => (l.subcategoryId === d.id ? { ...l, subcategoryId: keep.id } : l)));
+      if (!keepImage && d.imageUrl) {
+        jsonStore.update(SUBS, keep.id, { imageUrl: d.imageUrl });
+        jsonStore.update(SUBS, d.id, { imageUrl: null }); // so removing the copy doesn't delete the moved picture
+        keepImage = d.imageUrl;
+      }
+      remove(d.id);
+      replaced.push([d.id, keep.id]);
+    }
+  }
+  return { removed: replaced.length, replaced };
+}
+
 function subcategoryOf(serviceId) {
   return jsonStore.readAll(LINKS).find((l) => l.id === serviceId)?.subcategoryId || null;
 }
@@ -133,4 +161,4 @@ function validate(subcategoryId, categoryId) {
   return subcategoryId;
 }
 
-module.exports = { list, get, create, update, remove, setImage, removeForCategory, subcategoryOf, link, reconcile, validate };
+module.exports = { list, get, create, update, remove, setImage, removeForCategory, subcategoryOf, link, reconcile, validate, duplicateTypes, mergeDuplicates };

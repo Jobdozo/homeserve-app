@@ -306,6 +306,7 @@ const RULES = [
   [/^\/admin\/customers/, () => "customers.view"],
   [/^\/admin\/services\/[^/]+\/image$/, () => "services.edit"],
   [/^\/admin\/services\/[^/]+\/review$/, (m, b) => `services.${decisionAction(b?.decision)}`],
+  [/^\/admin\/duplicates(\/|$)/, (m) => (m === "GET" ? "services.view" : "services.delete")],
   [/^\/admin\/provider-changes\/[^/]+\/review$/, (m, b) => `providers.${decisionAction(b?.decision)}`],
   [/^\/admin\/provider-changes/, () => "providers.view"],
   [/^\/admin\/service-changes\/[^/]+\/review$/, (m, b) => `services.${decisionAction(b?.decision)}`],

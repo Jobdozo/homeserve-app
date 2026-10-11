@@ -38,8 +38,11 @@ export default function AddServiceScreen() {
   const removeImage = (idx) => setImages((prev) => prev.filter((_, i) => i !== idx));
 
   const canSave = name.trim() && price;
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = () => {
+  // Waits for the server: a refusal (e.g. the service is already listed) is shown, and a second tap can't add it twice.
+  const handleSave = async () => {
+    if (saving) return;
     if (!canSave) {
       showToast("Please fill in service name and price");
       return;
@@ -48,8 +51,14 @@ export default function AddServiceScreen() {
       showToast("Choose the type of service");
       return;
     }
-    addService({ name: name.trim(), categorySlug, subcategoryId, description, price, originalPrice, extraCharges, serviceArea });
-    navigate("/services", { replace: true });
+    setSaving(true);
+    try {
+      await addService({ name: name.trim(), categorySlug, subcategoryId, description, price, originalPrice, extraCharges, serviceArea });
+      navigate("/services", { replace: true });
+    } catch (e) {
+      showToast(e.message || "Couldn't add the service");
+      setSaving(false);
+    }
   };
 
   return (
@@ -192,9 +201,10 @@ export default function AddServiceScreen() {
       <div className="flex-shrink-0 px-4 pb-4 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-10">
         <button
           onClick={handleSave}
+          disabled={saving}
           className="w-full rounded-xl bg-brand py-3.5 text-sm font-semibold text-white shadow-card hover:bg-brand-dark active:scale-[0.98] disabled:opacity-50 lg:w-auto lg:px-10"
         >
-          Save Service
+          {saving ? "Saving…" : "Save Service"}
         </button>
       </div>
     </div>

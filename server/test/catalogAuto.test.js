@@ -73,7 +73,9 @@ test("bulk add: gives a provider many items, skips ones they already have, isola
     return s;
   };
   store.adminUpdateService = async (id) => ({ id });
-  const items = ["Hair Spa", "Face Clean Up", "Boom", "Threading"].map((name) => catalog.create({ categorySlug: "salon-spa", name, price: 100 }, "t"));
+  // An entry with the same category + name already exists from the test above, so it is reused (a second one is refused).
+  const entry = (name) => catalog.list().find((r) => r.categorySlug === "salon-spa" && r.name === name) || catalog.create({ categorySlug: "salon-spa", name, price: 100 }, "t");
+  const items = ["Hair Spa", "Face Clean Up", "Boom", "Threading"].map(entry);
   const off = catalog.create({ categorySlug: "salon-spa", name: "Off Item", price: 100, active: false }, "t");
   const ids = [...items.map((i) => i.id), off.id, "nope"];
 
@@ -90,4 +92,27 @@ test("bulk add: gives a provider many items, skips ones they already have, isola
   await assert.rejects(() => catalog.applyMany([], "prov", "t"), /at least one/);
   await assert.rejects(() => catalog.applyMany(Array.from({ length: 26 }, (_, i) => "x" + i), "prov", "t"), /at most 25/);
   await assert.rejects(() => catalog.applyMany([items[0].id], "ghost", "t"), /Provider not found/);
+});
+
+test("the catalog refuses a second entry with the same category and name, also on rename", () => {
+  const a = catalog.create({ categorySlug: "plumbing", name: "Tap Repair", price: 199 }, "t");
+  assert.throws(() => catalog.create({ categorySlug: "plumbing", name: "  tap   REPAIR ", price: 150 }, "t"), (e) => e.status === 409);
+  const b = catalog.create({ categorySlug: "plumbing", name: "Pipe Fix", price: 299 }, "t");
+  assert.throws(() => catalog.update(b.id, { name: "Tap repair" }, "t"), (e) => e.status === 409);
+  assert.ok(catalog.create({ categorySlug: "electrician", name: "Tap Repair", price: 199 }, "t"), "same name in another category is fine");
+  assert.equal(catalog.update(a.id, { name: "Tap Repair", price: 249 }, "t").price, 249, "an entry keeps its own name");
+});
+
+test("duplicate catalog entries merge into one, keeping a photo and filling gaps", () => {
+  const jsonStore = require("../src/jsonStore");
+  const now = new Date().toISOString();
+  jsonStore.insert("serviceCatalog", { categorySlug: "painting", name: "Wall Paint", price: 900, includes: [], tagline: "", source: "auto", createdAt: now });
+  jsonStore.insert("serviceCatalog", { categorySlug: "painting", name: "wall  paint", price: 950, includes: ["Primer"], tagline: "Smooth finish", imageUrl: null, source: "auto", createdAt: now });
+  assert.equal(catalog.duplicateEntries().filter((g) => g[0].categorySlug === "painting").length, 1);
+  const r = catalog.mergeDuplicates("t");
+  assert.ok(r.removed >= 1);
+  const left = catalog.list().filter((x) => x.categorySlug === "painting");
+  assert.equal(left.length, 1);
+  assert.deepEqual(left[0].includes, ["Primer"]);
+  assert.equal(catalog.duplicateEntries().length, 0);
 });

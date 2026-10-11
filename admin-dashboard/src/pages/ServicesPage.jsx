@@ -38,6 +38,65 @@ export default function ServicesPage() {
   );
 }
 
+// Same service listed twice for one provider (or the same catalog entry / type twice in a category):
+// shows what's duplicated and merges it in one click. Bookings, reviews and photos are kept.
+function DuplicatesNotice({ onMerged }) {
+  const { showToast } = useApp();
+  const [found, setFound] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = () => api.getDuplicates().then(setFound).catch(() => setFound(null));
+  useEffect(() => {
+    load();
+  }, []);
+  if (!found) return null;
+  const total = found.services.length + found.catalog.length + found.types.length;
+  if (total === 0) return null;
+  const merge = async () => {
+    setBusy(true);
+    try {
+      const r = await api.mergeDuplicates();
+      const removed = r.services.removed + r.catalog.removed + r.types.removed;
+      showToast(`Merged — ${removed} duplicate${removed === 1 ? "" : "s"} removed${r.services.movedBookings ? `, ${r.services.movedBookings} booking${r.services.movedBookings === 1 ? "" : "s"} moved` : ""}`);
+      await load();
+      onMerged();
+    } catch (e) {
+      showToast(e.message || "Couldn't merge the duplicates");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const line = (label, rows, describe) =>
+    rows.length > 0 && (
+      <div>
+        <p className="font-semibold text-amber-900">{label}</p>
+        <ul className="mt-0.5 list-disc pl-5">
+          {rows.slice(0, 8).map((r, i) => (
+            <li key={i}>{describe(r)}</li>
+          ))}
+          {rows.length > 8 && <li>and {rows.length - 8} more</li>}
+        </ul>
+      </div>
+    );
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-[12.5px] text-amber-800">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-[14px] font-bold text-amber-900">Duplicates found</p>
+          <p className="mt-0.5">The same name appears more than once. Merging keeps one of each and moves its bookings, reviews and photo onto it.</p>
+        </div>
+        <button onClick={merge} disabled={busy} className="rounded-lg bg-amber-600 px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-amber-700 disabled:opacity-50">
+          {busy ? "Merging…" : "Merge duplicates"}
+        </button>
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        {line("Services", found.services, (r) => `${r.name} — ${r.provider} (${r.copies} copies${r.bookings ? `, ${r.bookings} bookings` : ""})`)}
+        {line("Catalog", found.catalog, (r) => `${r.name} — ${r.categoryId} (${r.copies} copies)`)}
+        {line("Types", found.types, (r) => `${r.name} — ${r.categoryId} (${r.copies} copies)`)}
+      </div>
+    </div>
+  );
+}
+
 function ServicesModule() {
   const { categories, services, refreshData } = useApp();
   const [view, setView] = useState("services");
@@ -65,6 +124,7 @@ function ServicesModule() {
 
   return (
     <div className="space-y-4">
+      <DuplicatesNotice onMerged={() => { refreshData(); loadChanges(); }} />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         {tiles.map((t) => (
           <button
