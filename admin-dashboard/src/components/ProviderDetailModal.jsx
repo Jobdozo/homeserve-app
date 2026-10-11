@@ -4,6 +4,7 @@ import { useApp } from "../context/AppContext";
 import { StarIcon, CheckIcon, XIcon, WalletIcon, FileIcon, MapPinIcon } from "./icons";
 import VisibilityPanel from "./VisibilityPanel";
 import ProviderServicesPicker from "./ProviderServicesPicker";
+import AreaKmPicker from "./AreaKmPicker";
 import ProviderOrdersTab from "./ProviderOrdersTab";
 import ProviderMoneyTab from "./ProviderMoneyTab";
 import ProviderKycReview from "./ProviderKycReview";
@@ -43,7 +44,7 @@ const DOC_LABELS = {
 
 // asPage: shown as its own full-screen page (Providers → a provider) with the services picker beside it.
 export default function ProviderDetailModal({ providerId, onClose, asPage = false }) {
-  const { providers, approveProvider, rejectProvider, deleteProvider, updateProviderProfile, updateProviderCoverage, showToast } =
+  const { providers, categories, approveProvider, rejectProvider, deleteProvider, updateProviderProfile, updateProviderCoverage, showToast } =
     useApp();
   const provider = providers.find((p) => p.id === providerId);
   const [services, setServices] = useState(null);
@@ -422,17 +423,43 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
                   ["serviceArea", "Service area", "text"],
                   ["experience", "Experience (years)", "text"],
                   ["gstNumber", "GST number", "text"],
-                ].map(([key, label, type]) => (
-                  <label key={key} className="block text-[11.5px] font-semibold text-gray-500">
+                ].map(([key, label, type]) => {
+                  // a <label> around the − / + buttons would press "−" when the label text is clicked
+                  const Wrap = key === "serviceArea" ? "div" : "label";
+                  return (
+                  <Wrap key={key} className="block text-[11.5px] font-semibold text-gray-500">
                     {label}
+                    {key === "category" ? (
+                      <select
+                        value={form.category ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                        className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12.5px] font-normal text-gray-800 outline-none focus:border-brand"
+                      >
+                        <option value="">Choose a category</option>
+                        {/* a category that was typed in before (not in the list) stays selectable */}
+                        {form.category && form.category !== "Not set" && !(categories || []).some((c) => c.name === form.category) && (
+                          <option value={form.category}>{form.category} (not in the list)</option>
+                        )}
+                        {(categories || []).map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.icon && c.icon.length <= 4 ? `${c.icon} ` : ""}
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : key === "serviceArea" ? (
+                      <AreaKmPicker value={form.serviceArea} onChange={(v) => setForm((f) => ({ ...f, serviceArea: v }))} />
+                    ) : (
                     <input
                       type={type}
                       value={form[key] ?? ""}
                       onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
                       className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] font-normal text-gray-800 outline-none focus:border-brand"
                     />
-                  </label>
-                ))}
+                    )}
+                  </Wrap>
+                  );
+                })}
                 <p className="text-[11px] text-gray-400">
                   The phone number can't be changed here — it's the provider's login.
                 </p>

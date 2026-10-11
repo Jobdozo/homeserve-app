@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
 import PendingProfileChanges from "../components/PendingProfileChanges";
+import AreaKmPicker from "../components/AreaKmPicker";
 
 export default function EditProfileScreen() {
   const navigate = useNavigate();
@@ -85,6 +86,8 @@ export default function EditProfileScreen() {
                 disabled={locked}
                 className="w-full bg-transparent text-[13.5px] text-gray-800 outline-none disabled:text-gray-400"
               >
+                {/* a category typed in before (not in the list) stays selected instead of silently showing the first one */}
+                {category && !categories.some((c) => c.name === category) && <option value={category}>{category}</option>}
                 {categories.map((c) => (
                   <option key={c.id} value={c.name}>
                     {c.icon} {c.name}
@@ -117,13 +120,7 @@ export default function EditProfileScreen() {
               />
             </Field>
             <Field label="Service Area">
-              <input
-                value={serviceArea}
-                onChange={(e) => setServiceArea(e.target.value)}
-                placeholder="e.g. 5 km around your location"
-                disabled={locked}
-                className="w-full bg-transparent text-[13.5px] text-gray-800 outline-none placeholder:text-gray-400 disabled:text-gray-400"
-              />
+              <AreaKmPicker value={serviceArea} onChange={setServiceArea} disabled={locked} />
             </Field>
             <Field label="GST Number (Optional)">
               <input
