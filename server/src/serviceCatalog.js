@@ -296,31 +296,56 @@ function duplicateEntries() {
   return dup.duplicateGroups(jsonStore.readAll(COLLECTION), (r) => (r.categorySlug && r.name ? `${r.categorySlug}|${dup.normName(r.name)}` : null));
 }
 
+// Folds one catalog entry into another: the kept one takes any photo / tagline / list / type it lacks, the other goes.
+function mergeEntryInto(drop, keep, actor) {
+  const patch = {};
+  if (!keep.imageUrl && drop.imageUrl) patch.imageUrl = drop.imageUrl;
+  else if (drop.imageUrl && drop.imageUrl !== keep.imageUrl) deleteUploadedFile(drop.imageUrl);
+  if (!keep.tagline && drop.tagline) patch.tagline = drop.tagline;
+  if (!(keep.includes || []).length && (drop.includes || []).length) patch.includes = drop.includes;
+  if (!keep.subcategoryId && drop.subcategoryId) patch.subcategoryId = drop.subcategoryId;
+  jsonStore.remove(COLLECTION, drop.id);
+  const kept = Object.keys(patch).length ? jsonStore.update(COLLECTION, keep.id, patch) : keep;
+  store.recordAdminChange({ actor, action: "service_catalog.merge", entityType: "service_catalog", entityId: keep.id, entityName: keep.name, changes: [{ field: "merged in", from: drop.name, to: keep.name }] });
+  return kept;
+}
+
 // Keeps one entry per group (one made by hand, then one with a photo and details) and fills its gaps from the others.
 function mergeDuplicates(actor) {
   let removed = 0;
   for (const group of duplicateEntries()) {
-    const keep = dup.pickKeeper(
+    let keep = dup.pickKeeper(
       group,
       (r) => (r.source !== "auto" ? 1000 : 0) + (r.imageUrl ? 100 : 0) + ((r.includes || []).length ? 10 : 0) + (r.tagline ? 1 : 0),
       (r) => r.createdAt || ""
     );
-    const patch = {};
     for (const d of group) {
       if (d.id === keep.id) continue;
-      if (!keep.imageUrl && !patch.imageUrl && d.imageUrl) patch.imageUrl = d.imageUrl;
-      else if (d.imageUrl && d.imageUrl !== keep.imageUrl && d.imageUrl !== patch.imageUrl) deleteUploadedFile(d.imageUrl);
-      if (!keep.tagline && !patch.tagline && d.tagline) patch.tagline = d.tagline;
-      if (!(keep.includes || []).length && !patch.includes && (d.includes || []).length) patch.includes = d.includes;
-      if (!keep.subcategoryId && !patch.subcategoryId && d.subcategoryId) patch.subcategoryId = d.subcategoryId;
-      jsonStore.remove(COLLECTION, d.id);
+      keep = mergeEntryInto(d, keep, actor);
       removed++;
     }
-    if (Object.keys(patch).length) jsonStore.update(COLLECTION, keep.id, patch);
-    store.recordAdminChange({ actor, action: "service_catalog.merge_duplicates", entityType: "service_catalog", entityId: keep.id, entityName: keep.name, changes: [{ field: "copies", from: group.length, to: 1 }] });
   }
   store.catalogChanged();
   return { removed };
+}
+
+// Look-alike entries in one category, minus pairs marked as "not duplicates".
+function similarEntries() {
+  const ignored = new Set(jsonStore.readAll("duplicateIgnores").map((r) => r.id));
+  return dup
+    .similarPairs(jsonStore.readAll(COLLECTION), (r) => r.categorySlug || null, (r) => r.name)
+    .filter(([x, y]) => !ignored.has(dup.pairKey("catalog", x.id, y.id)));
+}
+
+function mergeEntryPair(dropId, keepId, actor) {
+  const rows = jsonStore.readAll(COLLECTION);
+  const drop = rows.find((r) => r.id === dropId);
+  const keep = rows.find((r) => r.id === keepId);
+  if (!drop || !keep) throw fail(404, "Catalog item not found");
+  if (drop.id === keep.id) throw fail(400, "Choose two different entries");
+  const kept = mergeEntryInto(drop, keep, actor);
+  store.catalogChanged();
+  return kept;
 }
 
 // After two types are merged, catalog entries that pointed at the removed one point at the kept one.
@@ -328,4 +353,4 @@ function replaceSubcategory(fromId, toId) {
   for (const r of jsonStore.readAll(COLLECTION).filter((x) => x.subcategoryId === fromId)) jsonStore.update(COLLECTION, r.id, { subcategoryId: toId });
 }
 
-module.exports = { list, create, update, remove, setImage, applyToProvider, ensureForService, syncFromServices, applyMany, duplicateEntries, mergeDuplicates, replaceSubcategory, MAX_BULK };
+module.exports = { list, create, update, remove, setImage, applyToProvider, ensureForService, syncFromServices, applyMany, duplicateEntries, mergeDuplicates, replaceSubcategory, similarEntries, mergeEntryPair, MAX_BULK };

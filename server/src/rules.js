@@ -5,6 +5,8 @@
 
 const BOOKING_STATUSES = ["Pending", "Accepted", "In Progress", "Completed", "Rejected", "Cancelled"];
 const SERVICE_CHANGE_FIELDS = ["name", "tagline", "price", "originalPrice", "distanceLabel"];
+// Provider documents (Documents & KYC). Which ones are required is a Business Rule.
+const KYC_DOC_TYPES = ["id_proof", "address_proof", "pan_card", "gst_certificate", "bank_details", "police_verification", "other"];
 const VISIBILITY_RULE_KEYS = ["pincode", "wallet", "approval", "verification", "requestsSwitch", "openLimit", "stale"];
 
 const DEFAULT_SWAP_REASONS = [
@@ -37,6 +39,9 @@ const DEFAULTS = {
   serviceApprovalRequired: true,
   serviceChangeApprovalRequired: true,
   serviceChangeFields: SERVICE_CHANGE_FIELDS,
+  // provider documents: approving a provider needs these documents approved first
+  kycApprovalGate: true,
+  kycRequiredDocs: ["id_proof", "address_proof"],
   // customer <-> provider communication
   commsChatEnabled: true,
   commsCallEnabled: true,
@@ -113,6 +118,8 @@ const VALIDATORS = {
   serviceApprovalRequired: bool,
   serviceChangeApprovalRequired: bool,
   serviceChangeFields: (v) => subset(v, SERVICE_CHANGE_FIELDS, "Fields needing approval"),
+  kycApprovalGate: bool,
+  kycRequiredDocs: (v) => subset(v, KYC_DOC_TYPES, "Required documents"),
   commsChatEnabled: bool,
   commsCallEnabled: bool,
   commsChatStatuses: (v) => subset(v, BOOKING_STATUSES, "Chat statuses"),
@@ -135,6 +142,6 @@ function validate(patch, current = {}) {
 }
 
 module.exports = {
-  DEFAULTS, validate, BOOKING_STATUSES, SERVICE_CHANGE_FIELDS, VISIBILITY_RULE_KEYS,
+  DEFAULTS, validate, BOOKING_STATUSES, SERVICE_CHANGE_FIELDS, KYC_DOC_TYPES, VISIBILITY_RULE_KEYS,
   DEFAULT_SWAP_REASONS, DEFAULT_COMPLAINT_CATEGORIES, DEFAULT_COMPLAINT_OUTCOMES,
 };

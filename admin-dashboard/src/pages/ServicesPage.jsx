@@ -49,8 +49,24 @@ function DuplicatesNotice({ onMerged }) {
     load();
   }, []);
   if (!found) return null;
-  const total = found.services.length + found.catalog.length + found.types.length;
+  const similar = [...(found.similar?.services || []).map((p) => ({ ...p, kind: "service" })), ...(found.similar?.catalog || []).map((p) => ({ ...p, kind: "catalog" }))];
+  const exact = found.services.length + found.catalog.length + found.types.length;
+  const total = exact + similar.length;
   if (total === 0) return null;
+  // one look-alike pair: keep one (the other is merged into it) or mark them as different
+  const pairAction = async (fn, done) => {
+    setBusy(true);
+    try {
+      await fn();
+      showToast(done);
+      await load();
+      onMerged();
+    } catch (e) {
+      showToast(e.message || "Action failed");
+    } finally {
+      setBusy(false);
+    }
+  };
   const merge = async () => {
     setBusy(true);
     try {
@@ -79,6 +95,7 @@ function DuplicatesNotice({ onMerged }) {
     );
   return (
     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-[12.5px] text-amber-800">
+      {exact > 0 && (<>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[14px] font-bold text-amber-900">Duplicates found</p>
@@ -93,6 +110,32 @@ function DuplicatesNotice({ onMerged }) {
         {line("Catalog", found.catalog, (r) => `${r.name} — ${r.categoryId} (${r.copies} copies)`)}
         {line("Types", found.types, (r) => `${r.name} — ${r.categoryId} (${r.copies} copies)`)}
       </div>
+      </>)}
+      {similar.length > 0 && (
+        <div className={exact > 0 ? "mt-4 border-t border-amber-200 pt-3" : ""}>
+          <p className="text-[14px] font-bold text-amber-900">Look-alikes · {similar.length}</p>
+          <p className="mt-0.5">Names that are almost the same. Choose the one to keep — the other is merged into it — or mark them as different.</p>
+          <div className="mt-2 max-h-72 space-y-1.5 overflow-auto">
+            {similar.map((p) => (
+              <div key={`${p.kind}:${p.a.id}:${p.b.id}`} className="flex flex-wrap items-center gap-2 rounded-lg bg-white px-3 py-2">
+                <span className="min-w-0 flex-1 text-gray-800">
+                  <span className="mr-1.5 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-gray-500">{p.kind === "service" ? p.provider : "Catalog"}</span>
+                  "{p.a.name}" (₹{p.a.price}) ↔ "{p.b.name}" (₹{p.b.price})
+                </span>
+                <button disabled={busy} onClick={() => pairAction(() => api.mergeDuplicatePair(p.kind, p.a.id, p.b.id), `Kept "${p.a.name}"`)} className="rounded-md border border-amber-300 px-2 py-1 text-[11.5px] font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50">
+                  Keep "{p.a.name}"
+                </button>
+                <button disabled={busy} onClick={() => pairAction(() => api.mergeDuplicatePair(p.kind, p.b.id, p.a.id), `Kept "${p.b.name}"`)} className="rounded-md border border-amber-300 px-2 py-1 text-[11.5px] font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50">
+                  Keep "{p.b.name}"
+                </button>
+                <button disabled={busy} onClick={() => pairAction(() => api.ignoreDuplicatePair(p.kind, p.a.id, p.b.id), "Marked as different")} className="px-1 text-[11.5px] font-semibold text-gray-400 hover:text-gray-700 disabled:opacity-50">
+                  Not duplicates
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

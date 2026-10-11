@@ -12,9 +12,34 @@ const STATE_STYLE = {
 };
 const BULK = 25; // the server adds at most this many catalog items per call
 
+// One price field that saves when you leave it (or press Enter) — only if the value changed.
+function PriceInput({ value, onSave, label, placeholder }) {
+  const [v, setV] = useState(value ?? "");
+  useEffect(() => setV(value ?? ""), [value]);
+  const commit = () => {
+    const next = v === "" ? null : Math.round(Number(v));
+    if (next === (value ?? null) || (next !== null && (!Number.isFinite(next) || next < 0))) return setV(value ?? "");
+    onSave(next);
+  };
+  return (
+    <input
+      type="number"
+      min="0"
+      value={v}
+      placeholder={placeholder}
+      aria-label={label}
+      title={label}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+      className="w-20 rounded-md border border-gray-200 px-1.5 py-1 text-right text-[12px] tabular-nums outline-none focus:border-brand"
+    />
+  );
+}
+
 // Every catalog service in the provider's category, ticked when the provider offers it.
 // Tick = add it from the catalog (or switch an existing one back on); untick = switch it off.
-// Switching off keeps the service and its bookings; ticking again turns the same one back on.
+// A ticked row's price and crossed-out price can be edited right there, and all prices moved by a percentage.
 export default function ProviderServicesPicker({ provider, services, onChanged }) {
   const { categories, showToast } = useApp();
   const [catalog, setCatalog] = useState(null);
@@ -22,6 +47,7 @@ export default function ProviderServicesPicker({ provider, services, onChanged }
   const [search, setSearch] = useState("");
   const [busyKey, setBusyKey] = useState(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [percent, setPercent] = useState("");
 
   useEffect(() => {
     api.listServiceCatalog().then(setCatalog).catch(() => setCatalog([]));
@@ -83,6 +109,22 @@ export default function ProviderServicesPicker({ provider, services, onChanged }
     }
   };
 
+  const savePrice = async (r, patch) => {
+    setBusyKey(r.key);
+    try {
+      const next = { price: r.service.price, originalPrice: r.service.originalPrice ?? null, ...patch };
+      if (next.price === null) throw new Error("A price is required");
+      if (next.originalPrice !== null && next.originalPrice <= next.price) next.originalPrice = null; // a crossed-out price must be higher
+      await api.updateService(r.service.id, next);
+      showToast(`${r.service.name}: ₹${next.price}${next.originalPrice ? ` (was ₹${next.originalPrice})` : ""}`);
+      await onChanged();
+    } catch (e) {
+      showToast(e.message || "Couldn't save the price");
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
   // Tick everything shown that the provider doesn't have yet (in batches the server accepts).
   const addAllShown = async () => {
     const toAdd = rows.filter((r) => !r.service && r.item).map((r) => r.item.id);
@@ -108,12 +150,31 @@ export default function ProviderServicesPicker({ provider, services, onChanged }
     }
   };
 
+  const changeAllPrices = async (e) => {
+    e.preventDefault();
+    const p = Number(percent);
+    if (!p) return;
+    const cat = categories.find((c) => c.id === categoryId);
+    if (!window.confirm(`${p > 0 ? "Raise" : "Lower"} all of ${provider.name}'s ${cat?.name || ""} prices by ${Math.abs(p)}%?`)) return;
+    setBulkBusy(true);
+    try {
+      const r = await api.adjustProviderPrices(provider.id, p, categoryId);
+      showToast(`${r.changed} price${r.changed === 1 ? "" : "s"} changed`);
+      setPercent("");
+      await onChanged();
+    } catch (err) {
+      showToast(err.message || "Couldn't change the prices");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   return (
     <div className="rounded-2xl border border-gray-100 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-[14px] font-bold text-gray-900">Services</p>
-          <p className="text-[11.5px] text-gray-400">Tick to add a service to this provider, untick to switch it off.</p>
+          <p className="text-[11.5px] text-gray-400">Tick to add, untick to switch off. Edit a price right in its row (saves when you leave the box).</p>
         </div>
         <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-600">
           {offeredHere} of {rows.length} ticked
@@ -121,12 +182,7 @@ export default function ProviderServicesPicker({ provider, services, onChanged }
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <select
-          value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
-          className="rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[12.5px] outline-none focus:border-brand"
-          aria-label="Category"
-        >
+        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[12.5px] outline-none focus:border-brand" aria-label="Category">
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -134,52 +190,53 @@ export default function ProviderServicesPicker({ provider, services, onChanged }
             </option>
           ))}
         </select>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search services…"
-          className="min-w-[160px] flex-1 rounded-lg border border-gray-200 px-2.5 py-2 text-[12.5px] outline-none focus:border-brand"
-        />
-        <button
-          onClick={addAllShown}
-          disabled={bulkBusy || !rows.some((r) => !ticked(r) && r.service?.status !== "rejected")}
-          className="rounded-lg bg-brand px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-40"
-        >
-          {bulkBusy ? "Adding…" : "Tick all shown"}
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search services…" className="min-w-[160px] flex-1 rounded-lg border border-gray-200 px-2.5 py-2 text-[12.5px] outline-none focus:border-brand" />
+        <button onClick={addAllShown} disabled={bulkBusy || !rows.some((r) => !ticked(r) && r.service?.status !== "rejected")} className="rounded-lg bg-brand px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-40">
+          {bulkBusy ? "Working…" : "Tick all shown"}
         </button>
       </div>
+
+      <form onSubmit={changeAllPrices} className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-gray-500">
+        Change all prices in this category by
+        <input type="number" value={percent} onChange={(e) => setPercent(e.target.value)} placeholder="±10" className="w-20 rounded-md border border-gray-200 px-1.5 py-1 text-right outline-none focus:border-brand" aria-label="Percent" />
+        %
+        <button type="submit" disabled={bulkBusy || !Number(percent)} className="rounded-md border border-gray-200 px-2.5 py-1 font-semibold text-gray-700 hover:border-brand hover:text-brand disabled:opacity-40">
+          Apply
+        </button>
+      </form>
 
       <div className="mt-3 max-h-[60vh] divide-y divide-gray-50 overflow-y-auto rounded-xl border border-gray-100">
         {catalog === null && <p className="p-4 text-[12px] text-gray-400">Loading the catalog…</p>}
         {catalog && rows.length === 0 && (
-          <p className="p-4 text-[12px] text-gray-400">
-            {search ? "No service matches your search." : "No catalog services in this category yet — add them under Services & Categories → Catalog."}
-          </p>
+          <p className="p-4 text-[12px] text-gray-400">{search ? "No service matches your search." : "No catalog services in this category yet — add them under Services & Categories → Catalog."}</p>
         )}
         {rows.map((r) => {
           const on = ticked(r);
           const name = r.item?.name || r.service?.name;
-          const price = r.service?.price ?? r.item?.price;
           const photo = r.service?.imageUrl || r.item?.imageUrl;
+          const busy = busyKey === r.key || bulkBusy;
           return (
-            <label key={r.key} className={`flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-gray-50 ${busyKey === r.key || bulkBusy ? "pointer-events-none opacity-60" : ""}`}>
-              <input type="checkbox" checked={on} onChange={() => toggle(r)} className="h-4 w-4 flex-shrink-0 accent-brand" />
-              <span className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
-                {photo && <img src={SERVER_URL + photo} alt="" className="h-full w-full object-cover" />}
-              </span>
+            <div key={r.key} className={`flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 ${busy ? "opacity-60" : ""}`}>
+              <input type="checkbox" checked={on} disabled={busy} onChange={() => toggle(r)} className="h-4 w-4 flex-shrink-0 cursor-pointer accent-brand" aria-label={`${on ? "Switch off" : "Add"} ${name}`} />
+              <span className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">{photo && <img src={SERVER_URL + photo} alt="" className="h-full w-full object-cover" />}</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[12.5px] font-semibold text-gray-800">{name}</span>
-                <span className="text-[11px] text-gray-400">
-                  ₹{price}
-                  {!r.item && " · not in the catalog"}
-                </span>
+                {!r.service && <span className="text-[11px] text-gray-400">₹{r.item.price} in the catalog</span>}
+                {r.service && !r.item && <span className="text-[11px] text-gray-400">not in the catalog</span>}
               </span>
               {r.service && (
-                <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${STATE_STYLE[r.service.status] || "bg-gray-100 text-gray-500"}`}>
+                <span className="flex flex-shrink-0 items-center gap-1 text-[11px] text-gray-400">
+                  ₹<PriceInput value={r.service.price} label="Price" onSave={(v) => savePrice(r, { price: v })} />
+                  <span className="hidden sm:inline">was ₹</span>
+                  <PriceInput value={r.service.originalPrice ?? null} label="Crossed-out price (optional)" placeholder="—" onSave={(v) => savePrice(r, { originalPrice: v })} />
+                </span>
+              )}
+              {r.service && (
+                <span className={`w-24 flex-shrink-0 rounded-full px-2 py-0.5 text-center text-[10.5px] font-semibold ${STATE_STYLE[r.service.status] || "bg-gray-100 text-gray-500"}`}>
                   {busyKey === r.key ? "Saving…" : STATE_LABEL[r.service.status] || r.service.status}
                 </span>
               )}
-            </label>
+            </div>
           );
         })}
       </div>

@@ -1667,6 +1667,40 @@ async function findDuplicateServices() {
 }
 
 // Folds every copy into the one kept: its bookings, reviews, photo, type and ads move over, then the copy is deleted.
+// Folds one service into another of the same provider: its bookings, reviews, photo, type and ads move over,
+// then it is deleted. Returns the kept service (with merged ratings) and how many bookings moved.
+async function mergeServiceInto(drop, keeper, actor) {
+  let movedBookings = 0;
+  const { bookings } = await query(`query($id: UUID!) { bookings(where: { serviceId: { eq: $id } }) { id } }`, { id: drop.id });
+  for (const b of bookings) {
+    await mutate(`mutation($id: UUID!, $serviceId: UUID!) { booking_update(id: $id, data: { serviceId: $serviceId }) }`, { id: b.id, serviceId: keeper.id });
+    movedBookings++;
+  }
+  const merged = dup.mergeRatings(keeper, drop);
+  if (merged.reviewCount !== (keeper.reviewCount || 0)) {
+    await mutate(`mutation($id: UUID!, $rating: Float!, $reviewCount: Int!) { service_update(id: $id, data: { rating: $rating, reviewCount: $reviewCount }) }`, { id: keeper.id, ...merged });
+    keeper = { ...keeper, ...merged };
+  }
+  const dropPhoto = serviceImageUrl(drop.id);
+  if (dropPhoto && !serviceImageUrl(keeper.id)) {
+    jsonStore.remove("serviceImages", drop.id); // the file now belongs to the kept service, so it isn't deleted below
+    jsonStore.insert("serviceImages", { id: keeper.id, url: dropPhoto, updatedAt: new Date().toISOString() });
+  }
+  const dropType = subcategories.subcategoryOf(drop.id);
+  if (dropType && !subcategories.subcategoryOf(keeper.id)) {
+    try {
+      subcategories.link(keeper.id, dropType, keeper.categoryId);
+    } catch (e) {
+      console.error("Could not move the type while merging", e.message);
+    }
+  }
+  subcategories.link(drop.id, null);
+  for (const ad of jsonStore.readAll("providerAds").filter((x) => x.serviceId === drop.id)) jsonStore.update("providerAds", ad.id, { serviceId: keeper.id });
+  for (const c of listServiceChanges({ serviceId: drop.id })) jsonStore.remove("serviceChangeRequests", c.id);
+  await adminDeleteService(drop.id, actor);
+  return { keeper, movedBookings };
+}
+
 async function mergeDuplicateServices(actor) {
   const groups = await findDuplicateServices();
   let removed = 0;
@@ -1674,33 +1708,9 @@ async function mergeDuplicateServices(actor) {
   for (const { keep, drop } of groups) {
     let keeper = keep;
     for (const d of drop) {
-      const { bookings } = await query(`query($id: UUID!) { bookings(where: { serviceId: { eq: $id } }) { id } }`, { id: d.id });
-      for (const b of bookings) {
-        await mutate(`mutation($id: UUID!, $serviceId: UUID!) { booking_update(id: $id, data: { serviceId: $serviceId }) }`, { id: b.id, serviceId: keeper.id });
-        movedBookings++;
-      }
-      const merged = dup.mergeRatings(keeper, d);
-      if (merged.reviewCount !== (keeper.reviewCount || 0)) {
-        await mutate(`mutation($id: UUID!, $rating: Float!, $reviewCount: Int!) { service_update(id: $id, data: { rating: $rating, reviewCount: $reviewCount }) }`, { id: keeper.id, ...merged });
-        keeper = { ...keeper, ...merged };
-      }
-      const dropPhoto = serviceImageUrl(d.id);
-      if (dropPhoto && !serviceImageUrl(keeper.id)) {
-        jsonStore.remove("serviceImages", d.id); // the file now belongs to the kept service, so it isn't deleted below
-        jsonStore.insert("serviceImages", { id: keeper.id, url: dropPhoto, updatedAt: new Date().toISOString() });
-      }
-      const dropType = subcategories.subcategoryOf(d.id);
-      if (dropType && !subcategories.subcategoryOf(keeper.id)) {
-        try {
-          subcategories.link(keeper.id, dropType, keeper.categoryId);
-        } catch (e) {
-          console.error("Could not move the type while merging", e.message);
-        }
-      }
-      subcategories.link(d.id, null);
-      for (const a of jsonStore.readAll("providerAds").filter((x) => x.serviceId === d.id)) jsonStore.update("providerAds", a.id, { serviceId: keeper.id });
-      for (const c of listServiceChanges({ serviceId: d.id })) jsonStore.remove("serviceChangeRequests", c.id);
-      await adminDeleteService(d.id, actor);
+      const r = await mergeServiceInto(d, keeper, actor);
+      keeper = r.keeper;
+      movedBookings += r.movedBookings;
       removed++;
     }
     recordAdminChange({
@@ -1716,6 +1726,82 @@ async function mergeDuplicateServices(actor) {
   cacheClear("openBookings");
   if (removed) await logActivity("service", `Merged duplicate services: ${removed} cop${removed === 1 ? "y" : "ies"} removed, ${movedBookings} booking${movedBookings === 1 ? "" : "s"} moved`);
   return { groups: groups.length, removed, movedBookings };
+}
+
+// Look-alike services of one provider in one category ("Kitchen windows" / "Kitchen windows Cleaning"),
+// minus pairs someone marked as "not duplicates".
+async function findSimilarServices() {
+  const { services } = await query(`query { services { ${SERVICE_FIELDS} } }`, {});
+  const ignored = new Set(jsonStore.readAll("duplicateIgnores").map((r) => r.id));
+  return dup
+    .similarPairs(services.map(mapService), (x) => (x.providerId && x.categoryId ? `${x.providerId}|${x.categoryId}` : null), (x) => x.name)
+    .filter(([x, y]) => !ignored.has(dup.pairKey("service", x.id, y.id)));
+}
+
+// An admin merges one look-alike into the other (dropId goes, keepId stays).
+async function mergeServicePair(dropId, keepId, actor) {
+  const [drop, keep] = await Promise.all([getService(dropId), getService(keepId)]);
+  if (!drop || !keep) throw Object.assign(new Error("Service not found"), { status: 404 });
+  if (drop.id === keep.id) throw Object.assign(new Error("Choose two different services"), { status: 400 });
+  if (drop.providerId !== keep.providerId) throw Object.assign(new Error("Only services of the same provider can be merged"), { status: 400 });
+  const r = await mergeServiceInto(drop, keep, actor);
+  recordAdminChange({ actor, action: "service.merge", entityType: "service", entityId: keep.id, entityName: keep.name, changes: [{ field: "merged in", from: drop.name, to: keep.name }] });
+  cacheClear("service");
+  cacheClear("openBookings");
+  return { kept: keep.id, movedBookings: r.movedBookings };
+}
+
+function ignoreDuplicatePair(kind, aId, bId, actor) {
+  const id = dup.pairKey(kind, aId, bId);
+  if (!jsonStore.readAll("duplicateIgnores").some((r) => r.id === id)) jsonStore.insert("duplicateIgnores", { id, kind, at: new Date().toISOString(), by: actor || null });
+  return { ignored: id };
+}
+
+// ---- Super Admin pause: hides a provider from customers (no new requests) with a reason, optionally until a date.
+// Jobs already running carry on. Lifts itself at the end date. ----
+function getAdminPause(providerId) {
+  const r = jsonStore.readAll("providerPauses").find((x) => x.id === providerId);
+  if (!r) return null;
+  if (r.until && Date.parse(r.until) <= Date.now()) return null;
+  return r;
+}
+
+async function setAdminPause(providerId, { reason, until } = {}, actor) {
+  const provider = await getProvider(providerId);
+  if (!provider) return undefined;
+  const why = String(reason || "").trim().slice(0, 200);
+  if (!why) throw Object.assign(new Error("Give a reason for pausing"), { status: 400 });
+  let end = null;
+  if (until) {
+    const t = Date.parse(until);
+    if (!Number.isFinite(t) || t <= Date.now()) throw Object.assign(new Error("The end date must be in the future"), { status: 400 });
+    end = new Date(t).toISOString();
+  }
+  const row = { id: providerId, reason: why, until: end, at: new Date().toISOString(), by: actor || null };
+  if (jsonStore.readAll("providerPauses").some((x) => x.id === providerId)) jsonStore.update("providerPauses", providerId, row);
+  else jsonStore.insert("providerPauses", row);
+  cacheClear("providers");
+  recordAdminChange({ actor, action: "provider.pause", entityType: "provider", entityId: providerId, entityName: provider.name, changes: [{ field: "paused", from: null, to: `${why}${end ? ` (until ${end.slice(0, 10)})` : ""}` }] });
+  await addNotification({
+    recipientType: "provider",
+    recipientId: providerId,
+    type: "account",
+    title: "Your account is paused",
+    message: `Tikdum has paused new requests for your account${end ? ` until ${new Date(end).toLocaleDateString("en-IN")}` : ""}. Reason: ${why}. Jobs already in progress continue as normal.`,
+  });
+  return row;
+}
+
+async function clearAdminPause(providerId, actor) {
+  const provider = await getProvider(providerId);
+  if (!provider) return undefined;
+  const had = jsonStore.readAll("providerPauses").find((x) => x.id === providerId);
+  if (!had) return { resumed: false };
+  jsonStore.remove("providerPauses", providerId);
+  cacheClear("providers");
+  recordAdminChange({ actor, action: "provider.resume", entityType: "provider", entityId: providerId, entityName: provider.name, changes: [{ field: "paused", from: had.reason, to: null }] });
+  await addNotification({ recipientType: "provider", recipientId: providerId, type: "account", title: "Your account is active again", message: "Tikdum has lifted the pause on your account. You can receive new requests again." });
+  return { resumed: true };
 }
 
 async function adminDeleteService(serviceId, actor) {
@@ -2266,6 +2352,8 @@ function providerVisibilityChecks(providerId, ctx, { pincode } = {}) {
   add("pincode", "Customer PIN is inside the provider's service area", !pin || isProviderVisibleForPincode(providerId, pin), pin ? `Customer ${pin} — provider ${area}` : `No customer PIN given — provider ${area}`, true, !pin);
   add("wallet", "Provider account is active (wallet funded)", ctx.activeWallets.has(providerId), ctx.activeWallets.has(providerId) ? "Wallet balance is positive" : "Wallet balance is empty — account is paused");
   add("approval", "Provider is approved", provider?.verificationStatus === "approved", `Approval status: ${provider?.verificationStatus || "unknown"}`);
+  const pause = getAdminPause(providerId);
+  add("admin_pause", "Not paused by Tikdum", !pause, pause ? `Paused: ${pause.reason}${pause.until ? ` (until ${pause.until.slice(0, 10)})` : ""}` : "Not paused");
   add("verification", "Provider is verified", provider?.verified !== false && Boolean(provider), provider?.verified === false ? "Verification not completed" : "Verified");
   const inHours = coverage.workingNow !== false;
   add("requests_switch", "Receive Requests switch is on", coverage.acceptingRequests && inHours, !coverage.acceptingRequests ? "Provider switched requests off" : !inHours ? "Outside the provider's working hours" : "Accepting new requests");
@@ -4592,6 +4680,12 @@ module.exports = {
   listServices,
   invalidateServices,
   findDuplicateServices,
+  findSimilarServices,
+  mergeServicePair,
+  ignoreDuplicatePair,
+  getAdminPause,
+  setAdminPause,
+  clearAdminPause,
   mergeDuplicateServices,
   catalogChanged,
   getService,

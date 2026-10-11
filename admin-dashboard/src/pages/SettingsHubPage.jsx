@@ -353,26 +353,51 @@ function ServicesTab({ data, save }) {
   const keys = useMemo(() => ["serviceApprovalRequired", "serviceChangeApprovalRequired", "serviceChangeFields"], []);
   const form = useDraft(data.settings, keys);
   return (
-    <Card title="Service approval rules" desc="What needs your approval before customers see it." form={form} save={save}>
+    <div className="space-y-4">
+      <Card title="Service approval rules" desc="What needs your approval before customers see it." form={form} save={save}>
+        <Toggle
+          label="New services need approval"
+          hint="On: a provider's new service is hidden until you approve it. Off: it goes live immediately."
+          checked={form.draft.serviceApprovalRequired}
+          onChange={(v) => form.set("serviceApprovalRequired", v)}
+        />
+        <Toggle
+          label="Changes to live services need approval"
+          hint="On: edits to the fields below wait for your review while the old details stay live."
+          checked={form.draft.serviceChangeApprovalRequired}
+          onChange={(v) => form.set("serviceChangeApprovalRequired", v)}
+        />
+        {form.draft.serviceChangeApprovalRequired && (
+          <div>
+            <p className={labelCls}>Fields that need approval when changed</p>
+            <Checks options={data.options.serviceChangeFields.map((f) => ({ value: f, label: FIELD_LABEL[f] || f }))} value={form.draft.serviceChangeFields} onChange={(v) => form.set("serviceChangeFields", v)} />
+            <p className="mt-1 text-[11.5px] text-gray-400">Other fields are applied directly.</p>
+          </div>
+        )}
+      </Card>
+      <KycRulesCard data={data} save={save} />
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------- provider documents
+
+function KycRulesCard({ data, save }) {
+  const keys = useMemo(() => ["kycApprovalGate", "kycRequiredDocs"], []);
+  const form = useDraft(data.settings, keys);
+  return (
+    <Card title="Provider documents (KYC)" desc="Which documents a provider must have approved, and whether approving the provider waits for them." form={form} save={save}>
       <Toggle
-        label="New services need approval"
-        hint="On: a provider's new service is hidden until you approve it. Off: it goes live immediately."
-        checked={form.draft.serviceApprovalRequired}
-        onChange={(v) => form.set("serviceApprovalRequired", v)}
+        label="Approving a provider needs their required documents approved first"
+        hint="On: the Approve button refuses until every required document below is approved on the provider's Documents tab."
+        checked={form.draft.kycApprovalGate}
+        onChange={(v) => form.set("kycApprovalGate", v)}
       />
-      <Toggle
-        label="Changes to live services need approval"
-        hint="On: edits to the fields below wait for your review while the old details stay live."
-        checked={form.draft.serviceChangeApprovalRequired}
-        onChange={(v) => form.set("serviceChangeApprovalRequired", v)}
-      />
-      {form.draft.serviceChangeApprovalRequired && (
-        <div>
-          <p className={labelCls}>Fields that need approval when changed</p>
-          <Checks options={data.options.serviceChangeFields.map((f) => ({ value: f, label: FIELD_LABEL[f] || f }))} value={form.draft.serviceChangeFields} onChange={(v) => form.set("serviceChangeFields", v)} />
-          <p className="mt-1 text-[11.5px] text-gray-400">Other fields are applied directly.</p>
-        </div>
-      )}
+      <div>
+        <p className={labelCls}>Required documents</p>
+        <Checks options={data.options.kycDocTypes || []} value={form.draft.kycRequiredDocs || []} onChange={(v) => form.set("kycRequiredDocs", v)} />
+        <p className="mt-1 text-[11.5px] text-gray-400">The others can still be uploaded and reviewed, but aren't needed to approve.</p>
+      </div>
     </Card>
   );
 }

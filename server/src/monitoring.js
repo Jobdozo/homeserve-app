@@ -190,6 +190,7 @@ async function build(query) {
     const cap = ctx.capacities[p.id];
     let unavailableReason = null;
     if (p.verificationStatus && p.verificationStatus !== "approved") unavailableReason = `Verification ${p.verificationStatus}`;
+    else if (store.getAdminPause(p.id)) unavailableReason = "Paused by Tikdum";
     else if (!coverage.acceptingRequests) unavailableReason = "Requests switched off";
     else if (coverage.workingNow === false) unavailableReason = "Outside working hours";
     else if (store.isProviderSuspended(p.id)) unavailableReason = "Wallet empty — paused";

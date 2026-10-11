@@ -34,6 +34,7 @@ const accounting = require("./accounting");
 const subcategories = require("./subcategories");
 const imageStudio = require("./imageStudio");
 const { groupByProvider, describeGroup } = require("./orderGroups");
+const providerAdmin = require("./providerAdmin");
 auth.setBlockCheck(blockedPhones.isBlocked);
 const liveLocation = require("./liveLocation");
 const push = require("./push");
@@ -152,6 +153,7 @@ async function dispatchBooking(booking, triedProviderIds = [booking.providerId],
         const current = await store.getBooking(g.id);
         if (current && current.status === "Pending") still.push(current); // not yet accepted/rejected/cancelled
       }
+      for (const b of still) providerAdmin.recordDecline(b.providerId, b.id, "timeout");
       if (still.length) await reassignGroup(still, triedProviderIds);
     } catch (e) {
       console.error("dispatchBooking timeout failed:", e);
@@ -629,6 +631,10 @@ app.patch("/api/providers/:id/verification", auth.requireAuth("admin"), ah(async
   const { status } = req.body || {};
   if (!["pending", "approved", "rejected"].includes(status)) {
     return res.status(400).json({ error: "status must be one of pending, approved, rejected" });
+  }
+  if (status === "approved" && store.getSettings().kycApprovalGate) {
+    const kyc = providerAdmin.providerKyc(req.params.id);
+    if (!kyc.complete) return res.status(409).json({ error: `Approve these documents first: ${kyc.missing.join(", ")}` });
   }
   const provider = await store.setProviderVerification(req.params.id, status);
   if (!provider) return res.status(404).json({ error: "Provider not found" });
@@ -1266,7 +1272,101 @@ app.get("/api/admin/duplicates", auth.requireAuth("admin"), ah(async (req, res) 
     services: (await store.findDuplicateServices()).map((g) => ({ name: g.keep.name, provider: providerName(g.keep.providerId), categoryId: g.keep.categoryId, copies: g.drop.length + 1, bookings: g.bookings })),
     catalog: serviceCatalog.duplicateEntries().map((g) => ({ name: g[0].name, categoryId: g[0].categorySlug, copies: g.length })),
     types: subcategories.duplicateTypes().map((g) => ({ name: g[0].name, categoryId: g[0].categoryId, copies: g.length })),
+    similar: {
+      services: (await store.findSimilarServices()).map(([a, b]) => ({
+        provider: providerName(a.providerId),
+        categoryId: a.categoryId,
+        a: { id: a.id, name: a.name, price: a.price, status: a.status },
+        b: { id: b.id, name: b.name, price: b.price, status: b.status },
+      })),
+      catalog: serviceCatalog.similarEntries().map(([a, b]) => ({
+        categoryId: a.categorySlug,
+        a: { id: a.id, name: a.name, price: a.price },
+        b: { id: b.id, name: b.name, price: b.price },
+      })),
+    },
   });
+}));
+
+app.post("/api/admin/duplicates/merge-pair", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { kind, keepId, dropId } = req.body || {};
+  if (kind === "service") {
+    res.json(await store.mergeServicePair(dropId, keepId, actorOf(req)));
+  } else if (kind === "catalog") {
+    res.json(serviceCatalog.mergeEntryPair(dropId, keepId, actorOf(req)));
+  } else {
+    res.status(400).json({ error: "kind must be service or catalog" });
+  }
+  rt.activity((await store.listActivities(1))[0]);
+}));
+
+app.post("/api/admin/duplicates/ignore", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { kind, aId, bId } = req.body || {};
+  if (!["service", "catalog"].includes(kind) || !aId || !bId) return res.status(400).json({ error: "kind, aId and bId are required" });
+  res.json(store.ignoreDuplicatePair(kind, aId, bId, actorOf(req)));
+}));
+
+// ---- Super Admin: provider tools (search, alerts, performance, money, documents, prices, notes, tags, pause) ----
+app.get("/api/admin/providers/search", auth.requireAuth("admin"), ah(async (req, res) => {
+  res.json(await providerAdmin.search({ ...req.query, all: req.query.all === "1" }));
+}));
+
+app.get("/api/admin/provider-alerts", auth.requireAuth("admin"), ah(async (req, res) => res.json(await providerAdmin.alerts())));
+app.get("/api/admin/provider-tags", auth.requireAuth("admin"), (req, res) => res.json(providerAdmin.allTags()));
+
+app.post("/api/admin/providers/message", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { ids, title, message } = req.body || {};
+  const result = await providerAdmin.messageProviders(ids, { title, message });
+  await store.logActivity("notification", `Admin sent "${String(title).slice(0, 60)}" to ${result.sent} provider(s)`);
+  res.json(result);
+}));
+
+app.get("/api/admin/providers/:id/performance", auth.requireAuth("admin"), ah(async (req, res) => res.json(await providerAdmin.performance(req.params.id))));
+app.get("/api/admin/providers/:id/money", auth.requireAuth("admin"), ah(async (req, res) => res.json(await providerAdmin.money(req.params.id))));
+app.get("/api/admin/providers/:id/kyc", auth.requireAuth("admin"), (req, res) => res.json(providerAdmin.providerKyc(req.params.id)));
+
+app.post("/api/admin/providers/:id/kyc-documents/:docId/review", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { status, note, expiresAt } = req.body || {};
+  res.json(await providerAdmin.reviewDocument(req.params.id, req.params.docId, { status, note, expiresAt }, actorOf(req)));
+}));
+
+app.post("/api/admin/providers/:id/prices", auth.requireAuth("admin"), ah(async (req, res) => {
+  const result = await providerAdmin.adjustPrices(req.params.id, req.body || {}, actorOf(req));
+  for (const s of result.services) rt.service("service:updated", await store.getService(s.id));
+  res.json(result);
+}));
+
+app.get("/api/admin/providers/:id/tags", auth.requireAuth("admin"), (req, res) => res.json(providerAdmin.getTags(req.params.id)));
+app.put("/api/admin/providers/:id/tags", auth.requireAuth("admin"), (req, res) => res.json(providerAdmin.setTags(req.params.id, req.body?.tags, actorOf(req))));
+
+app.get("/api/admin/providers/:id/notes", auth.requireAuth("admin"), (req, res) => res.json(providerAdmin.listNotes(req.params.id)));
+app.post("/api/admin/providers/:id/notes", auth.requireAuth("admin"), (req, res) => {
+  try {
+    res.status(201).json(providerAdmin.addNote(req.params.id, req.body?.text, actorOf(req)));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+app.delete("/api/admin/providers/:id/notes/:noteId", auth.requireAuth("admin"), (req, res) => {
+  try {
+    res.json(providerAdmin.deleteNote(req.params.id, req.params.noteId));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+app.get("/api/admin/providers/:id/pause", auth.requireAuth("admin"), (req, res) => res.json(store.getAdminPause(req.params.id)));
+app.post("/api/admin/providers/:id/pause", auth.requireAuth("admin"), ah(async (req, res) => {
+  const row = await store.setAdminPause(req.params.id, req.body || {}, actorOf(req));
+  if (!row) return res.status(404).json({ error: "Provider not found" });
+  io.emit("provider:updated", publicProvider(await store.getProvider(req.params.id)));
+  res.json(row);
+}));
+app.delete("/api/admin/providers/:id/pause", auth.requireAuth("admin"), ah(async (req, res) => {
+  const result = await store.clearAdminPause(req.params.id, actorOf(req));
+  if (!result) return res.status(404).json({ error: "Provider not found" });
+  io.emit("provider:updated", publicProvider(await store.getProvider(req.params.id)));
+  res.json(result);
 }));
 
 app.post("/api/admin/duplicates/merge", auth.requireAuth("admin"), ah(async (req, res) => {
@@ -1464,6 +1564,7 @@ app.post("/api/orders/:orderId/respond", auth.requireAuth("provider"), ah(async 
   const mine = (await store.listBookings({ providerId: req.user.id })).filter((b) => b.orderId === req.params.orderId && b.status === "Pending");
   if (mine.length === 0) return res.status(404).json({ error: "No pending requests for this order" });
   if (action === "reject") {
+    for (const b of mine) providerAdmin.recordDecline(req.user.id, b.id, "declined");
     await reassignGroup(mine, [req.user.id]);
     return res.json({ rejected: mine.map((b) => b.id) });
   }
@@ -1503,6 +1604,7 @@ app.patch("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
   // A provider declining doesn't fail the booking outright — try handing it
   // to another provider in the same category first, same as a ring timeout.
   if (req.user.role === "provider" && status === "Rejected" && existing.status === "Pending") {
+    providerAdmin.recordDecline(req.user.id, existing.id, "declined");
     const result = await store.reassignBooking(req.params.id, [req.user.id]);
     rt.booking("booking:updated", result.booking, { previous: [req.user.id] });
     rt.activity((await store.listActivities(1))[0]);
@@ -1676,7 +1778,7 @@ app.post(
     if (provider?.verificationStatus === "approved") {
       return res.status(403).json({ error: "Your account is verified — contact support to change documents" });
     }
-    const docType = req.body?.docType || "other";
+    const docType = rulesConfig.KYC_DOC_TYPES.includes(req.body?.docType) ? req.body.docType : "other";
     const doc = store.addKycDocument(req.user.id, { docType, url: `/uploads/${req.file.filename}` });
     await store.logActivity("provider", `${req.user.id} uploaded a KYC document (${docType})`);
     res.status(201).json(doc);
@@ -1707,7 +1809,7 @@ app.post(
     if (!req.file) return res.status(400).json({ error: "Choose a photo of the document" });
     const provider = await store.getProvider(req.params.id);
     if (!provider) return res.status(404).json({ error: "Provider not found" });
-    const docType = ["id_proof", "gst_certificate", "other"].includes(req.body?.docType) ? req.body.docType : "other";
+    const docType = rulesConfig.KYC_DOC_TYPES.includes(req.body?.docType) ? req.body.docType : "other";
     const doc = store.addKycDocument(req.params.id, { docType, url: `/uploads/${req.file.filename}` });
     store.recordAdminChange({
       actor: actorOf(req),
@@ -2044,6 +2146,7 @@ app.get("/api/admin/business-rules", auth.requireAuth("admin"), ah(async (req, r
     options: {
       bookingStatuses: rulesConfig.BOOKING_STATUSES,
       serviceChangeFields: rulesConfig.SERVICE_CHANGE_FIELDS,
+      kycDocTypes: rulesConfig.KYC_DOC_TYPES.map((k) => ({ value: k, label: providerAdmin.DOC_LABELS[k] || k })),
       visibilityRuleKeys: rulesConfig.VISIBILITY_RULE_KEYS,
       staffPermissionGroups: staff.PERMISSION_GROUPS.map((g) => ({ key: g.key, label: g.label, permissions: g.permissions.map(([key, label]) => ({ key, label })) })),
       staffRoleTemplates: staff.roleTemplates(),
@@ -2690,4 +2793,5 @@ server.listen(PORT, () => {
 // a day — checked hourly so a restart never leaves it waiting a full day.
 setInterval(() => {
   store.sendSuspendedWalletReminders().catch((e) => console.error("Suspended wallet reminders failed:", e));
+  providerAdmin.sendExpiryReminders().catch((e) => console.error("Document expiry reminders failed:", e));
 }, 60 * 60 * 1000);

@@ -28,9 +28,28 @@ const statusConfig = {
 };
 
 const DOC_TYPES = [
-  { docType: "id_proof", label: "ID Proof", description: "Aadhaar, PAN, or another government ID" },
+  { docType: "id_proof", label: "ID Proof", description: "Aadhaar, voter ID, driving licence or passport" },
+  { docType: "address_proof", label: "Address Proof", description: "Aadhaar, electricity bill, rent agreement or passport" },
+  { docType: "pan_card", label: "PAN Card", description: "Your PAN card" },
   { docType: "gst_certificate", label: "GST Certificate", description: "Only if you're GST registered" },
+  { docType: "bank_details", label: "Bank / UPI Proof", description: "Cancelled cheque, passbook page or UPI screenshot" },
+  { docType: "police_verification", label: "Police Verification", description: "If you have a police verification certificate" },
 ];
+
+// How Tikdum's review of a document is shown to the provider.
+function DocStatus({ doc }) {
+  if (!doc) return null;
+  const expired = doc.status === "approved" && doc.expiresAt && new Date(doc.expiresAt) <= new Date();
+  if (expired) return <p className="mt-1 text-[11px] font-semibold text-red-600">Expired — please upload a new one</p>;
+  if (doc.status === "approved")
+    return (
+      <p className="mt-1 text-[11px] font-semibold text-emerald-600">
+        ✓ Verified{doc.expiresAt ? ` · valid till ${new Date(doc.expiresAt).toLocaleDateString("en-IN")}` : ""}
+      </p>
+    );
+  if (doc.status === "rejected") return <p className="mt-1 text-[11px] font-semibold text-red-600">Not accepted{doc.note ? `: ${doc.note}` : ""} — please upload again</p>;
+  return <p className="mt-1 text-[11px] font-semibold text-amber-600">Waiting for review</p>;
+}
 
 export default function DocumentsKycScreen() {
   const { provider, showToast } = useApp();
@@ -99,7 +118,9 @@ export default function DocumentsKycScreen() {
           <h2 className="mb-2 text-[13px] font-bold text-gray-900">Documents</h2>
           <div className="space-y-3">
             {DOC_TYPES.map(({ docType, label, description }) => {
-              const doc = documents.find((d) => d.docType === docType);
+              const doc = documents
+                .filter((d) => d.docType === docType)
+                .sort((a, b) => String(b.uploadedAt).localeCompare(String(a.uploadedAt)))[0];
               const isUploading = uploadingType === docType;
               return (
                 <div key={docType} className="flex items-center gap-3 rounded-2xl border border-gray-100 p-3">
@@ -118,11 +139,12 @@ export default function DocumentsKycScreen() {
                   <div className="min-w-0 flex-1">
                     <p className="text-[13px] font-semibold text-gray-800">{label}</p>
                     <p className="mt-0.5 text-[11px] text-gray-400">{description}</p>
+                    <DocStatus doc={doc} />
                   </div>
 
-                  {!locked && (
+                  {(
                     <div className="flex flex-shrink-0 items-center gap-2">
-                      {doc && (
+                      {doc && !locked && doc.status !== "approved" && (
                         <button
                           onClick={() => handleDelete(doc)}
                           className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-50 text-gray-400"
@@ -152,7 +174,7 @@ export default function DocumentsKycScreen() {
               );
             })}
           </div>
-          {!loading && !locked && (
+          {!loading && (
             <p className="mt-2 px-1 text-[11px] text-gray-400">
               Tap "Add Photo" to take a picture with your camera or choose one from your gallery.
             </p>

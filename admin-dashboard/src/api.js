@@ -214,6 +214,30 @@ export const api = {
     return request(`/admin/change-log?${q.toString()}`);
   },
   getDuplicates: () => request("/admin/duplicates"),
+  mergeDuplicatePair: (kind, keepId, dropId) => request("/admin/duplicates/merge-pair", { method: "POST", body: JSON.stringify({ kind, keepId, dropId }) }),
+  ignoreDuplicatePair: (kind, aId, bId) => request("/admin/duplicates/ignore", { method: "POST", body: JSON.stringify({ kind, aId, bId }) }),
+  // provider tools
+  searchProviders: (params) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params || {})) if (v !== undefined && v !== null && v !== "") q.set(k, v);
+    return request(`/admin/providers/search?${q.toString()}`);
+  },
+  getProviderAlerts: () => request("/admin/provider-alerts"),
+  listProviderTags: () => request("/admin/provider-tags"),
+  messageProviders: (ids, title, message) => request("/admin/providers/message", { method: "POST", body: JSON.stringify({ ids, title, message }) }),
+  getProviderPerformance: (id) => request(`/admin/providers/${id}/performance`),
+  getProviderMoney: (id) => request(`/admin/providers/${id}/money`),
+  getProviderKyc: (id) => request(`/admin/providers/${id}/kyc`),
+  reviewProviderDocument: (id, docId, body) => request(`/admin/providers/${id}/kyc-documents/${docId}/review`, { method: "POST", body: JSON.stringify(body) }),
+  adjustProviderPrices: (id, percent, categoryId) => request(`/admin/providers/${id}/prices`, { method: "POST", body: JSON.stringify({ percent, categoryId }) }),
+  getProviderTags: (id) => request(`/admin/providers/${id}/tags`),
+  setProviderTags: (id, tags) => request(`/admin/providers/${id}/tags`, { method: "PUT", body: JSON.stringify({ tags }) }),
+  listProviderNotes: (id) => request(`/admin/providers/${id}/notes`),
+  addProviderNote: (id, text) => request(`/admin/providers/${id}/notes`, { method: "POST", body: JSON.stringify({ text }) }),
+  deleteProviderNote: (id, noteId) => request(`/admin/providers/${id}/notes/${noteId}`, { method: "DELETE" }),
+  getProviderPause: (id) => request(`/admin/providers/${id}/pause`),
+  pauseProvider: (id, reason, until) => request(`/admin/providers/${id}/pause`, { method: "POST", body: JSON.stringify({ reason, until }) }),
+  resumeProvider: (id) => request(`/admin/providers/${id}/pause`, { method: "DELETE" }),
   mergeDuplicates: () => request("/admin/duplicates/merge", { method: "POST" }),
   listProviderChanges: (status) => request(`/admin/provider-changes${status ? `?status=${status}` : ""}`),
   reviewProviderChange: (id, decision, note) =>

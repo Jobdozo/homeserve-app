@@ -4,6 +4,21 @@ import { useApp } from "../context/AppContext";
 import { StarIcon, CheckIcon, XIcon, WalletIcon, FileIcon, MapPinIcon } from "./icons";
 import VisibilityPanel from "./VisibilityPanel";
 import ProviderServicesPicker from "./ProviderServicesPicker";
+import ProviderOrdersTab from "./ProviderOrdersTab";
+import ProviderMoneyTab from "./ProviderMoneyTab";
+import ProviderKycReview from "./ProviderKycReview";
+import ProviderActivityTab from "./ProviderActivityTab";
+import { ProviderContact, ProviderPause } from "./ProviderContactPause";
+
+// The full-screen provider page is split into tabs; the old popup shows everything in one list.
+const PAGE_TABS = [
+  ["overview", "Overview"],
+  ["services", "Services"],
+  ["orders", "Orders"],
+  ["money", "Money"],
+  ["documents", "Documents"],
+  ["activity", "Activity"],
+];
 
 const verificationStyles = {
   pending: "bg-amber-100 text-amber-700",
@@ -160,6 +175,13 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
 
   const loadWallet = () => api.getProviderWallet(providerId).then(setWallet).catch(() => setWallet(null));
   const reloadServices = () => api.getProviderServices(providerId).then(setServices).catch(() => {});
+  const [tab, setTab] = useState("overview");
+  const show = (t) => !asPage || tab === t;
+  const [tags, setTags] = useState([]);
+  const [, setKycTick] = useState(0);
+  useEffect(() => {
+    if (asPage) api.getProviderTags(providerId).then(setTags).catch(() => setTags([]));
+  }, [asPage, providerId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -282,7 +304,7 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
           )}
         </div>
 
-        <div className={asPage ? "grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] xl:items-start" : ""}>
+        <div >
         <div className="space-y-5 p-5">
           <div className="flex items-start gap-3">
             <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-3xl">
@@ -309,8 +331,33 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
           <div className="rounded-xl bg-gray-50 px-3 py-2 text-[11.5px] text-gray-500">
             {provider.live ? "🟢 Connected via Provider App" : "⚪ Managed by admin (no live app)"}
           </div>
+          {asPage && (
+            <>
+              {tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {tags.map((t) => (
+                    <span key={t} className="rounded-full bg-brand-light px-2.5 py-0.5 text-[11px] font-semibold text-brand-dark">{t}</span>
+                  ))}
+                </div>
+              )}
+              <ProviderContact provider={provider} />
+              <ProviderPause provider={provider} />
+              <div className="-mx-5 flex gap-1 overflow-x-auto border-b border-gray-100 px-5">
+                {PAGE_TABS.map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setTab(key)}
+                    className={`relative flex-shrink-0 px-3 py-2.5 text-[13px] font-semibold ${tab === key ? "text-brand" : "text-gray-500 hover:text-gray-800"}`}
+                  >
+                    {label}
+                    {tab === key && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand" />}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
-          <Section title="Wallet">
+          {show("money") && (<><Section title="Wallet">
             {wallet === null && <p className="text-[12px] text-gray-400">Loading…</p>}
             {wallet && (
               <>
@@ -353,9 +400,9 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
                 </form>
               </>
             )}
-          </Section>
+          </Section></>)}
 
-          <Section
+          {show("overview") && (<><Section
             title="Provider Details"
             action={
               !editing && (
@@ -418,9 +465,9 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
                 <Field label="Joined" value={provider.joinedAt ? new Date(provider.joinedAt).toLocaleDateString("en-IN") : null} />
               </div>
             )}
-          </Section>
+          </Section></>)}
 
-          <Section title="Service Area">
+          {show("overview") && (<><Section title="Service Area">
             <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 text-[12.5px]">
               <span className="flex items-center gap-2 text-gray-500">
                 <MapPinIcon width={16} height={16} className="text-gray-400" />
@@ -479,13 +526,13 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
               A short number covers every PIN code that starts with it: <b>180</b> covers all of 180xxx, <b>18</b> all of 18xxxx. Leave it empty
               to use the default region from Settings → Visibility &amp; coverage (not the whole country).
             </p>
-          </Section>
+          </Section></>)}
 
-          <Section title="Customer Visibility">
+          {show("overview") && (<><Section title="Customer Visibility">
             <VisibilityPanel providerId={providerId} />
-          </Section>
+          </Section></>)}
 
-          <Section title="Open Requests & Visibility">
+          {show("overview") && (<><Section title="Open Requests & Visibility">
             {capacity === null && <p className="text-[12px] text-gray-400">Loading…</p>}
             {capacity && (
               <>
@@ -596,11 +643,11 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
                 Send warning
               </button>
             </div>
-          </Section>
+          </Section></>)}
 
-          {provider.verificationStatus === "pending" && <PrecheckSection providerId={provider.id} />}
+          {show("overview") && provider.verificationStatus === "pending" && <PrecheckSection providerId={provider.id} />}
 
-          {provider.verificationStatus === "pending" && (
+          {show("overview") && (<>{provider.verificationStatus === "pending" && (
             <div className="flex gap-2">
               <button
                 disabled={busy}
@@ -617,9 +664,9 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
                 <CheckIcon width={13} height={13} /> Approve
               </button>
             </div>
-          )}
+          )}</>)}
 
-          <Section title="Documents">
+          {!asPage && (<><Section title="Documents">
             {documents === null && <p className="text-[12px] text-gray-400">Loading…</p>}
             {documents?.length === 0 && <p className="text-[12px] text-gray-400">No documents uploaded.</p>}
             {documents?.map((d) => (
@@ -671,7 +718,7 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
                 <input type="file" accept="image/*" onChange={uploadDocument} className="hidden" />
               </label>
             </div>
-          </Section>
+          </Section></>)}
 
           {!asPage && <Section title="Services">
             {services === null && <p className="text-[12px] text-gray-400">Loading…</p>}
@@ -686,7 +733,7 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
             ))}
           </Section>}
 
-          <Section title="Earnings">
+          {show("money") && (<><Section title="Earnings">
             {earnings === null && <p className="text-[12px] text-gray-400">Loading…</p>}
             {earnings && (
               <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2.5 text-[12.5px]">
@@ -695,9 +742,9 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
                 <span className="font-semibold text-gray-900">₹{earnings.allTime.toLocaleString("en-IN")}</span>
               </div>
             )}
-          </Section>
+          </Section></>)}
 
-          <Section title="Reviews">
+          {show("orders") && (<><Section title="Reviews">
             {reviews === null && <p className="text-[12px] text-gray-400">Loading…</p>}
             {reviews?.length === 0 && <p className="text-[12px] text-gray-400">No reviews yet.</p>}
             {reviews?.slice(0, 5).map((r) => (
@@ -711,9 +758,9 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
                 {r.text && <p className="mt-1 text-[11.5px] text-gray-500">{r.text}</p>}
               </div>
             ))}
-          </Section>
+          </Section></>)}
 
-          <div className="rounded-xl border border-red-100 p-3.5">
+          {show("overview") && (<><div className="rounded-xl border border-red-100 p-3.5">
             <p className="text-[12.5px] font-bold text-red-700">Danger Zone</p>
             <p className="mt-1 text-[11.5px] leading-snug text-gray-400">
               Permanently deletes this provider along with their services and bookings. This can't be undone.
@@ -734,15 +781,31 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
                 </button>
               )}
             </div>
-          </div>
+          </div></>)}
         </div>
-        {asPage && (
-          <div className="p-5 xl:sticky xl:top-4 xl:pl-0">
-            {services === null ? (
-              <p className="text-[12px] text-gray-400">Loading services…</p>
-            ) : (
-              <ProviderServicesPicker provider={provider} services={services} onChanged={reloadServices} />
-            )}
+        {asPage && tab === "services" && (
+          <div className="px-5 pb-5">
+            {services === null ? <p className="text-[12px] text-gray-400">Loading services…</p> : <ProviderServicesPicker provider={provider} services={services} onChanged={reloadServices} />}
+          </div>
+        )}
+        {asPage && tab === "orders" && (
+          <div className="px-5 pb-5">
+            <ProviderOrdersTab providerId={provider.id} />
+          </div>
+        )}
+        {asPage && tab === "money" && (
+          <div className="px-5 pb-5">
+            <ProviderMoneyTab providerId={provider.id} refreshKey={wallet?.balance} />
+          </div>
+        )}
+        {asPage && tab === "documents" && (
+          <div className="px-5 pb-5">
+            <ProviderKycReview provider={provider} onChanged={() => setKycTick((n) => n + 1)} />
+          </div>
+        )}
+        {asPage && tab === "activity" && (
+          <div className="px-5 pb-5">
+            <ProviderActivityTab providerId={provider.id} onTagsSaved={setTags} />
           </div>
         )}
         </div>
