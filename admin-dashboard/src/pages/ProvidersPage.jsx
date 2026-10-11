@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
 import { StarIcon, CheckIcon, XIcon } from "../components/icons";
-import ProviderDetailModal from "../components/ProviderDetailModal";
 
 const TABS = ["All", "Pending", "Approved", "Rejected"];
+const PAGE = 60; // cards drawn at a time — with thousands of providers the list grows on "Show more"
 
 const verificationStyles = {
   pending: "bg-amber-100 text-amber-700",
@@ -14,18 +15,47 @@ const verificationStyles = {
 
 export default function ProvidersPage() {
   const { providers, approveProvider, rejectProvider } = useApp();
-  const [tab, setTab] = useState("All");
-  const [openProviderId, setOpenProviderId] = useState(null);
+  const navigate = useNavigate();
+  // Tab and search live in the address, so "Back to providers" returns to the same list.
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") || "All";
+  const query = params.get("q") || "";
+  const setParam = (key, value) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value && value !== "All") next.set(key, value);
+        else next.delete(key);
+        return next;
+      },
+      { replace: true }
+    );
+  const [shown, setShown] = useState(PAGE);
   const [capacities, setCapacities] = useState({});
 
   useEffect(() => {
     api.listProviderCapacities().then(setCapacities).catch(() => {});
-  }, [openProviderId]);
+  }, []);
+  useEffect(() => setShown(PAGE), [tab, query]);
 
+  const counts = useMemo(() => {
+    const c = { All: providers.length };
+    for (const p of providers) c[p.verificationStatus] = (c[p.verificationStatus] || 0) + 1;
+    return c;
+  }, [providers]);
+
+  // Phone numbers match on their digits, so "98765 43210", "+91 9876543210" and "9876543210" all find the same person.
   const filtered = useMemo(() => {
-    if (tab === "All") return providers;
-    return providers.filter((p) => p.verificationStatus === tab.toLowerCase());
-  }, [providers, tab]);
+    const inTab = tab === "All" ? providers : providers.filter((p) => p.verificationStatus === tab.toLowerCase());
+    const q = query.trim().toLowerCase();
+    if (!q) return inTab;
+    const digits = q.replace(/\D/g, "");
+    return inTab.filter((p) => {
+      const phone = String(p.phone || "").replace(/\D/g, "");
+      if (digits.length >= 3 && phone.includes(digits.replace(/^91(?=\d{10}$)/, ""))) return true;
+      return [p.name, p.businessName, p.email, p.category].some((v) => String(v || "").toLowerCase().includes(q));
+    });
+  }, [providers, tab, query]);
 
   return (
     <div className="space-y-4">
@@ -33,21 +63,35 @@ export default function ProvidersPage() {
         {TABS.map((t) => (
           <button
             key={t}
-            onClick={() => setTab(t)}
+            onClick={() => setParam("tab", t)}
             className={`flex-shrink-0 rounded-xl px-4 py-2 text-[12.5px] font-semibold transition-colors ${
               tab === t ? "bg-brand text-white" : "text-gray-500 hover:bg-gray-50"
             }`}
           >
             {t}
+            <span className={`ml-1.5 ${tab === t ? "text-white/75" : "text-gray-400"}`}>{t === "All" ? counts.All : counts[t.toLowerCase()] || 0}</span>
           </button>
         ))}
       </div>
 
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          value={query}
+          onChange={(e) => setParam("q", e.target.value)}
+          placeholder="Search by phone number, name or business…"
+          className="w-full max-w-md rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-[13px] outline-none focus:border-brand"
+          aria-label="Search providers"
+        />
+        <span className="text-[12px] text-gray-400">
+          {filtered.length} provider{filtered.length === 1 ? "" : "s"}
+        </span>
+      </div>
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {filtered.map((p) => (
+        {filtered.slice(0, shown).map((p) => (
           <div
             key={p.id}
-            onClick={() => setOpenProviderId(p.id)}
+            onClick={() => navigate(`/providers/${p.id}`)}
             className="cursor-pointer rounded-2xl bg-white p-4 shadow-card transition-shadow hover:shadow-md"
           >
             <div className="flex items-start gap-3">
@@ -108,12 +152,16 @@ export default function ProvidersPage() {
           </div>
         ))}
         {filtered.length === 0 && (
-          <p className="col-span-full py-12 text-center text-sm text-gray-400">No {tab.toLowerCase()} providers.</p>
+          <p className="col-span-full py-12 text-center text-sm text-gray-400">{query ? "No provider matches your search." : `No ${tab.toLowerCase()} providers.`}</p>
         )}
       </div>
 
-      {openProviderId && (
-        <ProviderDetailModal providerId={openProviderId} onClose={() => setOpenProviderId(null)} />
+      {filtered.length > shown && (
+        <div className="text-center">
+          <button onClick={() => setShown((n) => n + PAGE)} className="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-[13px] font-semibold text-gray-600 hover:bg-gray-50">
+            Show more ({filtered.length - shown} left)
+          </button>
+        </div>
       )}
     </div>
   );

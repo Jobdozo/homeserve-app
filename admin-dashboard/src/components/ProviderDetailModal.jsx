@@ -3,6 +3,7 @@ import { api, SERVER_URL } from "../api";
 import { useApp } from "../context/AppContext";
 import { StarIcon, CheckIcon, XIcon, WalletIcon, FileIcon, MapPinIcon } from "./icons";
 import VisibilityPanel from "./VisibilityPanel";
+import ProviderServicesPicker from "./ProviderServicesPicker";
 
 const verificationStyles = {
   pending: "bg-amber-100 text-amber-700",
@@ -25,7 +26,8 @@ const DOC_LABELS = {
   other: "Other",
 };
 
-export default function ProviderDetailModal({ providerId, onClose }) {
+// asPage: shown as its own full-screen page (Providers → a provider) with the services picker beside it.
+export default function ProviderDetailModal({ providerId, onClose, asPage = false }) {
   const { providers, approveProvider, rejectProvider, deleteProvider, updateProviderProfile, updateProviderCoverage, showToast } =
     useApp();
   const provider = providers.find((p) => p.id === providerId);
@@ -157,6 +159,7 @@ export default function ProviderDetailModal({ providerId, onClose }) {
   };
 
   const loadWallet = () => api.getProviderWallet(providerId).then(setWallet).catch(() => setWallet(null));
+  const reloadServices = () => api.getProviderServices(providerId).then(setServices).catch(() => {});
 
   useEffect(() => {
     let cancelled = false;
@@ -258,17 +261,28 @@ export default function ProviderDetailModal({ providerId, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      className={asPage ? "" : "fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"}
+      onMouseDown={asPage ? undefined : (e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-xl">
+      <div className={asPage ? "w-full rounded-2xl bg-white shadow-card" : "max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-xl"}>
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-          <h2 className="text-[15px] font-bold text-gray-900">Provider Account</h2>
-          <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100">
-            <XIcon width={16} height={16} />
-          </button>
+          {asPage ? (
+            <button onClick={onClose} className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[13px] font-semibold text-gray-600 hover:bg-gray-50">
+              ← Back to providers
+            </button>
+          ) : (
+            <h2 className="text-[15px] font-bold text-gray-900">Provider Account</h2>
+          )}
+          {asPage ? (
+            <span className="text-[12px] text-gray-400">{provider.phone}</span>
+          ) : (
+            <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100">
+              <XIcon width={16} height={16} />
+            </button>
+          )}
         </div>
 
+        <div className={asPage ? "grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] xl:items-start" : ""}>
         <div className="space-y-5 p-5">
           <div className="flex items-start gap-3">
             <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-3xl">
@@ -493,7 +507,7 @@ export default function ProviderDetailModal({ providerId, onClose }) {
                     <p className="text-[10px] text-gray-400">To customers</p>
                   </div>
                 </div>
-                {capacity.reasons.length > 0 && (
+                {capacity.reasons?.length > 0 && (
                   <div
                     className={`rounded-lg px-3 py-2 text-[11.5px] ${
                       capacity.restricted ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-700"
@@ -659,7 +673,7 @@ export default function ProviderDetailModal({ providerId, onClose }) {
             </div>
           </Section>
 
-          <Section title="Services">
+          {!asPage && <Section title="Services">
             {services === null && <p className="text-[12px] text-gray-400">Loading…</p>}
             {services?.length === 0 && <p className="text-[12px] text-gray-400">No services listed.</p>}
             {services?.map((s) => (
@@ -670,7 +684,7 @@ export default function ProviderDetailModal({ providerId, onClose }) {
                 <span className="text-[12.5px] font-semibold text-gray-900">₹{s.price}</span>
               </div>
             ))}
-          </Section>
+          </Section>}
 
           <Section title="Earnings">
             {earnings === null && <p className="text-[12px] text-gray-400">Loading…</p>}
@@ -721,6 +735,16 @@ export default function ProviderDetailModal({ providerId, onClose }) {
               )}
             </div>
           </div>
+        </div>
+        {asPage && (
+          <div className="p-5 xl:sticky xl:top-4 xl:pl-0">
+            {services === null ? (
+              <p className="text-[12px] text-gray-400">Loading services…</p>
+            ) : (
+              <ProviderServicesPicker provider={provider} services={services} onChanged={reloadServices} />
+            )}
+          </div>
+        )}
         </div>
       </div>
     </div>

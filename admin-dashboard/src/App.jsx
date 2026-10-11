@@ -10,6 +10,7 @@ import LogoMark from "./components/LogoMark";
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const CustomersPage = lazy(() => import("./pages/CustomersPage"));
 const ProvidersPage = lazy(() => import("./pages/ProvidersPage"));
+const ProviderPage = lazy(() => import("./pages/ProviderPage"));
 const ServicesPage = lazy(() => import("./pages/ServicesPage"));
 const HomeLayoutPage = lazy(() => import("./pages/HomeLayoutPage"));
 const LocationsPage = lazy(() => import("./pages/LocationsPage"));
@@ -63,6 +64,7 @@ function AppRoutes() {
     ["/dashboard", <DashboardPage />, "dashboard.view"],
     ["/customers", <CustomersPage />, "customers.view"],
     ["/providers", <ProvidersPage />, "providers.view"],
+    ["/providers/:providerId", <ProviderPage />, "providers.view"],
     ["/services", <ServicesPage />, "services.view"],
     ["/home-layout", <HomeLayoutPage />, "cms.view"],
     ["/locations", <LocationsPage />, "locations.view"],

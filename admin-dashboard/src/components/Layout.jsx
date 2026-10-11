@@ -49,7 +49,9 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { loading } = useApp();
   const location = useLocation();
-  const meta = TITLES[location.pathname] || { title: "Admin" };
+  const meta =
+    TITLES[location.pathname] ||
+    (location.pathname.startsWith("/providers/") ? { title: "Provider", subtitle: "Details, documents and services" } : { title: "Admin" });
 
   return (
     <div className="flex h-full overflow-hidden bg-[#F5F6FA]">
