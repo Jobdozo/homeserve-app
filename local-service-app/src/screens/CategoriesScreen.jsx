@@ -1,81 +1,110 @@
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import useIsDesktop from "../utils/useIsDesktop";
-import { SearchIcon } from "../components/icons";
+import { SearchIcon, ChevronRightIcon } from "../components/icons";
 import { useApp } from "../context/AppContext";
-import CategoryIcon from "../components/CategoryIcon";
+import CategoryPhoto from "../components/CategoryPhoto";
 import CartBar from "../components/CartBar";
 import Seo from "../components/Seo";
 import ComingSoon from "../components/ComingSoon";
 import DesktopCategories from "../components/DesktopCategories";
+import { TabTitle, inr } from "../components/ui";
 
+// Every category as a photo tile with what it starts at, so the customer sees prices before tapping.
 export default function CategoriesScreen() {
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
-  const { categories, showToast, noCoverage } = useApp();
+  const { categories, services, showToast, noCoverage } = useApp();
+
+  const stats = useMemo(() => {
+    const out = {};
+    for (const s of services) {
+      const st = (out[s.categoryId] = out[s.categoryId] || { count: 0, min: Infinity, pros: new Set() });
+      st.count += 1;
+      st.min = Math.min(st.min, Number(s.price) || Infinity);
+      st.pros.add(s.providerId);
+    }
+    return out;
+  }, [services]);
 
   return (
     <>
-    <Seo
-      title="Service Categories"
-      description="Browse every home service category on Tikdum — cleaning, pest control, AC repair, and more — and find trusted local providers near you."
-      path="/categories"
-    />
-    {/* Desktop gets its own full-width page (components/DesktopCategories). */}
-    {isDesktop && (
-    <div className="hidden lg:block">
-      <DesktopCategories />
-    </div>
-    )}
-    <div className="flex flex-col pb-4 lg:hidden">
-      <div className="flex items-center justify-between px-4 pt-1 lg:px-0 lg:pt-0">
-        <h1 className="text-lg font-bold text-gray-900 lg:text-2xl">Categories</h1>
-        <button
-          onClick={() => navigate("/search")}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-700 lg:hidden"
-        >
-          <SearchIcon width={17} height={17} />
-        </button>
-      </div>
-
-      {noCoverage ? (
-        <ComingSoon />
-      ) : (
-        <>
-      <div className="mt-3 px-4 lg:mt-5 lg:px-0">
-        <button className="rounded-full bg-brand px-4 py-1.5 text-xs font-semibold text-white lg:px-5 lg:py-2 lg:text-sm">
-          All Categories
-        </button>
-      </div>
-
-      <div className="mt-4 grid grid-cols-3 gap-3 px-4 lg:mt-6 lg:grid-cols-4 lg:gap-4 lg:px-0">
-        {categories.map((c) => (
-          <button
-            key={c.id}
-            onClick={() => navigate(`/category/${c.id}`)}
-            className="flex flex-col items-center gap-2 rounded-2xl bg-white py-4 shadow-card transition-transform hover:-translate-y-0.5 active:scale-95 lg:gap-3 lg:py-8"
-          >
-            <CategoryIcon categoryId={c.id} size={44} className="lg:scale-125" />
-            <span className="px-1 text-center text-[11px] font-medium leading-tight text-gray-700 lg:text-[13px]">
-              {c.name}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <button
-        onClick={() => showToast("Thanks! We'll notify you when it's available.")}
-        className="mx-4 mt-5 rounded-2xl bg-brand-light px-4 py-3.5 text-left lg:mx-0 lg:mt-10 lg:px-8 lg:py-6"
-      >
-        <p className="text-[13px] font-semibold text-brand-dark lg:text-base">Can't find the service you need?</p>
-        <p className="mt-0.5 text-[11px] text-brand-dark/70 lg:text-sm">Tell us, we'll add it for you.</p>
-        <span className="mt-2.5 inline-block rounded-lg bg-brand px-3.5 py-2 text-[11px] font-semibold text-white lg:mt-3 lg:text-xs">
-          Request a Service
-        </span>
-      </button>
-        </>
+      <Seo
+        title="Service Categories"
+        description="Browse every home service category on Tikdum — cleaning, pest control, AC repair, and more — and find trusted local providers near you."
+        path="/categories"
+      />
+      {/* Desktop gets its own full-width page (components/DesktopCategories). */}
+      {isDesktop && (
+        <div className="hidden lg:block">
+          <DesktopCategories />
+        </div>
       )}
-      <CartBar />
-    </div>
+      <div className="flex min-h-full flex-shrink-0 flex-col bg-mist pb-4 lg:hidden">
+        <TabTitle title="Categories" subtitle={noCoverage ? undefined : `${categories.length} kinds of home services`} />
+
+        {noCoverage ? (
+          <div className="p-4">
+            <ComingSoon />
+          </div>
+        ) : (
+          <>
+            <div className="px-4 pt-2">
+              <button
+                onClick={() => navigate("/search")}
+                className="flex h-12 w-full items-center gap-2.5 rounded-2xl bg-white px-4 text-left text-[14.5px] text-ink-muted shadow-card active:scale-[0.99]"
+              >
+                <SearchIcon width={19} height={19} className="text-brand" strokeWidth={2.4} />
+                Search any service
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3 px-4">
+              {categories.map((c, i) => {
+                const st = stats[c.id];
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => navigate(`/category/${c.id}`)}
+                    className="flex animate-fade-up flex-col overflow-hidden rounded-[20px] bg-white text-left shadow-card active:scale-[0.98]"
+                    style={{ animationDelay: `${i * 30}ms` }}
+                  >
+                    <span className="block h-[112px] bg-brand-light">
+                      <CategoryPhoto categoryId={c.id} imageUrl={c.imageUrl} size={112} />
+                    </span>
+                    <span className="flex flex-1 flex-col gap-0.5 p-3">
+                      <span className="line-clamp-2 text-[14.5px] font-bold leading-snug text-ink">{c.name}</span>
+                      <span className="mt-auto text-[12px] text-ink-muted">
+                        {st ? (
+                          <>
+                            From <b className="text-ink">{inr(st.min)}</b> · {st.pros.size} pro{st.pros.size === 1 ? "" : "s"}
+                          </>
+                        ) : (
+                          "Coming soon near you"
+                        )}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={() => showToast("Thanks! We'll notify you when it's available.")}
+              className="mx-4 mt-5 flex items-center justify-between gap-3 rounded-[22px] bg-brand-night px-4 py-4 text-left active:scale-[0.99]"
+            >
+              <span>
+                <span className="block text-[11.5px] font-bold uppercase tracking-[0.12em] text-marigold">Can't find it?</span>
+                <span className="block font-display text-[18px] font-bold leading-tight text-white">Tell us — we'll add it for you</span>
+              </span>
+              <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-marigold text-ink">
+                <ChevronRightIcon width={20} height={20} />
+              </span>
+            </button>
+          </>
+        )}
+        <CartBar />
+      </div>
     </>
   );
 }

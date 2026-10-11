@@ -38,7 +38,7 @@ export default function NotificationsScreen() {
         {notifications.length === 0 && (
           <div className="mt-16 flex flex-col items-center gap-2 text-center">
             <span className="text-3xl">🔔</span>
-            <p className="text-sm text-gray-500">No notifications yet.</p>
+            <p className="text-sm text-ink-muted">No notifications yet.</p>
           </div>
         )}
         {notifications.map((n) => {
@@ -47,7 +47,7 @@ export default function NotificationsScreen() {
             <button
               key={n.id}
               onClick={() => handleOpen(n)}
-              className={`flex w-full items-start gap-3 rounded-xl px-2.5 py-3 text-left hover:bg-gray-50 ${
+              className={`flex w-full items-start gap-3 rounded-xl px-2.5 py-3 text-left hover:bg-mist ${
                 n.read ? "" : "bg-brand-light/40"
               }`}
             >
@@ -56,10 +56,10 @@ export default function NotificationsScreen() {
                 {!n.read && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />}
               </span>
               <div className="min-w-0 flex-1">
-                <p className={`text-[13px] leading-snug ${n.read ? "text-gray-600" : "font-semibold text-gray-900"}`}>
+                <p className={`text-[13px] leading-snug ${n.read ? "text-ink-soft" : "font-semibold text-ink"}`}>
                   {n.message}
                 </p>
-                <p className="mt-0.5 text-[10.5px] text-gray-400">{timeAgo(n.time)}</p>
+                <p className="mt-0.5 text-[10.5px] text-ink-muted">{timeAgo(n.time)}</p>
               </div>
               {n.read && <CheckIcon width={14} height={14} className="mt-1 flex-shrink-0 text-gray-300" />}
             </button>

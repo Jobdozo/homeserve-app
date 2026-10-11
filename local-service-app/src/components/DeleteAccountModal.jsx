@@ -39,29 +39,29 @@ export default function DeleteAccountModal({ onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={(e) => e.target === e.currentTarget && !busy && onClose()}>
       <div className="w-full max-w-md rounded-t-3xl bg-white p-5 sm:rounded-3xl">
-        <h2 className="text-[16px] font-bold text-gray-900">Delete your account?</h2>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-gray-500">
+        <h2 className="text-[16px] font-bold text-ink">Delete your account?</h2>
+        <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
           This permanently removes your name, phone number, email, saved addresses, referral details and the address and notes on your past
           bookings. It can't be undone. Records of completed bookings and payments are kept without your personal details, as the law requires.
           You can't delete your account while a booking is active.
         </p>
-        <label className="mt-4 block text-[12px] font-semibold text-gray-700">Why are you leaving? <span className="font-normal text-gray-400">(optional)</span></label>
-        <select value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-red-400">
+        <label className="mt-4 block text-[12px] font-semibold text-ink-soft">Why are you leaving? <span className="font-normal text-ink-muted">(optional)</span></label>
+        <select value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-red-400">
           <option value="">Choose a reason</option>
           {REASONS.map(([id, label]) => (
             <option key={id} value={id}>{label}</option>
           ))}
         </select>
-        <textarea value={note} onChange={(e) => setNote(e.target.value.slice(0, 500))} rows={2} placeholder="Anything you'd like us to know? (optional)" className="mt-2 w-full resize-none rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm outline-none focus:border-red-400" />
-        <label className="mt-2 flex items-start gap-2 text-[12px] leading-snug text-gray-600">
+        <textarea value={note} onChange={(e) => setNote(e.target.value.slice(0, 500))} rows={2} placeholder="Anything you'd like us to know? (optional)" className="mt-2 w-full resize-none rounded-xl border border-line px-3.5 py-2.5 text-sm outline-none focus:border-red-400" />
+        <label className="mt-2 flex items-start gap-2 text-[12px] leading-snug text-ink-soft">
           <input type="checkbox" checked={contactOk} onChange={(e) => setContactOk(e.target.checked)} className="mt-0.5 h-4 w-4 flex-shrink-0 accent-red-600" />
           <span>Yes, Tikdum may keep my name and phone number to contact me about my feedback. Leave this unticked and nothing personal is kept — only the reason.</span>
         </label>
-        <label className="mt-4 block text-[12px] font-semibold text-gray-700">Type DELETE to confirm</label>
-        <input value={text} onChange={(e) => setText(e.target.value)} autoCapitalize="characters" className="mt-1 w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm outline-none focus:border-red-400" />
+        <label className="mt-4 block text-[12px] font-semibold text-ink-soft">Type DELETE to confirm</label>
+        <input value={text} onChange={(e) => setText(e.target.value)} autoCapitalize="characters" className="mt-1 w-full rounded-xl border border-line px-3.5 py-2.5 text-sm outline-none focus:border-red-400" />
         {error && <p className="mt-2 text-[12px] text-red-600">{error}</p>}
         <div className="mt-4 flex gap-3">
-          <button onClick={onClose} disabled={busy} className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-600">
+          <button onClick={onClose} disabled={busy} className="flex-1 rounded-xl border border-line py-3 text-sm font-semibold text-ink-soft">
             Keep my account
           </button>
           <button onClick={confirm} disabled={busy || text.trim() !== "DELETE"} className="flex-1 rounded-xl bg-red-600 py-3 text-sm font-semibold text-white disabled:opacity-50">

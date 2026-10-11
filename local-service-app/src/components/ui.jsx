@@ -152,3 +152,32 @@ export const areaLabel = (a) => {
   const t = String(a || "").trim();
   return /^\d+(\.\d+)?$/.test(t) ? `${t} km around` : t;
 };
+
+// Title row for the main tabs (Bookings, Categories, Messages, Profile).
+export function TabTitle({ title, subtitle, right }) {
+  return (
+    <div className="flex items-start justify-between gap-3 px-4 pb-1 pt-3">
+      <div className="min-w-0">
+        <h1 className="font-display text-[28px] font-extrabold leading-tight text-ink">{title}</h1>
+        {subtitle && <p className="text-[13px] text-ink-muted">{subtitle}</p>}
+      </div>
+      {right}
+    </div>
+  );
+}
+
+// Friendly empty state: icon in a soft tile, a line, and one action.
+export function EmptyState({ icon, title, text, action, onAction }) {
+  return (
+    <div className="mx-4 mt-6 flex flex-col items-center gap-2 rounded-[22px] bg-white px-6 py-10 text-center shadow-card">
+      <span className="flex h-16 w-16 items-center justify-center rounded-3xl bg-brand-light text-brand">{icon}</span>
+      <p className="mt-1 font-display text-[19px] font-extrabold text-ink">{title}</p>
+      {text && <p className="max-w-[260px] text-[13px] leading-relaxed text-ink-muted">{text}</p>}
+      {action && (
+        <button onClick={onAction} className="mt-2 rounded-2xl bg-brand px-5 py-2.5 text-[14px] font-bold text-white shadow-cta active:scale-[0.98]">
+          {action}
+        </button>
+      )}
+    </div>
+  );
+}

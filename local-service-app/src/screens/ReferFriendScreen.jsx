@@ -60,12 +60,12 @@ export default function ReferFriendScreen() {
         </div>
 
         <div className="rounded-2xl border border-dashed border-brand/40 bg-brand-light/40 p-4 text-center">
-          <p className="text-[11px] font-semibold text-gray-500">Your referral code</p>
+          <p className="text-[11px] font-semibold text-ink-muted">Your referral code</p>
           <p className="mt-1 text-2xl font-extrabold tracking-[0.15em] text-brand">{code}</p>
         </div>
 
         <div>
-          <p className="mb-3 text-center text-[12px] text-gray-400">Refer via</p>
+          <p className="mb-3 text-center text-[12px] text-ink-muted">Refer via</p>
           <div className="flex items-center justify-center gap-8">
             <ShareButton emoji="💬" label="WhatsApp" onClick={() => shareVia("whatsapp")} />
             <ShareButton emoji="✉️" label="Messenger" onClick={() => shareVia("messenger")} />
@@ -73,34 +73,34 @@ export default function ReferFriendScreen() {
           </div>
         </div>
 
-        <div className="rounded-2xl bg-gray-50 p-4">
-          <p className="mb-3 text-[13.5px] font-bold text-gray-900">How it works?</p>
+        <div className="rounded-2xl bg-mist p-4">
+          <p className="mb-3 text-[13.5px] font-bold text-ink">How it works?</p>
           <Step number={1} text="Invite your friends & get rewarded" />
           <Step number={2} text={`They get ₹${friendDiscount} on their first service`} />
           <Step number={3} text={`You get ₹${reward} once their service is completed`} last />
         </div>
 
-        <div className="flex items-center justify-between rounded-2xl border border-gray-100 p-4">
+        <div className="flex items-center justify-between rounded-2xl border border-line p-4">
           <div>
-            <p className="text-[11px] text-gray-400">Your referral credit</p>
-            <p className="text-xl font-extrabold text-gray-900">₹{balance}</p>
+            <p className="text-[11px] text-ink-muted">Your referral credit</p>
+            <p className="text-xl font-extrabold text-ink">₹{balance}</p>
           </div>
-          {balance > 0 && <p className="text-[11px] font-medium text-emerald-600">Applies at your next checkout</p>}
+          {balance > 0 && <p className="text-[11px] font-medium text-trust">Applies at your next checkout</p>}
         </div>
 
         {history.length > 0 && (
           <div>
-            <p className="mb-2 text-[13px] font-bold text-gray-900">Reward history</p>
-            <div className="divide-y divide-gray-100 rounded-2xl border border-gray-100">
+            <p className="mb-2 text-[13px] font-bold text-ink">Reward history</p>
+            <div className="divide-y divide-line rounded-2xl border border-line">
               {history
                 .slice()
                 .reverse()
                 .map((h, i) => (
                   <div key={i} className="flex items-center justify-between px-4 py-2.5 text-[12.5px]">
-                    <span className="text-gray-500">
+                    <span className="text-ink-muted">
                       {new Date(h.at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                     </span>
-                    <span className={`font-semibold ${h.amount >= 0 ? "text-emerald-600" : "text-gray-500"}`}>
+                    <span className={`font-semibold ${h.amount >= 0 ? "text-trust" : "text-ink-muted"}`}>
                       {h.amount >= 0 ? "+" : ""}₹{h.amount}
                     </span>
                   </div>
@@ -117,7 +117,7 @@ function ShareButton({ emoji, label, onClick }) {
   return (
     <button onClick={onClick} className="flex flex-col items-center gap-1.5">
       <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-2xl shadow-card">{emoji}</span>
-      <span className="text-[11px] font-medium text-gray-600">{label}</span>
+      <span className="text-[11px] font-medium text-ink-soft">{label}</span>
     </button>
   );
 }
@@ -125,10 +125,10 @@ function ShareButton({ emoji, label, onClick }) {
 function Step({ number, text, last }) {
   return (
     <div className={`flex items-start gap-3 ${last ? "" : "pb-4"}`}>
-      <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-gray-200 text-[11px] font-bold text-gray-600">
+      <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-gray-200 text-[11px] font-bold text-ink-soft">
         {number}
       </span>
-      <p className="pt-0.5 text-[12.5px] text-gray-700">{text}</p>
+      <p className="pt-0.5 text-[12.5px] text-ink-soft">{text}</p>
     </div>
   );
 }

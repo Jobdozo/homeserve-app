@@ -66,26 +66,26 @@ export default function LoginScreen() {
               <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-white">
                 <LogoMark size={30} />
               </span>
-              <h1 className="text-xl font-extrabold text-gray-900">Tikdum</h1>
-              <p className="text-[13px] text-gray-400">Log in or sign up with WhatsApp</p>
+              <h1 className="text-xl font-extrabold text-ink">Tikdum</h1>
+              <p className="text-[13px] text-ink-muted">Log in or sign up with WhatsApp</p>
             </div>
 
             {step === "phone" && (
               <form onSubmit={handleRequestOtp} className="flex flex-col gap-3">
-                <label className="text-[13px] font-semibold text-gray-700">
+                <label className="text-[13px] font-semibold text-ink-soft">
                   WhatsApp number
                   <div className="mt-1">
                     <PhoneInput country={country} onCountryChange={setCountry} number={number} onNumberChange={setNumber} autoFocus />
                   </div>
                 </label>
-                <label className="text-[13px] font-semibold text-gray-700">
-                  Name <span className="font-normal text-gray-400">(new accounts only)</span>
+                <label className="text-[13px] font-semibold text-ink-soft">
+                  Name <span className="font-normal text-ink-muted">(new accounts only)</span>
                   <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Your name"
-                    className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 text-[14px] focus:border-brand focus:outline-none"
+                    className="mt-1 w-full rounded-xl border border-line px-4 py-3 text-[14px] focus:border-brand focus:outline-none"
                   />
                 </label>
                 {error && <p className="text-[12.5px] font-medium text-red-500">{error}</p>}
@@ -102,8 +102,8 @@ export default function LoginScreen() {
 
             {step === "otp" && (
               <form onSubmit={handleVerifyOtp} className="flex flex-col gap-3">
-                <p className="text-center text-[13px] text-gray-500">
-                  We sent a code via WhatsApp to <span className="font-semibold text-gray-800">{fullPhone}</span>
+                <p className="text-center text-[13px] text-ink-muted">
+                  We sent a code via WhatsApp to <span className="font-semibold text-ink">{fullPhone}</span>
                 </p>
                 <OtpSenderHint />
                 {devOtp && (
@@ -119,7 +119,7 @@ export default function LoginScreen() {
                   onChange={(e) => setCode(e.target.value)}
                   placeholder="6-digit code"
                   maxLength={6}
-                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-center text-[18px] tracking-[0.4em] focus:border-brand focus:outline-none"
+                  className="w-full rounded-xl border border-line px-4 py-3 text-center text-[18px] tracking-[0.4em] focus:border-brand focus:outline-none"
                 />
                 {error && <p className="text-center text-[12.5px] font-medium text-red-500">{error}</p>}
                 <button
@@ -136,7 +136,7 @@ export default function LoginScreen() {
                     setCode("");
                     setError("");
                   }}
-                  className="text-[12.5px] font-semibold text-gray-400"
+                  className="text-[12.5px] font-semibold text-ink-muted"
                 >
                   Use a different number
                 </button>

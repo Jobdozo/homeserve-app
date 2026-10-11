@@ -30,7 +30,7 @@ export default function ChatScreen() {
   if (!booking) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-        <p className="text-sm text-gray-500">Conversation not found.</p>
+        <p className="text-sm text-ink-muted">Conversation not found.</p>
         <button onClick={() => navigate("/messages")} className="text-sm font-semibold text-brand">
           Back to Messages
         </button>
@@ -42,8 +42,8 @@ export default function ChatScreen() {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
         <span className="text-3xl">🔒</span>
-        <p className="text-sm font-semibold text-gray-700">This conversation is no longer available</p>
-        <p className="max-w-xs text-xs text-gray-400">
+        <p className="text-sm font-semibold text-ink-soft">This conversation is no longer available</p>
+        <p className="max-w-xs text-xs text-ink-muted">
           Chats are closed once an order is completed. For any issue with this order, use Claim a refund on the booking.
         </p>
         <button onClick={() => navigate("/bookings")} className="text-sm font-semibold text-brand">
@@ -62,10 +62,10 @@ export default function ChatScreen() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <div className="flex flex-shrink-0 items-center gap-3 border-b border-gray-100 px-4 pb-3 pt-1 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-5 lg:pt-6">
+      <div className="flex flex-shrink-0 items-center gap-3 border-b border-line px-4 pb-3 pt-1 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-5 lg:pt-6">
         <button
           onClick={() => navigate(-1)}
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 lg:h-10 lg:w-10"
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-ink-soft hover:bg-gray-200 lg:h-10 lg:w-10"
         >
           <BackIcon width={18} height={18} />
         </button>
@@ -77,7 +77,7 @@ export default function ChatScreen() {
             <Avatar provider={provider} fallback="" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[13.5px] font-semibold text-gray-900 lg:text-[15px]">{provider?.name}</p>
+            <p className="truncate text-[13.5px] font-semibold text-ink lg:text-[15px]">{provider?.name}</p>
             <p className="text-[11px] text-emerald-500">Active</p>
           </div>
         </button>
@@ -103,13 +103,13 @@ export default function ChatScreen() {
         <div ref={endRef} />
       </div>
 
-      <div className="flex flex-shrink-0 items-center gap-2 border-t border-gray-100 bg-white px-3 py-2.5 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:py-4">
+      <div className="flex flex-shrink-0 items-center gap-2 border-t border-line bg-white px-3 py-2.5 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:py-4">
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
           placeholder="Type a message..."
-          className="flex-1 rounded-full bg-gray-100 px-4 py-2.5 text-[13px] text-gray-800 outline-none placeholder:text-gray-400"
+          className="flex-1 rounded-full bg-gray-100 px-4 py-2.5 text-[13px] text-ink outline-none placeholder:text-ink-muted"
         />
         <button
           onClick={handleSend}
@@ -129,11 +129,11 @@ function Bubble({ message }) {
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
         className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-snug ${
-          isUser ? "rounded-br-md bg-brand text-white" : "rounded-bl-md bg-gray-100 text-gray-800"
+          isUser ? "rounded-br-md bg-brand text-white" : "rounded-bl-md bg-gray-100 text-ink"
         }`}
       >
         <p>{message.text}</p>
-        <p className={`mt-1 text-right text-[10px] ${isUser ? "text-white/70" : "text-gray-400"}`}>
+        <p className={`mt-1 text-right text-[10px] ${isUser ? "text-white/70" : "text-ink-muted"}`}>
           {new Date(message.time).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}
         </p>
       </div>

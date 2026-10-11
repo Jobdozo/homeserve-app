@@ -49,44 +49,44 @@ export default function BookingProtectionScreen() {
       <ScreenHeader title="Booking Protection" maxWidth="lg:max-w-2xl" />
 
       <div className="flex-1 space-y-5 px-4 pb-8 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-10">
-        <div className="rounded-2xl bg-gray-50 p-4">
-          <p className="text-[14px] font-bold text-gray-900">
+        <div className="rounded-2xl bg-mist p-4">
+          <p className="text-[14px] font-bold text-ink">
             Booking outside the Tikdum app means we can't guarantee your safety or quality
           </p>
-          <p className="mt-1.5 text-[12px] leading-snug text-gray-500">
+          <p className="mt-1.5 text-[12px] leading-snug text-ink-muted">
             We discourage providers from offering service outside the app. If something goes wrong on a
             Tikdum booking, you're covered — file a claim below and our team will review it.
           </p>
         </div>
 
         <div>
-          <p className="mb-2 text-[13px] font-bold text-gray-900">Booking through Tikdum ensures</p>
-          <div className="divide-y divide-gray-100 rounded-2xl border border-gray-100">
+          <p className="mb-2 text-[13px] font-bold text-ink">Booking through Tikdum ensures</p>
+          <div className="divide-y divide-line rounded-2xl border border-line">
             {BADGES.map((b) => (
               <div key={b.label} className="flex items-center gap-3 px-4 py-3">
                 <span className="text-lg">{b.icon}</span>
-                <span className="text-[12.5px] text-gray-700">{b.label}</span>
+                <span className="text-[12.5px] text-ink-soft">{b.label}</span>
               </div>
             ))}
           </div>
         </div>
 
         {submitted ? (
-          <div className="rounded-2xl bg-emerald-50 p-4 text-center">
-            <p className="text-[13px] font-semibold text-emerald-700">Claim submitted</p>
-            <p className="mt-1 text-[12px] text-emerald-600">Our team will review it and get back to you.</p>
+          <div className="rounded-2xl bg-trust-light p-4 text-center">
+            <p className="text-[13px] font-semibold text-trust-dark">Claim submitted</p>
+            <p className="mt-1 text-[12px] text-trust">Our team will review it and get back to you.</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3">
-            <p className="text-[13px] font-bold text-gray-900">Claim a refund</p>
+            <p className="text-[13px] font-bold text-ink">Claim a refund</p>
             {eligibleBookings.length === 0 ? (
-              <p className="text-[12.5px] text-gray-400">You don't have any bookings to claim a refund for yet.</p>
+              <p className="text-[12.5px] text-ink-muted">You don't have any bookings to claim a refund for yet.</p>
             ) : (
               <>
                 <select
                   value={bookingId}
                   onChange={(e) => setBookingId(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-[13px] text-gray-800 outline-none focus:border-brand"
+                  className="w-full rounded-xl border border-line px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-brand"
                 >
                   {eligibleBookings.map((b) => (
                     <option key={b.id} value={b.id}>
@@ -99,7 +99,7 @@ export default function BookingProtectionScreen() {
                   onChange={(e) => setReason(e.target.value)}
                   rows={4}
                   placeholder="What went wrong?"
-                  className="w-full resize-none rounded-xl border border-gray-200 px-3.5 py-2.5 text-[13px] text-gray-800 outline-none placeholder:text-gray-400 focus:border-brand"
+                  className="w-full resize-none rounded-xl border border-line px-3.5 py-2.5 text-[13px] text-ink outline-none placeholder:text-ink-muted focus:border-brand"
                 />
                 <button
                   type="submit"

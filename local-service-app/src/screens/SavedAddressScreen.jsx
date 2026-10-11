@@ -86,14 +86,14 @@ export default function SavedAddressScreen() {
               key={s.key}
               type="button"
               onClick={() => switchSlot(s.key)}
-              className={`rounded-lg py-2 text-[13px] font-semibold ${slot === s.key ? "bg-white text-brand shadow-card" : "text-gray-500"}`}
+              className={`rounded-lg py-2 text-[13px] font-semibold ${slot === s.key ? "bg-white text-brand shadow-card" : "text-ink-muted"}`}
             >
               {s.label}
             </button>
           ))}
         </div>
 
-        <p className="text-[12.5px] text-gray-500">
+        <p className="text-[12.5px] text-ink-muted">
           Pick Home, Office or your current location when you check out. The PIN code decides which providers can take the booking.
         </p>
 
@@ -107,24 +107,24 @@ export default function SavedAddressScreen() {
         </button>
 
         <div>
-          <label className="mb-1 block text-[12.5px] font-semibold text-gray-700">Address</label>
+          <label className="mb-1 block text-[12.5px] font-semibold text-ink-soft">Address</label>
           <textarea
             value={line}
             onChange={(e) => setLine(e.target.value)}
             rows={3}
             placeholder="House/flat no., street, area, city"
-            className="w-full resize-none rounded-xl border border-gray-200 px-3.5 py-2.5 text-[13px] text-gray-800 outline-none placeholder:text-gray-400 focus:border-brand"
+            className="w-full resize-none rounded-xl border border-line px-3.5 py-2.5 text-[13px] text-ink outline-none placeholder:text-ink-muted focus:border-brand"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-[12.5px] font-semibold text-gray-700">PIN code</label>
+          <label className="mb-1 block text-[12.5px] font-semibold text-ink-soft">PIN code</label>
           <input
             value={pincode}
             onChange={(e) => setPincode(e.target.value.replace(/\D/g, "").slice(0, 10))}
             inputMode="numeric"
             placeholder="e.g. 180012"
-            className="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-[13px] text-gray-800 outline-none focus:border-brand"
+            className="w-full rounded-xl border border-line px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-brand"
           />
         </div>
 

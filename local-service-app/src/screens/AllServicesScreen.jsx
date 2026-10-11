@@ -57,7 +57,7 @@ export default function AllServicesScreen() {
               key={s.id}
               onClick={() => setSort(s.id)}
               className={`flex-shrink-0 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-colors ${
-                sort === s.id ? "bg-brand text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                sort === s.id ? "bg-brand text-white" : "bg-gray-100 text-ink-soft hover:bg-gray-200"
               }`}
             >
               {s.label}
@@ -75,7 +75,7 @@ export default function AllServicesScreen() {
                 className="relative overflow-hidden rounded-2xl bg-white text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.98]"
               >
                 {pct > 0 && (
-                  <span className="absolute left-2 top-2 z-10 rounded-full bg-emerald-500 px-2 py-0.5 text-[9.5px] font-bold text-white">
+                  <span className="absolute left-2 top-2 z-10 rounded-full bg-trust px-2 py-0.5 text-[9.5px] font-bold text-white">
                     {pct}% OFF
                   </span>
                 )}
@@ -83,12 +83,12 @@ export default function AllServicesScreen() {
                   <CategoryPhoto categoryId={s.categoryId} imageUrl={s.imageUrl} size={96} />
                 </div>
                 <div className="p-2.5 lg:p-4">
-                  <p className="text-[12.5px] font-semibold text-gray-900 lg:text-[15px]">{s.name}</p>
+                  <p className="text-[12.5px] font-semibold text-ink lg:text-[15px]">{s.name}</p>
                   <div className="mt-0.5 flex items-center gap-1.5">
-                    <span className="text-[11px] text-gray-500 lg:text-[13px]">Starting ₹{s.price}</span>
-                    {pct > 0 && <span className="text-[10px] text-gray-400 line-through">₹{s.originalPrice}</span>}
+                    <span className="text-[11px] text-ink-muted lg:text-[13px]">Starting ₹{s.price}</span>
+                    {pct > 0 && <span className="text-[10px] text-ink-muted line-through">₹{s.originalPrice}</span>}
                   </div>
-                  <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-500 lg:text-[13px]">
+                  <div className="mt-1 flex items-center gap-1 text-[11px] text-ink-muted lg:text-[13px]">
                     <StarIcon filled width={12} height={12} /> {s.rating} ({formatCount(s.reviewCount)})
                   </div>
                 </div>

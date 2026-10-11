@@ -25,10 +25,10 @@ export default function ComingSoon({ categoryName }) {
       <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-brand shadow-card">
         <MapPinIcon width={26} height={26} />
       </span>
-      <h2 className="mt-4 text-[17px] font-extrabold text-gray-900 lg:text-xl">
+      <h2 className="mt-4 text-[17px] font-extrabold text-ink lg:text-xl">
         {categoryName ? `${categoryName} is coming to your area soon` : "We're coming to your area soon"}
       </h2>
-      <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-gray-600 lg:text-[14px]">
+      <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-ink-soft lg:text-[14px]">
         {categoryName
           ? `We don't have ${categoryName} providers near ${activePincode || "you"} just yet, but we're working hard to bring trusted professionals to your neighbourhood.`
           : `Tikdum doesn't have service providers near ${activePincode || "you"} just yet. We're working hard to bring trusted professionals to your neighbourhood, and we'll be there very soon.`}{" "}
