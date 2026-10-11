@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
+import WhatsAppSend from "../components/WhatsAppSend";
 
 const TABS = [
   ["customers", "Customers"],
@@ -12,7 +13,6 @@ const TABS = [
 const when = (iso) =>
   iso ? new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : "—";
 
-const digits = (phone) => String(phone || "").replace(/\D/g, "");
 
 const ATTEMPT_RESULT = {
   sent: "Code sent",
@@ -35,18 +35,16 @@ function StatusPill({ status }) {
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[status] || STATUS_STYLE.new}`}>{label}</span>;
 }
 
-function CallLinks({ phone }) {
+function CallLinks({ phone, name }) {
   if (!phone) return <span className="text-gray-400">—</span>;
-  const d = digits(phone);
-  const wa = d.length === 10 ? `91${d}` : d;
   return (
     <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
       <a href={`tel:${phone.replace(/\s/g, "")}`} className="font-semibold text-brand hover:underline">
         {phone}
       </a>
-      <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer" className="text-[11.5px] font-semibold text-green-600 hover:underline">
+      <WhatsAppSend target={{ phone, name }} className="text-[11.5px] font-semibold text-green-600 hover:underline">
         WhatsApp
-      </a>
+      </WhatsAppSend>
     </span>
   );
 }
@@ -312,7 +310,7 @@ function DeletedAccounts({ canEdit }) {
                     <span className="block text-[11px] capitalize text-gray-400">{r.role}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <CallLinks phone={r.phone} />
+                    <CallLinks phone={r.phone} name={r.name} />
                     {r.detail && <span className="block text-[11px] text-gray-400">{r.detail}</span>}
                   </td>
                   <td className="px-4 py-3 text-gray-500">{when(r.at)}</td>

@@ -1,14 +1,11 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
+import WhatsAppSend from "./WhatsAppSend";
 
 const digits = (phone) => String(phone || "").replace(/[^0-9]/g, "");
-const waNumber = (phone) => {
-  const d = digits(phone);
-  return d.length === 10 ? `91${d}` : d;
-};
 
-// Call, WhatsApp and an in-app notice for one provider.
+// Call, WhatsApp (sent from the company number via MSG91) and an in-app notice for one provider.
 export function ProviderContact({ provider }) {
   const { showToast } = useApp();
   const [open, setOpen] = useState(false);
@@ -40,9 +37,7 @@ export function ProviderContact({ provider }) {
             <a href={`tel:${digits(provider.phone)}`} className={btn}>
               📞 Call
             </a>
-            <a href={`https://wa.me/${waNumber(provider.phone)}`} target="_blank" rel="noreferrer" className={btn}>
-              💬 WhatsApp
-            </a>
+            <WhatsAppSend target={{ providerId: provider.id }} className={btn} />
           </>
         )}
         <button onClick={() => setOpen((v) => !v)} className={btn}>

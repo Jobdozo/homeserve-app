@@ -2581,6 +2581,27 @@ app.post("/api/webhooks/whatsapp/msg91", ah(async (req, res) => {
 app.get("/api/admin/inbox", adminOnly, crm(async (req, res) => {
   res.json(inbox.listConversations({ queue: req.query.queue, mode: req.query.mode, q: req.query.q, limit: req.query.limit }));
 }));
+// Staff starting a WhatsApp from a provider's or customer's page — sent from
+// the company number via MSG91 (inbox.sendToPhone), not a wa.me tab.
+const whatsappTarget = async (q) => {
+  if (q.providerId) {
+    const p = await store.getProvider(String(q.providerId));
+    if (!p) throw Object.assign(new Error("Provider not found"), { status: 404 });
+    return { phone: p.phone, name: p.businessName || p.name || "", link: { providerId: p.id } };
+  }
+  return { phone: q.phone, name: q.name || "", link: q.customerId ? { customerId: String(q.customerId) } : {} };
+};
+app.get("/api/admin/inbox/phone-status", adminOnly, crm(async (req, res) => {
+  const t = await whatsappTarget(req.query || {});
+  res.json({ ...inbox.phoneStatus(t.phone), name: t.name });
+}));
+app.post("/api/admin/inbox/send", adminOnly, crm(async (req, res) => {
+  const t = await whatsappTarget(req.body || {});
+  const out = await inbox.sendToPhone({ phone: t.phone, name: t.name, text: req.body?.message, link: t.link }, actorOf(req));
+  const who = t.name ? `${t.name} (${t.phone})` : t.phone;
+  await store.logActivity(t.link.providerId ? "provider" : "customer", `${actorOf(req)} sent a WhatsApp to ${who}${out.via === "template" ? " (template)" : ""}`).catch(() => {});
+  res.status(201).json(out);
+}));
 app.get("/api/admin/inbox/:id", adminOnly, crm(async (req, res) => {
   const found = inbox.getConversation(req.params.id, { limit: req.query.limit });
   if (!found) return res.status(404).json({ error: "Conversation not found" });

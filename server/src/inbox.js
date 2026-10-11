@@ -16,7 +16,8 @@
 const crypto = require("crypto");
 const jsonStore = require("./jsonStore");
 const store = require("./store");
-const { sendWhatsAppMessage } = require("./whatsapp");
+const whatsapp = require("./whatsapp");
+const { sendWhatsAppMessage } = whatsapp;
 
 const CONVERSATIONS = "waConversations";
 const MESSAGES = "waMessages";
@@ -214,4 +215,67 @@ function setMode(id, mode, reason, actor) {
   }));
 }
 
-module.exports = { parseInbound, ingest, listConversations, getConversation, reply, saveDraft, discardDraft, setMode, normalise };
+// ---- staff starting a WhatsApp from Admin (a provider's or customer's page) ----
+// Sent from the company number through MSG91, never a wa.me tab. Inside the
+// 24-hour window it's plain text; outside it, the approved notice template
+// (whatsapp.js) carries the text. The message lands in that person's inbox
+// thread, so their answer shows up in WhatsApp inbox.
+function phoneStatus(phone) {
+  const p = normalise(phone);
+  if (!p) throw fail(400, "That phone number doesn't look right");
+  const conv = jsonStore.readAll(CONVERSATIONS).find((c) => c.id === convId(p)) || null;
+  const messages = conv ? jsonStore.readAll(MESSAGES).filter((m) => m.conversationId === conv.id).sort((a, b) => new Date(a.at) - new Date(b.at)).slice(-6) : [];
+  const template = whatsapp.noticeTemplate();
+  const open = Boolean(conv && withinWindow(conv));
+  return {
+    phone: p,
+    configured: whatsapp.isConfigured,
+    conversationId: conv?.id || null,
+    lastInboundAt: conv?.lastInboundAt || null,
+    windowOpen: open,
+    windowClosesAt: open ? new Date(new Date(conv.lastInboundAt).getTime() + WINDOW_MS).toISOString() : null,
+    template: template ? template.name : null,
+    canSend: whatsapp.isConfigured && (open || Boolean(template)),
+    messages,
+  };
+}
+
+async function sendToPhone({ phone, name, text, link } = {}, actor) {
+  const p = normalise(phone);
+  if (!p) throw fail(400, "That phone number doesn't look right");
+  const body = String(text || "").trim().slice(0, 1000);
+  if (!body) throw fail(400, "Write a message first");
+  if (!whatsapp.isConfigured) throw fail(503, "WhatsApp (MSG91) isn't set up on the server");
+  const id = convId(p);
+  const existing = jsonStore.readAll(CONVERSATIONS).find((c) => c.id === id) || null;
+  const open = Boolean(existing && withinWindow(existing));
+  if (!open && !whatsapp.noticeTemplate()) {
+    throw fail(409, "They haven't messaged our WhatsApp number in the last 24 hours, so WhatsApp only allows an approved template message — set one up in MSG91 first (see MSG91_NOTICE_TEMPLATE)");
+  }
+  const result = open ? await whatsapp.sendWhatsAppText(p, body) : await whatsapp.sendNoticeTemplate(p, { message: body, name });
+  if (!result.ok) throw fail(502, result.error || "WhatsApp didn't accept the message");
+  const conv =
+    existing ||
+    jsonStore.insert(CONVERSATIONS, {
+      // started by staff, so the AI support agent stays out of it
+      id, phone: p, name: String(name || "").slice(0, 80), customerId: link?.customerId || null, mode: "human",
+      createdAt: nowIso(), lastInboundAt: null, lastMessageAt: null, lastDirection: null, handoffReason: "Started from Admin",
+    });
+  const msg = {
+    id: `wam_${Date.now().toString(36)}${crypto.randomBytes(3).toString("hex")}`,
+    conversationId: id, direction: "out", sender: "staff", actor, text: body, delivered: true, at: nowIso(),
+    ...(open ? {} : { template: whatsapp.noticeTemplate().name }),
+  };
+  const messages = jsonStore.readAll(MESSAGES);
+  messages.push(msg);
+  jsonStore.writeAll(MESSAGES, messages.slice(-MAX_MESSAGES));
+  jsonStore.update(CONVERSATIONS, id, {
+    lastMessageAt: msg.at, lastDirection: "out", lastPreview: body.slice(0, 120), draft: null, mode: "human",
+    ...(link?.providerId ? { providerId: link.providerId } : {}),
+    ...(link?.customerId && !conv.customerId ? { customerId: link.customerId } : {}),
+    ...(name && !conv.name ? { name: String(name).slice(0, 80) } : {}),
+  });
+  return { message: msg, via: open ? "text" : "template", conversationId: id };
+}
+
+module.exports = { parseInbound, ingest, listConversations, getConversation, reply, saveDraft, discardDraft, setMode, normalise, phoneStatus, sendToPhone };

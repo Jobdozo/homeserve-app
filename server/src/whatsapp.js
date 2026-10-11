@@ -20,6 +20,17 @@ const MSG91_OTP_TEMPLATE_LANG = process.env.MSG91_OTP_TEMPLATE_LANG || "en";
 // Set to "true" only if the approved template has a "Copy code" button —
 // Meta rejects the request either way if this doesn't match the template.
 const MSG91_OTP_HAS_BUTTON = process.env.MSG91_OTP_HAS_BUTTON === "true";
+// An approved "utility" template for messages staff send from Admin when the
+// person hasn't written to us in the last 24 hours (free text isn't allowed
+// then). Its body variables, in order, are listed in MSG91_NOTICE_TEMPLATE_VARS:
+// "message" (what staff typed) and optionally "name" — e.g. "name,message" for
+// "Hello {{1}}, {{2}} — Team Tikdum". Empty name = no template set up.
+const MSG91_NOTICE_TEMPLATE = process.env.MSG91_NOTICE_TEMPLATE || "";
+const MSG91_NOTICE_TEMPLATE_LANG = process.env.MSG91_NOTICE_TEMPLATE_LANG || "en";
+const MSG91_NOTICE_TEMPLATE_VARS = (process.env.MSG91_NOTICE_TEMPLATE_VARS || "message")
+  .split(",")
+  .map((v) => v.trim())
+  .filter((v) => v === "name" || v === "message");
 
 const isConfigured = Boolean(MSG91_AUTH_KEY && MSG91_SENDER_NUMBER);
 // Two different MSG91 endpoints — not interchangeable. The bulk one only
@@ -34,10 +45,11 @@ function toGatewayNumber(phone) {
   return String(phone || "").replace(/\D/g, "");
 }
 
-async function postJsonToMsg91(payload, label) {
+// Returns { ok, error } so callers that show the result to a person can say why.
+async function postTemplate(payload, label) {
   if (!isConfigured) {
     console.log(`[WhatsApp] (MSG91 not configured) ${label}`);
-    return false;
+    return { ok: false, error: "WhatsApp (MSG91) isn't set up on the server" };
   }
   const res = await fetch(MSG91_BULK_URL, {
     method: "POST",
@@ -47,10 +59,17 @@ async function postJsonToMsg91(payload, label) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.status === "error" || data.hasError) {
     console.error(`[WhatsApp/MSG91] ${label} failed:`, res.status, data);
-    return false;
+    return { ok: false, error: msg91Error(data, res.status) };
   }
-  return true;
+  return { ok: true };
 }
+const postJsonToMsg91 = async (payload, label) => (await postTemplate(payload, label)).ok;
+
+const msg91Error = (data, status) => {
+  const e = data && (data.errors || data.message || data.error);
+  const text = Array.isArray(e) ? e.join("; ") : typeof e === "string" ? e : e ? JSON.stringify(e) : "";
+  return `MSG91 refused it${text ? `: ${text.slice(0, 200)}` : ` (HTTP ${status})`}`;
+};
 
 // MSG91's template-send request body for one recipient, one body variable
 // (the code) and, optionally, a "Copy code" button carrying the same value —
@@ -76,6 +95,36 @@ function buildOtpPayload(phone, code) {
   };
 }
 
+// Template variables can't hold new lines, tabs or more than 4 spaces in a row (Meta's rule).
+const templateValue = (v) => String(v || "").replace(/\s*[\r\n\t]+\s*/g, " · ").replace(/ {4,}/g, "   ").trim().slice(0, 1000);
+
+function buildNoticePayload(phone, { message, name }) {
+  const values = { message: templateValue(message), name: templateValue(name) || "there" };
+  const components = {};
+  MSG91_NOTICE_TEMPLATE_VARS.forEach((v, i) => {
+    components[`body_${i + 1}`] = { type: "text", value: values[v] };
+  });
+  return {
+    integrated_number: MSG91_SENDER_NUMBER,
+    content_type: "template",
+    payload: {
+      messaging_product: "whatsapp",
+      type: "template",
+      template: {
+        name: MSG91_NOTICE_TEMPLATE,
+        language: { code: MSG91_NOTICE_TEMPLATE_LANG, policy: "deterministic" },
+        namespace: null,
+        to_and_components: [{ to: [toGatewayNumber(phone)], components }],
+      },
+    },
+  };
+}
+const noticeTemplate = () => (MSG91_NOTICE_TEMPLATE ? { name: MSG91_NOTICE_TEMPLATE, vars: MSG91_NOTICE_TEMPLATE_VARS } : null);
+async function sendNoticeTemplate(phone, { message, name } = {}) {
+  if (!MSG91_NOTICE_TEMPLATE) return { ok: false, error: "No WhatsApp message template is set up (MSG91_NOTICE_TEMPLATE)" };
+  return postTemplate(buildNoticePayload(phone, { message, name }), "Notice template send");
+}
+
 async function sendOtpViaWhatsApp(phone, code) {
   return postJsonToMsg91(buildOtpPayload(phone, code), "OTP send");
 }
@@ -95,10 +144,10 @@ function buildTextUrl(phone, message) {
   return `${MSG91_SESSION_URL}?${params.toString()}`;
 }
 
-async function sendWhatsAppMessage(phone, message) {
+async function sendWhatsAppText(phone, message) {
   if (!isConfigured) {
     console.log(`[WhatsApp] (MSG91 not configured) Text send`);
-    return false;
+    return { ok: false, error: "WhatsApp (MSG91) isn't set up on the server" };
   }
   const res = await fetch(buildTextUrl(phone, message), {
     method: "POST",
@@ -107,9 +156,20 @@ async function sendWhatsAppMessage(phone, message) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.status === "error" || data.hasError) {
     console.error("[WhatsApp/MSG91] Text send failed:", res.status, data);
-    return false;
+    return { ok: false, error: msg91Error(data, res.status) };
   }
-  return true;
+  return { ok: true };
 }
+const sendWhatsAppMessage = async (phone, message) => (await sendWhatsAppText(phone, message)).ok;
 
-module.exports = { sendOtpViaWhatsApp, sendWhatsAppMessage, isConfigured, buildOtpPayload, buildTextUrl };
+module.exports = {
+  sendOtpViaWhatsApp,
+  sendWhatsAppMessage,
+  sendWhatsAppText,
+  sendNoticeTemplate,
+  noticeTemplate,
+  isConfigured,
+  buildOtpPayload,
+  buildNoticePayload,
+  buildTextUrl,
+};

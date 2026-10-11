@@ -345,6 +345,9 @@ export const api = {
   getInboxConversation: (id) => request(`/admin/inbox/${encodeURIComponent(id)}?limit=200`),
   replyInbox: (id, text, { fromDraft = false } = {}) => request(`/admin/inbox/${encodeURIComponent(id)}/reply`, { method: "POST", body: JSON.stringify({ text, fromDraft }) }),
   discardInboxDraft: (id) => request(`/admin/inbox/${encodeURIComponent(id)}/draft`, { method: "DELETE" }),
+  // WhatsApp from the company number (MSG91) — target is { providerId } or { phone, name, customerId }
+  getWhatsAppStatus: (target) => request(`/admin/inbox/phone-status?${new URLSearchParams(Object.fromEntries(Object.entries(target).filter(([, v]) => v)))}`),
+  sendWhatsApp: (target, message) => request("/admin/inbox/send", { method: "POST", body: JSON.stringify({ ...target, message }) }),
   setInboxMode: (id, mode, reason) => request(`/admin/inbox/${encodeURIComponent(id)}/mode`, { method: "POST", body: JSON.stringify({ mode, reason }) }),
 
   getVerificationPrecheck: () => request("/admin/verification/precheck"),

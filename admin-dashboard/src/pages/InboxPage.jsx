@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
 
@@ -17,7 +18,9 @@ export default function InboxPage() {
   const [filter, setFilter] = useState("needs_reply");
   const [q, setQ] = useState("");
   const [list, setList] = useState(null);
-  const [openId, setOpenId] = useState(null);
+  // ?c=<conversation id> opens that chat (linked from the WhatsApp dialog on provider/customer pages)
+  const location = useLocation();
+  const [openId, setOpenId] = useState(() => new URLSearchParams(location.search).get("c"));
 
   const load = () => {
     const params = filter === "needs_reply" || filter === "drafts" ? { queue: filter } : filter === "all" ? {} : { mode: filter };
