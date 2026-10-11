@@ -2887,8 +2887,8 @@ async function addNotification({ recipientType, recipientId, type, title, messag
       .catch((e) => console.error("Push send failed for notification", notification.id, e));
     // Separate channel from push.js — this is what the native customer app
     // listens on (see local-service-app/android's TikdumMessagingService).
-    // Harmless for providers too: their native service only acts on
-    // type "booking:created", which never comes through this generic path.
+    // For providers, fcm.js adds a visible notification block (their app
+    // only handles the booking ring itself; see fcm.displayFor).
     fcm
       .sendToDevices(recipientType, recipientId, { title, body: message, type, bookingId: bookingId || null })
       .catch((e) => console.error("FCM send failed for notification", notification.id, e));

@@ -36,18 +36,35 @@ function toStringData(payload) {
   return Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, v == null ? "" : String(v)]));
 }
 
+// Provider app versions up to 3.20 only handle the "booking:created" ring in
+// their own code and drop every other data message, so announcements and
+// other updates never showed. Adding a "notification" block makes Android
+// itself show those while the app is in the background (no app code runs).
+// Never use it for the ring: that would bypass the full-screen ringing
+// notification, which only works through onMessageReceived.
+const PROVIDER_UPDATES_CHANNEL = "tikdum_updates"; // created by the provider app from 3.21; older ones fall back to the default channel
+function displayFor(role, data) {
+  if (role !== "provider" || data.type === "booking:created" || !data.title) return null;
+  return {
+    notification: { title: String(data.title).slice(0, 200), body: String(data.body || "").slice(0, 1000) },
+    android: { notification: { channelId: PROVIDER_UPDATES_CHANNEL, icon: "ic_launcher_foreground", color: "#634AE0" } },
+  };
+}
+
 async function sendToDevices(role, id, data) {
   const all = jsonStore.readAll("fcmTokens");
   const mine = all.filter((t) => t.key === key(role, id));
   if (mine.length === 0) return;
   const messaging = getMessaging(getApp());
+  const display = displayFor(role, data);
   await Promise.all(
     mine.map(async (t) => {
       try {
         await messaging.send({
           token: t.token,
           data: toStringData(data),
-          android: { priority: "high" },
+          ...(display ? { notification: display.notification } : {}),
+          android: { priority: "high", ...(display ? display.android : {}) },
         });
       } catch (e) {
         // registration-token-not-registered means the app was uninstalled
@@ -62,4 +79,4 @@ async function sendToDevices(role, id, data) {
   );
 }
 
-module.exports = { saveToken, removeToken, sendToDevices };
+module.exports = { saveToken, removeToken, sendToDevices, displayFor };

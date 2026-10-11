@@ -15,6 +15,7 @@ import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
 
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 // Handles incoming FCM messages natively instead of leaning on the OS's
 // default auto-display — that path only ever produces a plain, DND-respecting
@@ -26,6 +27,12 @@ import java.util.Map;
 public class TikdumMessagingService extends FirebaseMessagingService {
 
   private static final String CHANNEL_ID = "tikdum_booking_requests";
+  // Everything else (announcements from Admin, approvals, reviews, payouts):
+  // a normal notification. The server also sends these with a notification
+  // block on this channel, so Android shows them itself while the app is in
+  // the background; this code covers the app being open.
+  public static final String UPDATES_CHANNEL_ID = "tikdum_updates";
+  private static final AtomicInteger updateId = new AtomicInteger(2000);
   public static final String EXTRA_BOOKING_ID = "bookingId";
   public static final String EXTRA_RING = "ring";
 
@@ -42,10 +49,15 @@ public class TikdumMessagingService extends FirebaseMessagingService {
     super.onMessageReceived(message);
     Map<String, String> data = message.getData();
     Log.e("TikdumFcm", "onMessageReceived data=" + data);
+    if (data == null || data.isEmpty()) return;
     // Only a genuinely new incoming request rings like a call — other
     // provider notifications (reviews, etc.) also carry a bookingId but
     // aren't a 90-second-timer "accept or decline" event.
-    if (data == null || !"booking:created".equals(data.get("type"))) return;
+    if (!"booking:created".equals(data.get("type"))) {
+      String title = data.get("title");
+      if (title != null && !title.isEmpty()) showUpdateNotification(data.get("bookingId"), title, data.containsKey("body") ? data.get("body") : "");
+      return;
+    }
     String bookingId = data.get("bookingId");
     if (bookingId == null || bookingId.isEmpty()) return;
     String title = data.containsKey("title") ? data.get("title") : "New booking request";
@@ -85,6 +97,38 @@ public class TikdumMessagingService extends FirebaseMessagingService {
         .setContentIntent(fullScreenPendingIntent);
 
     NotificationManagerCompat.from(ctx).notify(bookingId != null ? bookingId.hashCode() : 1, builder.build());
+  }
+
+  private void showUpdateNotification(String bookingId, String title, String body) {
+    Context ctx = getApplicationContext();
+    ensureUpdatesChannel(ctx);
+    Intent intent = new Intent(ctx, MainActivity.class);
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+    int id = updateId.incrementAndGet();
+    int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0);
+    PendingIntent pendingIntent = PendingIntent.getActivity(ctx, id, intent, flags);
+    NotificationCompat.Builder builder = new NotificationCompat.Builder(ctx, UPDATES_CHANNEL_ID)
+        .setSmallIcon(R.drawable.ic_launcher_foreground)
+        .setColor(0xFF634AE0)
+        .setContentTitle(title)
+        .setContentText(body)
+        .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .setContentIntent(pendingIntent);
+    NotificationManagerCompat.from(ctx).notify(id, builder.build());
+  }
+
+  // Also called from MainActivity.onCreate, so the channel exists before the
+  // first background notification arrives (Android then uses it, not "Miscellaneous").
+  static void ensureUpdatesChannel(Context ctx) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+    NotificationManager manager = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+    if (manager.getNotificationChannel(UPDATES_CHANNEL_ID) != null) return;
+    NotificationChannel channel = new NotificationChannel(UPDATES_CHANNEL_ID, "Updates and announcements", NotificationManager.IMPORTANCE_HIGH);
+    channel.setDescription("Messages from Tikdum, approvals, reviews and payouts");
+    channel.enableVibration(true);
+    manager.createNotificationChannel(channel);
   }
 
   private void ensureChannel(Context ctx) {

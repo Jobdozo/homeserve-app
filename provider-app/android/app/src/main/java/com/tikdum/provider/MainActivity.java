@@ -35,6 +35,7 @@ public class MainActivity extends BridgeActivity {
     registerPlugin(FcmTokenPlugin.class);
     registerPlugin(BatteryOptPlugin.class);
     super.onCreate(savedInstanceState);
+    TikdumMessagingService.ensureUpdatesChannel(this);
     handleRingIntent(getIntent());
   }
 
