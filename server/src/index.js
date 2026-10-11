@@ -251,7 +251,7 @@ function dropStaleLastMessage(booking, cutoffs) {
 // so it can't be used to call them after the order is Completed.
 function publicProvider(provider) {
   if (!provider) return provider;
-  const { phone, email, ...rest } = provider;
+  const { phone, email, udyamNumber, ...rest } = provider;
   return rest;
 }
 
@@ -610,7 +610,7 @@ app.patch("/api/admin/providers/:id/profile", auth.requireAuth("admin"), ah(asyn
   }
   const trimmed = Object.fromEntries(Object.entries(body).map(([k, v]) => [k, typeof v === "string" ? v.trim() : v]));
   const provider = await store.updateProviderProfile(req.params.id, trimmed);
-  const changes = ["name", "category", "businessName", "experience", "serviceArea", "email", "gstNumber"]
+  const changes = ["name", "category", "businessName", "experience", "serviceArea", "email", "gstNumber", "udyamNumber"]
     .filter((f) => trimmed[f] !== undefined && (existing[f] ?? "") !== (provider[f] ?? ""))
     .map((f) => ({ field: f, from: existing[f] ?? null, to: provider[f] ?? null }));
   if (changes.length) {

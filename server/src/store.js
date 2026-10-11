@@ -4,6 +4,7 @@ const accounting = require("./accounting");
 const subcategories = require("./subcategories");
 const push = require("./push");
 const fcm = require("./fcm");
+const taxIds = require("./taxIds");
 const presence = require("./presence");
 const rules = require("./rules");
 const whatsapp = require("./whatsapp");
@@ -164,7 +165,19 @@ function mapProvider(p) {
     agreementAccepted: hasAcceptedAgreement(p.id),
     coverage: getProviderCoverage(p.id),
     photoUrl: providerPhotoUrl(p.id),
+    udyamNumber: providerExtras(p.id).udyamNumber || null,
   };
+}
+
+// Provider fields kept outside the database table (jsonStore "providerExtras", one record per provider).
+const EXTRA_PROVIDER_FIELDS = ["udyamNumber"];
+function providerExtras(providerId) {
+  return jsonStore.readAll("providerExtras").find((r) => r.id === providerId) || {};
+}
+function setProviderExtras(providerId, fields) {
+  const existing = jsonStore.readAll("providerExtras").find((r) => r.id === providerId);
+  if (existing) jsonStore.update("providerExtras", providerId, fields);
+  else jsonStore.insert("providerExtras", { id: providerId, ...fields });
 }
 
 // ---- PIN-code-based service visibility (jsonStore-backed — a small,
@@ -961,12 +974,22 @@ async function deleteProvider(providerId) {
 
 const EDITABLE_PROVIDER_FIELDS = ["name", "category", "businessName", "experience", "serviceArea", "email", "gstNumber"];
 
-async function updateProviderProfile(providerId, patch) {
+async function updateProviderProfile(providerId, rawPatch) {
+  // GST / Udyam numbers are checked and tidied (format + GST check digit) on every save path.
+  const patch = taxIds.cleanTaxIds({ ...(rawPatch || {}) });
+  const extras = {};
+  for (const key of EXTRA_PROVIDER_FIELDS) {
+    if (patch[key] !== undefined) extras[key] = patch[key] === "" ? null : patch[key];
+  }
+  if (Object.keys(extras).length) setProviderExtras(providerId, extras);
   const fields = {};
   for (const key of EDITABLE_PROVIDER_FIELDS) {
     if (patch[key] !== undefined) fields[key] = patch[key] === "" ? null : patch[key];
   }
-  if (Object.keys(fields).length === 0) return getProvider(providerId);
+  if (Object.keys(fields).length === 0) {
+    if (Object.keys(extras).length) cacheClear("providers");
+    return getProvider(providerId);
+  }
 
   const varDefs = Object.keys(fields).map((k) => `$${k}: String`).join(", ");
   const dataFields = Object.keys(fields).map((k) => `${k}: $${k}`).join(", ");
@@ -1005,11 +1028,12 @@ function cleanProviderPincodes(list, current) {
   return cleaned;
 }
 
-async function submitProviderChange(providerId, raw = {}) {
+async function submitProviderChange(providerId, rawInput = {}) {
   const provider = await getProvider(providerId);
   if (!provider) throw Object.assign(new Error("Provider not found"), { status: 404 });
+  const raw = taxIds.cleanTaxIds({ ...rawInput });
   const changes = {};
-  for (const key of EDITABLE_PROVIDER_FIELDS) {
+  for (const key of [...EDITABLE_PROVIDER_FIELDS, ...EXTRA_PROVIDER_FIELDS]) {
     if (raw[key] === undefined) continue;
     const to = raw[key] === null ? null : String(raw[key]).trim() || null;
     const from = provider[key] ?? null;

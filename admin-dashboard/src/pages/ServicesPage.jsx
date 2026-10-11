@@ -1220,6 +1220,7 @@ const PROFILE_LABELS = {
   serviceArea: "Service area",
   email: "Email",
   gstNumber: "GST number",
+  udyamNumber: "Udyam number",
   photo: "Profile photo / logo",
   pincodes: "PIN codes",
 };

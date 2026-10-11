@@ -4,6 +4,14 @@ import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
 import PendingProfileChanges from "../components/PendingProfileChanges";
 import AreaKmPicker from "../components/AreaKmPicker";
+import { checkGstin, checkUdyam } from "../utils/taxIds";
+
+// Format + GST check digit while typing (the server checks again on save).
+function TaxIdHint({ value, check, okText }) {
+  if (!String(value || "").trim()) return null;
+  const r = check(value);
+  return <p className={`mt-1 text-[11px] ${r.ok ? "text-green-700" : "text-red-600"}`}>{r.ok ? `✓ ${okText(r)}` : `⚠ ${r.error}`}</p>;
+}
 
 export default function EditProfileScreen() {
   const navigate = useNavigate();
@@ -20,13 +28,15 @@ export default function EditProfileScreen() {
   const [serviceArea, setServiceArea] = useState(provider.serviceArea || "");
   const [email, setEmail] = useState(provider.email || "");
   const [gstNumber, setGstNumber] = useState(provider.gstNumber || "");
+  const [udyamNumber, setUdyamNumber] = useState(provider.udyamNumber || "");
   const [saving, setSaving] = useState(false);
 
-  const canSave = !locked && name.trim().length > 0;
+  const taxIdsOk = checkGstin(gstNumber).ok && checkUdyam(udyamNumber).ok;
+  const canSave = !locked && name.trim().length > 0 && taxIdsOk;
 
   const handleSave = async () => {
     if (!canSave) {
-      showToast("Name is required");
+      showToast(name.trim() ? "Check the GST / Udyam number" : "Name is required");
       return;
     }
     setSaving(true);
@@ -39,6 +49,7 @@ export default function EditProfileScreen() {
         serviceArea: serviceArea.trim(),
         email: email.trim(),
         gstNumber: gstNumber.trim(),
+        udyamNumber: udyamNumber.trim(),
       });
       navigate("/profile", { replace: true });
     } catch (e) {
@@ -128,9 +139,20 @@ export default function EditProfileScreen() {
                 onChange={(e) => setGstNumber(e.target.value)}
                 placeholder="e.g. 07ABCDE1234F1Z5"
                 disabled={locked}
-                className="w-full bg-transparent text-[13.5px] text-gray-800 outline-none placeholder:text-gray-400 disabled:text-gray-400"
+                className="w-full bg-transparent text-[13.5px] uppercase text-gray-800 outline-none placeholder:normal-case placeholder:text-gray-400 disabled:text-gray-400"
               />
             </Field>
+            <TaxIdHint value={gstNumber} check={checkGstin} okText={(r) => `Looks right · ${r.stateName}${r.pan ? ` · PAN ${r.pan}` : ""}`} />
+            <Field label="Udyam Registration Number (Optional)">
+              <input
+                value={udyamNumber}
+                onChange={(e) => setUdyamNumber(e.target.value)}
+                placeholder="e.g. UDYAM-JK-01-0012345"
+                disabled={locked}
+                className="w-full bg-transparent text-[13.5px] uppercase text-gray-800 outline-none placeholder:normal-case placeholder:text-gray-400 disabled:text-gray-400"
+              />
+            </Field>
+            <TaxIdHint value={udyamNumber} check={checkUdyam} okText={() => "Looks right"} />
           </div>
         </div>
 

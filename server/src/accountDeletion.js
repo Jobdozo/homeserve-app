@@ -167,6 +167,7 @@ async function deleteProviderAccount(providerId, feedback) {
     }`,
     { id: providerId, phone: `deleted:${providerId}` }
   );
+  if (jsonStore.readAll("providerExtras").some((r) => r.id === providerId)) jsonStore.remove("providerExtras", providerId); // Udyam number
   // KYC documents and their files, staff logins, coverage and preferences.
   jsonStore.readAll("kycDocuments").filter((d) => d.providerId === providerId).forEach((d) => {
     removeUploadedFile(d.url);

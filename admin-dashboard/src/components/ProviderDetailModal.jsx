@@ -5,6 +5,22 @@ import { StarIcon, CheckIcon, XIcon, WalletIcon, FileIcon, MapPinIcon } from "./
 import VisibilityPanel from "./VisibilityPanel";
 import ProviderServicesPicker from "./ProviderServicesPicker";
 import AreaKmPicker from "./AreaKmPicker";
+import { checkGstin, checkUdyam } from "../utils/taxIds";
+
+// Format + GST check digit (not a government lookup): what's shown under the field / on the details.
+const TAX_CHECKS = { gstNumber: checkGstin, udyamNumber: checkUdyam };
+function taxIdNote(key, value) {
+  const check = TAX_CHECKS[key];
+  if (!check || !String(value || "").trim()) return null;
+  const r = check(value);
+  if (!r.ok) return { ok: false, text: r.error };
+  if (key === "gstNumber") return { ok: true, text: `Format and check digit OK · ${r.stateName}${r.pan ? ` · PAN ${r.pan}` : ""}` };
+  return { ok: true, text: "Format OK" };
+}
+function TaxIdLine({ note }) {
+  if (!note) return null;
+  return <span className={`mt-1 block text-[11px] font-normal ${note.ok ? "text-green-700" : "text-red-600"}`}>{note.ok ? "✓ " : "⚠ "}{note.text}</span>;
+}
 import ProviderOrdersTab from "./ProviderOrdersTab";
 import ProviderMoneyTab from "./ProviderMoneyTab";
 import ProviderKycReview from "./ProviderKycReview";
@@ -79,6 +95,7 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
       serviceArea: provider.serviceArea || "",
       experience: provider.experience != null ? String(provider.experience) : "",
       gstNumber: provider.gstNumber || "",
+      udyamNumber: provider.udyamNumber || "",
     });
     setEditing(true);
   };
@@ -423,6 +440,7 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
                   ["serviceArea", "Service area", "text"],
                   ["experience", "Experience (years)", "text"],
                   ["gstNumber", "GST number", "text"],
+                  ["udyamNumber", "Udyam number", "text"],
                 ].map(([key, label, type]) => {
                   // a <label> around the − / + buttons would press "−" when the label text is clicked
                   const Wrap = key === "serviceArea" ? "div" : "label";
@@ -454,9 +472,11 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
                       type={type}
                       value={form[key] ?? ""}
                       onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] font-normal text-gray-800 outline-none focus:border-brand"
+                      placeholder={key === "gstNumber" ? "e.g. 01ABCDE1234F1Z5" : key === "udyamNumber" ? "e.g. UDYAM-JK-01-0012345" : undefined}
+                      className={`mt-1 w-full rounded-lg border px-3 py-2 text-[12.5px] font-normal text-gray-800 outline-none focus:border-brand ${taxIdNote(key, form[key])?.ok === false ? "border-red-300" : "border-gray-200"}`}
                     />
                     )}
+                    <TaxIdLine note={taxIdNote(key, form[key])} />
                   </Wrap>
                   );
                 })}
@@ -473,7 +493,7 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
                   </button>
                   <button
                     type="submit"
-                    disabled={savingProfile || !form.name?.trim()}
+                    disabled={savingProfile || !form.name?.trim() || taxIdNote("gstNumber", form.gstNumber)?.ok === false || taxIdNote("udyamNumber", form.udyamNumber)?.ok === false}
                     className="rounded-lg bg-brand px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
                   >
                     {savingProfile ? "Saving…" : "Save details"}
@@ -487,7 +507,14 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
                 <Field label="Category" value={provider.category} />
                 <Field label="Service area" value={provider.serviceArea} />
                 <Field label="Experience" value={provider.experience ? `${provider.experience} yrs` : null} />
-                <Field label="GST number" value={provider.gstNumber} />
+                <div>
+                  <Field label="GST number" value={provider.gstNumber} />
+                  <TaxIdLine note={taxIdNote("gstNumber", provider.gstNumber)} />
+                </div>
+                <div>
+                  <Field label="Udyam number" value={provider.udyamNumber} />
+                  <TaxIdLine note={taxIdNote("udyamNumber", provider.udyamNumber)} />
+                </div>
                 <Field label="Response rate" value={provider.responseRate != null ? `${provider.responseRate}%` : null} />
                 <Field label="Joined" value={provider.joinedAt ? new Date(provider.joinedAt).toLocaleDateString("en-IN") : null} />
               </div>

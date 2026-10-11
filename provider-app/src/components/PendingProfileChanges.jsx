@@ -10,6 +10,7 @@ const LABELS = {
   serviceArea: "Service area",
   email: "Email",
   gstNumber: "GST number",
+  udyamNumber: "Udyam number",
   photo: "Profile photo",
   pincodes: "PIN codes",
 };

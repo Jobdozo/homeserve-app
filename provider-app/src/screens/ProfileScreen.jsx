@@ -123,7 +123,8 @@ export default function ProfileScreen() {
         <InfoRow label="Service Area" value={providerProfile.serviceArea} />
         <InfoRow label="Phone" value={providerProfile.phone} />
         <InfoRow label="Email" value={providerProfile.email} />
-        <InfoRow label="GST Number" value={providerProfile.gstNumber} last />
+        <InfoRow label="GST Number" value={providerProfile.gstNumber} />
+        <InfoRow label="Udyam Number" value={providerProfile.udyamNumber} last />
       </div>
 
       </div>
