@@ -2,9 +2,9 @@ import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import useIsDesktop from "../utils/useIsDesktop";
 import { useApp } from "../context/AppContext";
-import ScreenHeader from "../components/ScreenHeader";
-import { StarIcon, ChevronRightIcon } from "../components/icons";
-import { formatCount, discountPct } from "../utils/format";
+import { BackIcon } from "../components/icons";
+import { discountPct } from "../utils/format";
+import { RatingPill, VerifiedBadge, OfferTag, AddButton, ProviderMark, expLabel, areaLabel, inr } from "../components/ui";
 import CategoryPhoto from "../components/CategoryPhoto";
 import CartBar from "../components/CartBar";
 import Seo from "../components/Seo";
@@ -67,65 +67,62 @@ export default function ServiceProvidersScreen() {
       <DesktopServiceProviders anchor={anchor} category={category} vendors={vendors} />
     </div>
     )}
-    <div className="flex flex-1 flex-col lg:hidden">
-      <ScreenHeader title={anchor.name} maxWidth="lg:max-w-3xl" />
-
-      <div className="flex-1 px-4 pb-6 lg:mx-auto lg:w-full lg:max-w-3xl lg:px-8 lg:pb-16">
-        <p className="text-[12.5px] text-gray-400">
-          {category?.name ? `${category.name} · ` : ""}
-          {vendors.length} vendor{vendors.length === 1 ? "" : "s"} available in your area
-        </p>
-
-        <div className="mt-4 space-y-3 lg:mt-6 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
-          {vendors.map(({ service: s, provider: p }) => {
-            const pct = discountPct(s.price, s.originalPrice);
-            return (
-              <button
-                key={s.id}
-                onClick={() => navigate(`/service/${s.id}`)}
-                className="flex w-full items-start gap-3 rounded-2xl border border-gray-100 p-3 text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.99] lg:p-4"
-              >
-                <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl">
-                  <CategoryPhoto categoryId={s.categoryId} imageUrl={s.imageUrl} size={64} rounded="rounded-xl" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13.5px] font-semibold text-gray-900 lg:text-[14.5px]">
-                    {p?.name || "Service provider"}
-                  </p>
-                  {(s.tagline || p?.serviceArea) && (
-                    <p className="truncate text-[11px] text-gray-400">{s.tagline || p.serviceArea}</p>
-                  )}
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="text-[13.5px] font-bold text-gray-900">₹{s.price}</span>
-                    {pct > 0 && (
-                      <>
-                        <span className="text-[11.5px] text-gray-400 line-through">₹{s.originalPrice}</span>
-                        <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9.5px] font-bold text-emerald-700">
-                          {pct}% OFF
-                        </span>
-                      </>
-                    )}
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                    {s.reviewCount > 0 ? (
-                      <span className="flex items-center gap-1 text-[11px] text-gray-500">
-                        <StarIcon filled width={11} height={11} />
-                        <span className="font-medium text-gray-700">{s.rating}</span>
-                        <span>({formatCount(s.reviewCount)})</span>
-                      </span>
-                    ) : (
-                      <span className="text-[11px] text-gray-400">New — no reviews yet</span>
-                    )}
-                    <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Available in your area
-                    </span>
-                  </div>
-                </div>
-                <ChevronRightIcon width={16} height={16} className="mt-1 flex-shrink-0 text-gray-300" />
-              </button>
-            );
-          })}
+    <div className="flex min-h-full flex-shrink-0 flex-col bg-mist lg:hidden">
+      {/* The service itself, photo first */}
+      <div className="relative h-[210px] flex-shrink-0">
+        <CategoryPhoto categoryId={anchor.categoryId} imageUrl={anchor.imageUrl} size={210} />
+        <span className="absolute inset-0 bg-gradient-to-b from-ink/50 via-transparent to-ink/70" />
+        <button onClick={() => navigate(-1)} aria-label="Go back" className="absolute left-4 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-ink/55 text-white active:scale-95">
+          <BackIcon width={19} height={19} />
+        </button>
+        <div className="absolute inset-x-4 bottom-4">
+          {category && <p className="text-[11.5px] font-bold uppercase tracking-[0.12em] text-marigold">{category.name}</p>}
+          <h1 className="font-display text-[26px] font-extrabold leading-[1.05] text-white">{anchor.name}</h1>
         </div>
+      </div>
+
+      <div className="flex flex-col gap-3 px-4 pb-6 pt-4">
+        <p className="text-[13px] text-ink-muted">
+          {vendors.length} professional{vendors.length === 1 ? "" : "s"} near you · compare and add
+        </p>
+        {vendors.map(({ service: s, provider: p }, i) => {
+          const pct = discountPct(s.price, s.originalPrice);
+          return (
+            <div key={s.id} className="animate-fade-up rounded-[22px] bg-white p-3.5 shadow-card" style={{ animationDelay: `${i * 40}ms` }}>
+              <button onClick={() => p && navigate(`/provider/${p.id}`)} className="flex w-full items-center gap-3 text-left">
+                <ProviderMark provider={p} />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-[15.5px] font-bold text-ink">{p?.name || "Service provider"}</span>
+                  <span className="flex flex-wrap items-center gap-x-1.5 text-[12.5px] text-ink-muted">
+                    {p?.verified && <VerifiedBadge className="text-[12.5px]" />}
+                    {p?.verified && (p?.experience || p?.serviceArea) && <span>·</span>}
+                    {p?.experience ? <span>{expLabel(p.experience)}</span> : p?.serviceArea ? <span className="truncate">{areaLabel(p.serviceArea)}</span> : null}
+                  </span>
+                </span>
+                <RatingPill rating={s.rating} count={s.reviewCount} size="sm" />
+              </button>
+              {(s.tagline || s.includes?.length > 0) && (
+                <p className="mt-2.5 line-clamp-2 text-[13px] leading-snug text-ink-muted">{s.tagline || s.includes.slice(0, 3).join(" · ")}</p>
+              )}
+              <div className="mt-3 flex items-center justify-between gap-3 border-t border-dashed border-line pt-3">
+                <span className="flex items-baseline gap-1.5">
+                  <span className="font-display text-[20px] font-extrabold text-ink">{inr(s.price)}</span>
+                  {pct > 0 && (
+                    <>
+                      <OfferTag className="!text-[10.5px]">{pct}% OFF</OfferTag>
+                    </>
+                  )}
+                </span>
+                <span className="flex items-center gap-2">
+                  <button onClick={() => navigate(`/service/${s.id}`)} className="px-1 text-[13px] font-bold text-brand">
+                    Details
+                  </button>
+                  <AddButton service={s} className="w-[104px]" />
+                </span>
+              </div>
+            </div>
+          );
+        })}
       </div>
       <CartBar />
     </div>

@@ -367,6 +367,9 @@ export const api = {
 
   listOffers: () => request("/admin/offers"),
   createOffer: (data) => request("/admin/offers", { method: "POST", body: JSON.stringify(data) }),
+  getServiceOptions: (serviceId) => request(`/admin/services/${encodeURIComponent(serviceId)}/options`),
+  setServiceOptions: (serviceId, groups, sameName) =>
+    request(`/admin/services/${encodeURIComponent(serviceId)}/options`, { method: "PUT", body: JSON.stringify({ groups, sameName }) }),
   updateOffer: (id, patch) => request(`/admin/offers/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteOffer: (id) => request(`/admin/offers/${id}`, { method: "DELETE" }),
 };

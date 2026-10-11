@@ -5,6 +5,8 @@ const subcategories = require("./subcategories");
 const push = require("./push");
 const fcm = require("./fcm");
 const taxIds = require("./taxIds");
+const serviceOptions = require("./serviceOptions");
+const orderExtras = require("./orderExtras");
 const presence = require("./presence");
 const rules = require("./rules");
 const whatsapp = require("./whatsapp");
@@ -389,7 +391,12 @@ function mapService(s) {
     includes: (s.serviceIncludes_on_service || []).map((i) => i.text),
     isAd: isServiceCurrentlyAdvertised(s.id),
     ...(s.status === "rejected" ? { approvalNote: getServiceReview(s.id)?.note || null } : {}),
+    ...withOptions(s.id),
   };
+}
+function withOptions(serviceId) {
+  const groups = serviceOptions.getOptions(serviceId);
+  return groups.length ? { options: groups } : {};
 }
 
 // ---- request IDs: short, human-friendly codes (2 letters + 2 digits + 2
@@ -502,9 +509,15 @@ function mapBooking(b, customer, service) {
     ...(b.cancelledAt ? { cancelledAt: b.cancelledAt } : {}),
     reviewed: !!b.reviewed,
     ...(b.reviewed ? { review: { rating: b.reviewRating, text: b.reviewText } } : {}),
+    ...bookingExtras(b),
     customer,
     service,
   };
+}
+function bookingExtras(b) {
+  const options = serviceOptions.bookingLines(b.id);
+  const contact = orderExtras.contactFor(b.orderId);
+  return { ...(options ? { options } : {}), ...(contact ? { contact } : {}) };
 }
 
 function mapMessage(m) {
@@ -1994,7 +2007,7 @@ function assertServedAtPincode(service, address) {
 
 // `offerCode` (never a raw discount percentage) is re-validated here server-side
 // on every call — a client can never supply its own discount amount directly.
-async function createBooking({ serviceId, date, time, address, issue, customerId, orderId, offerCode, flatDiscount = 0, quantity }) {
+async function createBooking({ serviceId, date, time, address, issue, customerId, orderId, offerCode, flatDiscount = 0, quantity, options }) {
   const qty = normalizeQuantity(quantity);
   const service = await getService(serviceId);
   if (!service) throw new Error("Unknown service");
@@ -2013,7 +2026,8 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
   }
   const customer = await getCustomerById(customerId);
   if (!customer) throw new Error("Unknown customer");
-  const lineTotal = service.price * qty;
+  const chosen = serviceOptions.priceSelection(service, options);
+  const lineTotal = (service.price + chosen.extra) * qty;
   let amount = lineTotal;
   if (offerCode) {
     const result = validateOffer(offerCode);
@@ -2050,6 +2064,7 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
     }
   );
   const bookingId = booking_insert.id;
+  serviceOptions.saveBookingLines(bookingId, chosen.lines);
   if (qty > 1) {
     jsonStore.insert("bookingQuantities", { id: bookingId, quantity: qty });
     if (quantityById) quantityById.set(bookingId, qty);
@@ -2128,18 +2143,23 @@ async function notifyCustomerNoProviders(list) {
   });
 }
 
-async function createOrder({ items, address, customerId, offerCode, referralCode, useCredits }) {
+async function createOrder({ items, address, customerId, offerCode, referralCode, useCredits, note, contact }) {
   if (!Array.isArray(items) || items.length === 0) throw new Error("Order must have at least one item");
   const orderId = `ORD-${Date.now().toString(36)}`;
-  // Check every line against the chosen location up front, so one unavailable
-  // item can't leave a half-created order (and a spent referral) behind.
+  const forContact = orderExtras.cleanContact(contact);
+  const noteText = orderExtras.cleanNote(note);
+  // Check every line against the chosen location (and its options) up front, so one
+  // unavailable item can't leave a half-created order (and a spent referral) behind.
+  let subtotal = 0;
   for (const item of items) {
     const svc = await getService(item.serviceId);
-    if (svc) assertServedAtPincode(svc, address);
+    if (!svc) continue;
+    assertServedAtPincode(svc, address);
+    subtotal += (svc.price + serviceOptions.priceSelection(svc, item.options).extra) * normalizeQuantity(item.quantity);
   }
   if (offerCode) {
-    const result = validateOffer(offerCode);
-    if (!result.valid) throw new Error(result.error);
+    const result = validateOffer(offerCode, subtotal);
+    if (!result.valid) throw Object.assign(new Error(result.error), { status: 400 });
   }
 
   // A referral code (flat ₹ off, only on a customer's very first order) and
@@ -2162,8 +2182,9 @@ async function createOrder({ items, address, customerId, offerCode, referralCode
         serviceId: item.serviceId,
         date: item.date,
         time: item.time,
-        issue: item.issue,
+        issue: [String(item.issue || "").trim(), noteText].filter(Boolean).join(" · "),
         quantity: item.quantity,
+        options: item.options,
         address,
         customerId,
         orderId,
@@ -2172,6 +2193,8 @@ async function createOrder({ items, address, customerId, offerCode, referralCode
       })
     );
   }
+
+  orderExtras.saveContact(orderId, forContact);
 
   // One notification + WhatsApp per provider for the whole order, not one per service.
   for (const list of groupBookingsByProvider(created)) await notifyProviderOfGroup(list[0].providerId, list);
@@ -3485,6 +3508,25 @@ async function getServiceBookingCounts() {
   return cacheSet("bookingCounts", counts);
 }
 
+// Completed jobs per provider (cached like the booking counts).
+async function getProviderJobCounts() {
+  const cached = cacheGet("providerJobCounts");
+  if (cached) return cached;
+  const { bookings } = await query(`query { bookings(where: { status: { eq: "Completed" } }) { provider { id } } }`);
+  const counts = {};
+  for (const b of bookings) if (b.provider?.id) counts[b.provider.id] = (counts[b.provider.id] || 0) + 1;
+  return cacheSet("providerJobCounts", counts);
+}
+
+// Adds what customers see on provider cards: jobs done and when they take requests.
+async function withCustomerHighlights(providers) {
+  const jobs = await getProviderJobCounts().catch(() => ({}));
+  return providers.map((p) => {
+    const label = workingHours.availabilityLabel(p.coverage?.schedule, p.coverage?.acceptingRequests !== false);
+    return { ...p, jobsDone: jobs[p.id] || 0, ...(label ? { nextSlot: { label } } : {}) };
+  });
+}
+
 async function getHomeLayout() {
   const counts = await getServiceBookingCounts().catch(() => ({}));
   return {
@@ -3500,13 +3542,14 @@ function listOffers() {
   return jsonStore.readAll("offers");
 }
 
-async function createOffer({ code, discountPercent, description, active = true, expiresAt }) {
+async function createOffer({ code, discountPercent, description, active = true, expiresAt, minOrder }) {
   const offer = jsonStore.insert("offers", {
     code: code.trim().toUpperCase(),
     discountPercent: Number(discountPercent),
     description: description || "",
     active,
     expiresAt: expiresAt || null,
+    minOrder: Math.max(0, Math.round(Number(minOrder) || 0)),
     createdAt: new Date().toISOString(),
   });
   // Best-effort only — see createBanner.
@@ -3517,19 +3560,34 @@ async function createOffer({ code, discountPercent, description, active = true, 
 }
 
 function updateOffer(id, patch) {
-  return jsonStore.update("offers", id, patch);
+  const clean = { ...patch };
+  if (clean.minOrder !== undefined) clean.minOrder = Math.max(0, Math.round(Number(clean.minOrder) || 0));
+  return jsonStore.update("offers", id, clean);
+}
+
+// What the cart lists as tap-to-apply savings (active, not expired).
+function listActiveOffers() {
+  const now = new Date();
+  return jsonStore
+    .readAll("offers")
+    .filter((o) => o.active !== false && !(o.expiresAt && new Date(o.expiresAt) < now))
+    .map((o) => ({ code: o.code, discountPercent: o.discountPercent, description: o.description || "", minOrder: o.minOrder || 0 }))
+    .sort((a, b) => b.discountPercent - a.discountPercent);
 }
 
 function deleteOffer(id) {
   return jsonStore.remove("offers", id);
 }
 
-function validateOffer(code) {
+function validateOffer(code, subtotal) {
   const offers = jsonStore.readAll("offers");
   const offer = offers.find((o) => o.code === String(code || "").trim().toUpperCase());
   if (!offer) return { valid: false, error: "Invalid offer code" };
   if (offer.active === false) return { valid: false, error: "This offer is no longer active" };
   if (offer.expiresAt && new Date(offer.expiresAt) < new Date()) return { valid: false, error: "This offer has expired" };
+  if (subtotal !== undefined && offer.minOrder > 0 && subtotal < offer.minOrder) {
+    return { valid: false, error: `${offer.code} needs a booking of ₹${offer.minOrder} or more` };
+  }
   return { valid: true, offer };
 }
 
@@ -4719,6 +4777,9 @@ module.exports = {
   getMessages,
   createBooking,
   createOrder,
+  listActiveOffers,
+  clearServiceCache: () => cacheClear("service"),
+  withCustomerHighlights,
   updateBookingStatus,
   reassignBooking,
   addMessage,

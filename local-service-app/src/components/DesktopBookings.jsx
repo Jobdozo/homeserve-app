@@ -4,6 +4,7 @@ import { useApp } from "../context/AppContext";
 import { StarIcon } from "./icons";
 import CategoryPhoto from "./CategoryPhoto";
 import { groupBookings } from "../utils/groupBookings";
+import { useOptionsSheet } from "./optionsSheetContext";
 
 const ACTIVE = ["Pending", "Accepted", "In Progress"];
 const CLOSED = ["Cancelled", "Rejected"];
@@ -28,6 +29,7 @@ function formatDate(iso) {
 export default function DesktopBookings() {
   const navigate = useNavigate();
   const { bookings, getService, getProvider, addToCart } = useApp();
+  const { open: openOptions } = useOptionsSheet();
   const [tab, setTab] = useState("All");
 
   const sorted = useMemo(() => [...bookings].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), [bookings]);
@@ -59,9 +61,12 @@ export default function DesktopBookings() {
     { label: "Spent on completed jobs", value: `₹${stats.spent}`, tone: "text-gray-900" },
   ];
 
+  // Services with options to choose go through their options sheet (one at a time); the rest go straight in.
   const rebook = (serviceIds) => {
-    serviceIds.forEach((id) => addToCart(id));
-    navigate("/cart");
+    const withChoices = serviceIds.map(getService).filter((s) => s?.options?.length);
+    serviceIds.filter((id) => !withChoices.some((s) => s.id === id)).forEach((id) => addToCart(id));
+    if (withChoices.length) openOptions(withChoices[0]);
+    else navigate("/cart");
   };
 
   // An order with several services from one provider shows as one row: one Request ID, the total, the services listed.

@@ -147,3 +147,96 @@ export const MapPinIcon = (p) => (
     <circle cx="12" cy="9.5" r="2.3" />
   </svg>
 );
+
+export const HeartIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" />
+  </svg>
+);
+
+export const PlusIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
+
+export const MinusIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M5 12h14" />
+  </svg>
+);
+
+export const TagIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 12l8-8 8 8-8 8-8-8z" />
+    <path d="M10 10l4 4M14 10h.01M10 14h.01" />
+  </svg>
+);
+
+export const NoteIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M6 3h9l4 4v14H6z" />
+    <path d="M9 12h7M9 16h5" />
+  </svg>
+);
+
+export const LockIcon = (p) => (
+  <svg {...base} {...p}>
+    <rect x="5" y="10" width="14" height="10" rx="2" />
+    <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+  </svg>
+);
+
+export const UmbrellaIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 12a8 8 0 0 1 16 0H4z" />
+    <path d="M12 12v6a2 2 0 0 0 4 0" />
+  </svg>
+);
+
+export const ArrowRightIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M5 12h14M13 6l6 6-6 6" />
+  </svg>
+);
+
+export const SlidersIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+    <circle cx="16" cy="7" r="2" />
+    <circle cx="10" cy="17" r="2" />
+  </svg>
+);
+
+export const CashIcon = (p) => (
+  <svg {...base} {...p}>
+    <rect x="3" y="6" width="18" height="12" rx="2" />
+    <circle cx="12" cy="12" r="2.5" />
+  </svg>
+);
+
+export const CrosshairIcon = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+  </svg>
+);
+
+export const ShareIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M14 5l6 6-6 6M20 11H10a6 6 0 0 0-6 6v1" />
+  </svg>
+);
+
+export const ListIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 7h16M4 12h16M4 17h10" />
+  </svg>
+);
+
+export const UserPlusIcon = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="10" cy="8" r="4" />
+    <path d="M3 21a7 7 0 0 1 14 0M19 8v6M16 11h6" />
+  </svg>
+);

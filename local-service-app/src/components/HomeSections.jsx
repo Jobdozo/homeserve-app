@@ -3,15 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { StarIcon, ChevronRightIcon } from "./icons";
 import { formatCount, discountPct, dedupeByName } from "../utils/format";
-import CategoryIcon from "./CategoryIcon";
 import CategoryPhoto from "./CategoryPhoto";
 import { useApp } from "../context/AppContext";
 import { chipsFor } from "../utils/subcategories";
 import { typeIllustration } from "../utils/illustrations";
+import { RatingPill, PhotoPriceTag, OfferTag, inr } from "./ui";
 
 // Gradient per admin-selectable banner colour (literal classes so Tailwind keeps them).
 const BANNER_GRADIENTS = {
-  brand: "from-brand to-brand-dark",
+  brand: "from-brand-dark to-brand-night",
   emerald: "from-emerald-500 to-emerald-700",
   amber: "from-amber-400 to-orange-500",
   violet: "from-violet-500 to-purple-700",
@@ -45,8 +45,8 @@ export function PromoBanner({ banner, hero = false }) {
   return (
     <Tag
       onClick={clickable ? () => open(banner) : undefined}
-      className={`relative flex w-full items-center justify-between overflow-hidden rounded-2xl bg-gradient-to-br ${gradient} px-4 text-left text-white ${
-        hero ? "min-h-[120px] py-4 lg:min-h-[220px] lg:px-10 lg:py-10" : "min-h-[96px] py-3.5 lg:min-h-[140px] lg:px-8"
+      className={`relative flex w-full items-center justify-between overflow-hidden rounded-3xl bg-gradient-to-br ${gradient} px-5 text-left text-white ${
+        hero ? "min-h-[188px] py-5 shadow-lift lg:min-h-[220px] lg:px-10 lg:py-10" : "min-h-[104px] py-4 lg:min-h-[140px] lg:px-8"
       }`}
     >
       {imageUrl && (
@@ -56,7 +56,7 @@ export function PromoBanner({ banner, hero = false }) {
         </>
       )}
       <div className="relative z-10 min-w-0">
-        <p className={`font-extrabold leading-snug ${hero ? "max-w-[220px] text-[17px] lg:max-w-lg lg:text-4xl" : "max-w-[220px] text-[15px] lg:max-w-md lg:text-2xl"}`}>
+        <p className={`font-display font-extrabold leading-[1.08] ${hero ? "max-w-[230px] text-[24px] lg:max-w-lg lg:text-4xl" : "max-w-[230px] text-[18px] lg:max-w-md lg:text-2xl"}`}>
           {banner.title}
         </p>
         {banner.subtitle && (
@@ -65,7 +65,7 @@ export function PromoBanner({ banner, hero = false }) {
           </p>
         )}
         {clickable && (
-          <span className="mt-2.5 inline-block rounded-lg bg-white px-3.5 py-1.5 text-[11.5px] font-semibold text-gray-900 lg:text-sm">
+          <span className="mt-3 inline-block rounded-full bg-white px-4 py-2 text-[13px] font-bold text-brand-night lg:text-sm">
             {banner.ctaLabel || "Book now"}
           </span>
         )}
@@ -80,7 +80,7 @@ export function PromoBanner({ banner, hero = false }) {
 export function HeroBanners({ banners }) {
   if (banners.length === 0) return null;
   return (
-    <div className="no-scrollbar mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 lg:mt-6 lg:px-0">
+    <div className="no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 lg:mt-6 lg:px-0">
       {banners.map((b) => (
         <div key={b.id} className={`snap-center ${banners.length > 1 ? "w-[88%] flex-shrink-0 lg:w-[70%]" : "w-full"}`}>
           <PromoBanner banner={b} hero />
@@ -96,32 +96,25 @@ function ServiceCard({ service, count, carousel }) {
   return (
     <button
       onClick={() => navigate(`/find-service/${service.id}`)}
-      className={`relative overflow-hidden rounded-2xl bg-white text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.98] ${
-        carousel ? "w-40 flex-shrink-0 lg:w-56" : ""
+      className={`relative flex flex-col overflow-hidden rounded-[18px] bg-white text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.98] ${
+        carousel ? "w-[172px] flex-shrink-0 lg:w-56" : ""
       }`}
     >
-      {pct > 0 && (
-        <span className="absolute left-2 top-2 z-10 rounded-full bg-emerald-500 px-2 py-0.5 text-[9.5px] font-bold text-white">
-          {pct}% OFF
-        </span>
-      )}
-      <div className="flex h-24 items-center justify-center lg:h-36">
-        <CategoryPhoto categoryId={service.categoryId} imageUrl={service.imageUrl} size={96} />
+      <div className="relative h-[112px] lg:h-36">
+        <CategoryPhoto categoryId={service.categoryId} imageUrl={service.imageUrl} size={112} />
+        <PhotoPriceTag className="absolute bottom-2 left-2">{inr(service.price)}</PhotoPriceTag>
+        {pct > 0 && <OfferTag className="absolute left-2 top-2">{pct}% OFF</OfferTag>}
       </div>
-      <div className="p-2.5 lg:p-4">
-        <p className="text-[12.5px] font-semibold text-gray-900 lg:text-[15px]">{service.name}</p>
-        <div className="mt-0.5 flex items-center gap-1.5">
-          <span className="text-[11px] text-gray-500 lg:text-[13px]">Starting ₹{service.price}</span>
-          {pct > 0 && <span className="text-[10px] text-gray-400 line-through">₹{service.originalPrice}</span>}
+      <div className="flex flex-1 flex-col gap-1 p-2.5 lg:p-4">
+        <p className="line-clamp-2 text-[13.5px] font-bold leading-snug text-ink lg:text-[15px]">{service.name}</p>
+        <div className="mt-auto flex items-center justify-between gap-2">
+          {count > 0 ? (
+            <span className="text-[11.5px] font-semibold text-brand-dark">Booked {formatCount(count)}×</span>
+          ) : (
+            <span className="text-[11.5px] text-ink-muted">{pct > 0 ? <s>{inr(service.originalPrice)}</s> : "Starting price"}</span>
+          )}
+          <RatingPill rating={service.rating} count={service.reviewCount} size="sm" />
         </div>
-        <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-500 lg:text-[13px]">
-          <StarIcon filled width={12} height={12} /> {service.rating} ({formatCount(service.reviewCount)})
-        </div>
-        {count > 0 && (
-          <p className="mt-1 text-[10.5px] font-semibold text-brand-dark">
-            Booked {formatCount(count)} time{count === 1 ? "" : "s"}
-          </p>
-        )}
       </div>
     </button>
   );
@@ -129,11 +122,11 @@ function ServiceCard({ service, count, carousel }) {
 
 function SectionHeader({ title, onSeeAll }) {
   return (
-    <div className="mt-6 flex items-center justify-between px-4 lg:mt-10 lg:px-0">
-      <h2 className="text-[15px] font-bold text-gray-900 lg:text-xl">{title}</h2>
+    <div className="mt-7 flex items-baseline justify-between gap-3 px-4 lg:mt-10 lg:px-0">
+      <h2 className="font-display text-[20px] font-extrabold leading-tight text-ink lg:text-2xl">{title}</h2>
       {onSeeAll && (
-        <button onClick={onSeeAll} className="flex items-center gap-0.5 text-xs font-semibold text-brand lg:text-sm">
-          See All <ChevronRightIcon width={13} height={13} />
+        <button onClick={onSeeAll} className="flex flex-shrink-0 items-center gap-0.5 text-[13px] font-bold text-brand lg:text-sm">
+          See all <ChevronRightIcon width={13} height={13} />
         </button>
       )}
     </div>
@@ -141,7 +134,7 @@ function SectionHeader({ title, onSeeAll }) {
 }
 
 function Carousel({ children }) {
-  return <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1 lg:mt-4 lg:gap-5 lg:px-0">{children}</div>;
+  return <div className="no-scrollbar mt-3.5 flex gap-3 overflow-x-auto px-4 pb-1 lg:mt-4 lg:gap-5 lg:px-0">{children}</div>;
 }
 
 function CategoryCarousel({ section, categories }) {
@@ -156,10 +149,12 @@ function CategoryCarousel({ section, categories }) {
           <button
             key={c.id}
             onClick={() => navigate(`/category/${c.id}`)}
-            className="flex w-[76px] flex-shrink-0 flex-col items-center gap-1.5 rounded-xl bg-white py-3 shadow-card transition-transform hover:-translate-y-0.5 active:scale-95 lg:w-32 lg:gap-2.5 lg:py-6"
+            className="flex w-[80px] flex-shrink-0 flex-col items-center gap-1.5 transition-transform hover:-translate-y-0.5 active:scale-95 lg:w-32 lg:gap-2.5"
           >
-            <CategoryIcon categoryId={c.id} size={40} className="lg:scale-125" />
-            <span className="px-1 text-center text-[10px] font-medium leading-tight text-gray-600 lg:text-[13px]">{c.name}</span>
+            <span className="block h-[72px] w-[72px] overflow-hidden rounded-[22px] bg-brand-light lg:h-28 lg:w-28">
+              <CategoryPhoto categoryId={c.id} imageUrl={c.imageUrl} size={72} />
+            </span>
+            <span className="line-clamp-2 px-1 text-center text-[12px] font-semibold leading-tight text-ink lg:text-[13px]">{c.name}</span>
           </button>
         ))}
       </Carousel>
@@ -179,13 +174,13 @@ function TypeCarousel({ section, category, chips }) {
           <button
             key={c.id}
             onClick={() => navigate(`/category/${category.id}?type=${c.id}`)}
-            className="w-32 flex-shrink-0 overflow-hidden rounded-2xl bg-white text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.98] lg:w-56"
+            className="w-36 flex-shrink-0 overflow-hidden rounded-[18px] bg-white text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.98] lg:w-56"
           >
             <div className="h-24 overflow-hidden lg:h-36">
               <CategoryPhoto categoryId={category.id} imageUrl={c.imageUrl} fallbackSrc={typeIllustration(c.name, category.id)} size={96} />
             </div>
             <div className="p-2.5 lg:p-4">
-              <p className="text-[12.5px] font-semibold text-gray-900 lg:text-[15px]">{c.name}</p>
+              <p className="text-[13.5px] font-bold text-ink lg:text-[15px]">{c.name}</p>
               <p className="mt-0.5 text-[11px] text-gray-500 lg:text-[13px]">From ₹{c.minPrice}</p>
             </div>
           </button>
@@ -214,17 +209,17 @@ function LowestCard({ category, service, more }) {
   return (
     <button
       onClick={() => navigate(`/find-service/${service.id}`)}
-      className="relative w-40 flex-shrink-0 overflow-hidden rounded-2xl bg-white text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.98] lg:w-56"
+      className="relative w-[172px] flex-shrink-0 overflow-hidden rounded-[18px] bg-white text-left shadow-card transition-transform hover:-translate-y-0.5 active:scale-[0.98] lg:w-56"
     >
       {pct > 0 && (
-        <span className="absolute left-2 top-2 z-10 rounded-full bg-emerald-500 px-2 py-0.5 text-[9.5px] font-bold text-white">{pct}% OFF</span>
+        <OfferTag className="absolute left-2 top-2 z-10">{pct}% OFF</OfferTag>
       )}
       <div className="h-28 overflow-hidden lg:h-40">
         <CategoryPhoto categoryId={service.categoryId} imageUrl={service.imageUrl} size={96} />
       </div>
       <div className="p-2.5 lg:p-4">
         <p className="text-[10.5px] font-semibold uppercase tracking-wide text-brand lg:text-[11.5px]">{category.name}</p>
-        <p className="mt-0.5 text-[12.5px] font-semibold leading-snug text-gray-900 lg:text-[15px]">{service.name}</p>
+        <p className="mt-0.5 text-[13.5px] font-bold leading-snug text-ink lg:text-[15px]">{service.name}</p>
         <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-500 lg:text-[13px]">
           {service.reviewCount > 0 ? (
             <>
@@ -235,7 +230,7 @@ function LowestCard({ category, service, more }) {
           )}
         </div>
         <div className="mt-1 flex items-center gap-1.5">
-          <span className="text-[13px] font-bold text-gray-900 lg:text-[15px]">₹{service.price}</span>
+          <span className="font-display text-[16px] font-extrabold text-ink lg:text-[17px]">₹{service.price}</span>
           {pct > 0 && <span className="text-[10.5px] text-gray-400 line-through lg:text-[12px]">₹{service.originalPrice}</span>}
         </div>
         {more > 0 && <p className="mt-1 text-[10.5px] text-gray-400 lg:text-[12px]">+{more} more in {category.name}</p>}
@@ -290,7 +285,7 @@ function ServiceCardList({ section, items, counts, inlineBanners }) {
         const banners = inlineBanners.filter((b) => (b.afterItems || 3) === end && end < items.length);
         return (
           <Fragment key={start}>
-            <div className="mt-3 grid grid-cols-2 gap-3 px-4 lg:mt-4 lg:grid-cols-4 lg:gap-5 lg:px-0">
+            <div className="mt-3.5 grid grid-cols-2 gap-3 px-4 lg:mt-4 lg:grid-cols-4 lg:gap-5 lg:px-0">
               {items.slice(start, end).map((s) => (
                 <ServiceCard key={s.id} service={s} count={counts[s.id] || 0} />
               ))}
@@ -322,7 +317,8 @@ function matchServices(section, services, categories) {
   });
 }
 
-export default function HomeSections({ sections, services, categories, banners, bookingCounts }) {
+// skipCategories: the phone home already shows every category as a photo grid.
+export default function HomeSections({ sections, services, categories, banners, bookingCounts, skipCategories = false }) {
   const navigate = useNavigate();
   const { subcategories } = useApp();
   const list = sections.length > 0 ? sections : FALLBACK_SECTIONS;
@@ -334,6 +330,7 @@ export default function HomeSections({ sections, services, categories, banners, 
       {list.map((section) => {
         const limit = section.limit || 8;
         if (section.type === "categories") {
+          if (skipCategories) return null;
           return <CategoryCarousel key={section.id} section={section} categories={categories} />;
         }
         if (section.type === "lowest_per_category") {

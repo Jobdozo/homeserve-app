@@ -531,16 +531,26 @@ export function AppProvider({ children }) {
   }, []);
 
   // likeServiceId: an add-on joins the same visit, so it starts on that cart item's date and time.
+  // extra: { options, optionLines, quantity, note } from the options sheet. Adding a service that's
+  // already in the cart with new choices replaces its choices (one line per service).
   const addToCart = useCallback(
-    (serviceId, likeServiceId) => {
+    (serviceId, likeServiceId, extra) => {
       setCart((prev) => {
-        if (prev.some((item) => item.serviceId === serviceId)) {
+        const existing = prev.find((item) => item.serviceId === serviceId);
+        if (existing && !extra) {
           showToast("Already in your cart");
           return prev;
         }
+        const chosen = extra
+          ? { options: extra.options || {}, optionLines: extra.optionLines || [], quantity: extra.quantity || 1, issue: extra.note || existing?.issue || "" }
+          : {};
+        if (existing) {
+          showToast("Choices updated");
+          return prev.map((item) => (item.serviceId === serviceId ? { ...item, ...chosen } : item));
+        }
         showToast("Added to cart");
         const like = (likeServiceId && prev.find((item) => item.serviceId === likeServiceId)) || prev[0] || null;
-        return [...prev, { serviceId, date: like?.date || todayISO(), time: like?.time || timeSlots[1], issue: "", quantity: 1 }];
+        return [...prev, { serviceId, date: like?.date || todayISO(), time: like?.time || timeSlots[1], issue: "", quantity: 1, ...chosen }];
       });
     },
     [showToast]
@@ -585,10 +595,10 @@ export function AppProvider({ children }) {
     [showToast]
   );
 
-  const applyOfferCode = useCallback(async (code) => {
+  const applyOfferCode = useCallback(async (code, subtotal) => {
     setOfferError("");
     try {
-      const offer = await api.validateOffer(code);
+      const offer = await api.validateOffer(code, subtotal);
       setAppliedOffer(offer);
       return offer;
     } catch (e) {
@@ -604,18 +614,20 @@ export function AppProvider({ children }) {
   }, []);
 
   const checkout = useCallback(
-    async (address, { referralCode, useCredits, serviceIds } = {}) => {
+    async (address, { referralCode, useCredits, serviceIds, note, contact } = {}) => {
       // Only book what the customer can actually see in their cart — items
       // hidden because they aren't offered in the current area stay out.
       const ordered = cart.filter((c) => !serviceIds || serviceIds.includes(c.serviceId));
       if (ordered.length === 0) return [];
-      const items = ordered.map(({ serviceId, date, time, issue, quantity }) => ({ serviceId, date, time, issue, quantity: quantity || 1 }));
+      const items = ordered.map(({ serviceId, date, time, issue, quantity, options }) => ({ serviceId, date, time, issue, quantity: quantity || 1, options: options || {} }));
       const created = await api.createOrder({
         items,
         address,
         offerCode: appliedOffer?.code,
         referralCode,
         useCredits,
+        note,
+        contact,
       });
       setBookings((prev) => created.reduce((acc, b) => upsertById(acc, b), prev));
       setCart((prev) => prev.filter((c) => !ordered.some((o) => o.serviceId === c.serviceId)));

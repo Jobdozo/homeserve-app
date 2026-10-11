@@ -46,4 +46,36 @@ function isWithinSchedule(schedule, at = new Date()) {
   return now >= minutes(row.from) && now < minutes(row.to);
 }
 
-module.exports = { DAYS, defaultSchedule, normalizeSchedule, isWithinSchedule };
+// "16:00" -> "4 PM", "09:30" -> "9:30 AM"
+function clock(hhmm) {
+  const h = Number(hhmm.slice(0, 2));
+  const m = hhmm.slice(3);
+  const h12 = h % 12 || 12;
+  return `${h12}${m === "00" ? "" : `:${m}`} ${h < 12 ? "AM" : "PM"}`;
+}
+const DAY_NAMES = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" };
+
+// What customers see about when a provider takes requests: "Taking requests now",
+// "Taking requests till 6 PM", "Opens today 4 PM", "Opens tomorrow 9 AM", "Opens Mon 9 AM".
+// null when they've switched requests off or never open in the next week.
+function availabilityLabel(schedule, accepting = true, at = new Date()) {
+  if (!accepting) return null;
+  if (!schedule || !schedule.enabled) return "Taking requests now";
+  const ist = new Date(at.getTime() + IST_OFFSET_MIN * 60000);
+  const now = ist.getUTCHours() * 60 + ist.getUTCMinutes();
+  const todayIdx = (ist.getUTCDay() + 6) % 7;
+  for (let k = 0; k < 8; k++) {
+    const day = DAYS[(todayIdx + k) % 7];
+    const row = schedule.days?.[day];
+    if (!row || !row.open) continue;
+    if (k === 0) {
+      if (now >= minutes(row.from) && now < minutes(row.to)) return `Taking requests till ${clock(row.to)}`;
+      if (now < minutes(row.from)) return `Opens today ${clock(row.from)}`;
+      continue;
+    }
+    return `Opens ${k === 1 ? "tomorrow" : DAY_NAMES[day]} ${clock(row.from)}`;
+  }
+  return null;
+}
+
+module.exports = { DAYS, defaultSchedule, normalizeSchedule, isWithinSchedule, availabilityLabel };

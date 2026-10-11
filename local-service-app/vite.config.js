@@ -23,7 +23,7 @@ export default defineConfig({
         name: 'Tikdum — Local Services Marketplace',
         short_name: 'Tikdum',
         description: 'Book trusted local home services near you.',
-        theme_color: '#5B3FE0',
+        theme_color: '#2A1A7A',
         background_color: '#ffffff',
         display: 'standalone',
         start_url: '/',

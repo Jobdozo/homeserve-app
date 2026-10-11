@@ -4,13 +4,41 @@ import { useApp } from "../context/AppContext";
 import { api } from "../api";
 import { timeSlots } from "../data/mockData";
 import ScreenHeader from "../components/ScreenHeader";
-import { CalendarIcon, ClockIcon, MapPinIcon, XIcon } from "../components/icons";
-import { discountPct } from "../utils/format";
-import CategoryIcon from "../components/CategoryIcon";
+import { MapPinIcon, PlusIcon, NoteIcon, TagIcon, CheckIcon, ShieldCheckIcon, CashIcon, UserPlusIcon, CalendarIcon, CrosshairIcon } from "../components/icons";
+import CategoryPhoto from "../components/CategoryPhoto";
 import AddOns from "../components/AddOns";
+import { QtyStepper, SectionLabel, inr } from "../components/ui";
+import { useOptionsSheet } from "../components/optionsSheetContext";
+import { unitPrice } from "../utils/cartMath";
 
 // The map (Leaflet) is only needed when a customer opens it, so it loads on demand.
 const LocationPicker = lazy(() => import("../components/LocationPicker"));
+
+const iso = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+// "08:00 AM – 10:00 AM" -> "8–10 AM"; "10:00 AM – 12:00 PM" -> "10 AM–12 PM"
+function shortSlot(slot) {
+  const m = String(slot).match(/(\d{1,2}):(\d{2})\s*(AM|PM)\s*[–-]\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!m) return slot;
+  const t = (h, mm) => `${Number(h)}${mm === "00" ? "" : `:${mm}`}`;
+  return m[3].toUpperCase() === m[6].toUpperCase() ? `${t(m[1], m[2])}–${t(m[4], m[5])} ${m[6].toUpperCase()}` : `${t(m[1], m[2])} ${m[3].toUpperCase()}–${t(m[4], m[5])} ${m[6].toUpperCase()}`;
+}
+function distanceKm(a, b) {
+  if (!a || !b || a.lat == null || b.lat == null) return 0;
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+// Hour a slot ends at (24h), for greying out today's slots that have passed.
+function slotEndHour(slot) {
+  const m = String(slot).match(/[–-]\s*(\d{1,2}):\d{2}\s*(AM|PM)/i);
+  if (!m) return 24;
+  const h = Number(m[1]) % 12;
+  return m[2].toUpperCase() === "PM" ? h + 12 : h;
+}
+const card = "rounded-[20px] bg-white p-4 shadow-card";
+const h2 = "font-display text-[18px] font-extrabold text-ink";
 
 export default function CartScreen() {
   const navigate = useNavigate();
@@ -19,6 +47,7 @@ export default function CartScreen() {
     services,
     bookings,
     getService,
+    getProvider,
     updateCartItem,
     setCartSchedule,
     removeFromCart,
@@ -36,6 +65,7 @@ export default function CartScreen() {
     customer,
     activePincode,
   } = useApp();
+  const { open: openOptions } = useOptionsSheet();
   const [submitting, setSubmitting] = useState(false);
   const [placeKey, setPlaceKey] = useState(null);
   const [landmark, setLandmark] = useState("");
@@ -43,17 +73,25 @@ export default function CartScreen() {
   const [picking, setPicking] = useState(false);
   const [availability, setAvailability] = useState(null); // { pin, ids: Set } for the chosen PIN
   const [couponInput, setCouponInput] = useState("");
-  const [applyingCoupon, setApplyingCoupon] = useState(false);
+  const [showCodeBox, setShowCodeBox] = useState(false);
+  const [applyingCoupon, setApplyingCoupon] = useState("");
+  const [offers, setOffers] = useState([]);
   const [referralInput, setReferralInput] = useState("");
   const [appliedReferral, setAppliedReferral] = useState(null);
   const [referralError, setReferralError] = useState("");
   const [applyingReferral, setApplyingReferral] = useState(false);
   const [useCredits, setUseCredits] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [forSomeone, setForSomeone] = useState(false);
+  const [contact, setContact] = useState({ name: "", phone: "" });
+  const [otherDate, setOtherDate] = useState(false);
 
   const isFirstOrder = bookings.length === 0;
 
   useEffect(() => {
     if (referral === null) refreshReferral();
+    api.listOffers().then(setOffers).catch(() => setOffers([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -69,23 +107,35 @@ export default function CartScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines.map((l) => l.item.date + l.item.time).join("|")]);
   const qtyOf = (l) => l.item.quantity || 1;
-  const total = lines.reduce((sum, l) => sum + l.service.price * qtyOf(l), 0);
-  const savings = lines.reduce((sum, l) => sum + (l.service.originalPrice ? (l.service.originalPrice - l.service.price) * qtyOf(l) : 0), 0);
+  const total = lines.reduce((sum, l) => sum + unitPrice(l.service, l.item) * qtyOf(l), 0);
+  const savings = lines.reduce((sum, l) => sum + (l.service.originalPrice > l.service.price ? (l.service.originalPrice - l.service.price) * qtyOf(l) : 0), 0);
   const offerDiscount = appliedOffer ? Math.round(total * (appliedOffer.discountPercent / 100)) : 0;
   const referralDiscount = appliedReferral ? appliedReferral.discount : 0;
   const creditDiscount = useCredits && referral ? Math.min(referral.balance, total - offerDiscount - referralDiscount) : 0;
   const discountAmount = offerDiscount + referralDiscount + creditDiscount;
   const payable = Math.max(0, total - discountAmount);
+  const providerNames = [...new Set(lines.map((l) => getProvider(l.service.providerId)?.name).filter(Boolean))];
 
-  const handleApplyCoupon = async () => {
-    if (!couponInput.trim() || applyingCoupon) return;
-    setApplyingCoupon(true);
+  // An offer that needs a bigger booking drops off by itself if the cart shrinks below it.
+  useEffect(() => {
+    if (appliedOffer?.minOrder > 0 && total < appliedOffer.minOrder) {
+      clearOffer();
+      showToast(`${appliedOffer.code} removed — it needs ${inr(appliedOffer.minOrder)} or more`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total]);
+
+  const applyCode = async (code) => {
+    if (!code || applyingCoupon) return;
+    setApplyingCoupon(code);
     try {
-      await applyOfferCode(couponInput.trim());
+      await applyOfferCode(code, total);
+      setShowCodeBox(false);
+      setCouponInput("");
     } catch (e) {
-      // offerError is already set by the context; nothing else to do here.
+      // offerError is set by the context
     } finally {
-      setApplyingCoupon(false);
+      setApplyingCoupon("");
     }
   };
 
@@ -124,6 +174,7 @@ export default function CartScreen() {
       }
     : null;
   const bookingPin = bookingAddress?.pincode || "";
+  const farKm = chosen && chosen.key !== "current" && location ? distanceKm(location, chosen.data) : 0;
 
   // Which cart items can actually be booked at the chosen PIN. The catalog on
   // screen follows the live location; a Home/Office pick in another PIN needs
@@ -151,36 +202,70 @@ export default function CartScreen() {
   const unavailable =
     availability && availability.pin === bookingPin ? lines.filter((l) => !availability.ids.has(l.service.id)) : [];
   const unavailableIds = new Set(unavailable.map((l) => l.service.id));
+  const contactOk = !forSomeone || (contact.name.trim() && /^[6-9]\d{9}$/.test(contact.phone.replace(/\D/g, "").slice(-10)));
 
   const handleCheckout = async () => {
-    if (submitting || lines.length === 0 || !bookingAddress || unavailable.length > 0 || checkingAvailability) return;
+    if (submitting || lines.length === 0 || !bookingAddress || unavailable.length > 0 || checkingAvailability || !contactOk || !timeOk) return;
     setSubmitting(true);
     try {
       const created = await checkout(bookingAddress, {
         referralCode: appliedReferral?.code,
         useCredits: creditDiscount > 0,
         serviceIds: lines.map((l) => l.service.id),
+        note: note.trim(),
+        contact: forSomeone ? { name: contact.name.trim(), phone: contact.phone } : undefined,
       });
-      navigate("/bookings", { replace: true, state: { orderId: created[0]?.orderId } });
+      navigate(created[0] ? `/booking/${created[0].id}` : "/bookings", { replace: true, state: { orderId: created[0]?.orderId, justBooked: true } });
     } catch (e) {
       showToast(e.message || "Something went wrong. Please try again.");
       setSubmitting(false);
     }
   };
 
+  // next 7 days as chips; anything later through "Another date"
+  const days = useMemo(() => {
+    const out = [];
+    const now = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+      out.push({ iso: iso(d), top: i === 0 ? "Today" : i === 1 ? "Tmrw" : d.toLocaleDateString("en-IN", { weekday: "short" }), day: d.getDate() });
+    }
+    return out;
+  }, []);
+  const dateInChips = days.some((d) => d.iso === schedule.date);
+  const whenLabel = (() => {
+    const d = days.find((x) => x.iso === schedule.date);
+    const dayText = d ? (d.top === "Today" ? "Today" : d.top === "Tmrw" ? "Tomorrow" : `${d.top} ${d.day}`) : new Date(schedule.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+    return `${dayText} ${shortSlot(schedule.time)}`;
+  })();
+  // today: a slot needs to end at least an hour from now to be bookable
+  const isToday = schedule.date === days[0].iso;
+  const slotPast = (slot) => isToday && slotEndHour(slot) <= new Date().getHours() + 1;
+  const timeOk = !slotPast(schedule.time);
+  // A slot that has passed moves to the next free one; late in the day that's tomorrow morning.
+  useEffect(() => {
+    if (!schedule.date || timeOk || lines.length === 0) return;
+    const next = timeSlots.find((s) => !slotPast(s));
+    if (next) setCartSchedule({ time: next });
+    else setCartSchedule({ date: days[1].iso, time: timeSlots[0] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schedule.date, schedule.time, timeOk]);
+  const nudge = offers
+    .filter((o) => o.minOrder > total && (!appliedOffer || o.code !== appliedOffer.code))
+    .sort((a, b) => a.minOrder - b.minOrder)[0];
+
   if (lines.length === 0) {
     return (
-      <div className="flex flex-1 flex-col">
-        <ScreenHeader title="Your Cart" maxWidth="lg:max-w-6xl" />
+      <div className="flex min-h-full flex-shrink-0 flex-col bg-mist">
+        <ScreenHeader title="Your booking" maxWidth="lg:max-w-6xl" />
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-          <span className="text-4xl">🛒</span>
-          <p className="text-sm font-medium text-gray-700">Your cart is empty</p>
-          <p className="text-xs text-gray-400">Add a service to get started.</p>
-          <button
-            onClick={() => navigate("/categories")}
-            className="mt-2 rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-card"
-          >
-            Browse Services
+          <span className="flex h-16 w-16 items-center justify-center rounded-3xl bg-brand-light text-brand">
+            <CalendarIcon width={28} height={28} />
+          </span>
+          <p className="font-display text-[19px] font-extrabold text-ink">Nothing booked yet</p>
+          <p className="text-[13px] text-ink-muted">Add a service and choose a time — it takes a minute.</p>
+          <button onClick={() => navigate("/categories")} className="mt-2 rounded-2xl bg-brand px-6 py-3 text-[14px] font-bold text-white shadow-cta active:scale-[0.98]">
+            Browse services
           </button>
         </div>
       </div>
@@ -188,359 +273,459 @@ export default function CartScreen() {
   }
 
   return (
-    <div className="flex flex-1 flex-col lg:pt-4">
-      <ScreenHeader title="Your Cart" subtitle={`${lines.length} service${lines.length > 1 ? "s" : ""}`} maxWidth="lg:max-w-6xl" />
+    <div className="flex min-h-full flex-shrink-0 flex-col bg-mist lg:pt-4">
+      <ScreenHeader
+        title="Your booking"
+        subtitle={providerNames.length > 1 ? `${providerNames.length} visits · ${providerNames.join(", ")}` : `One visit${providerNames[0] ? ` · ${providerNames[0]}` : ""}`}
+        maxWidth="lg:max-w-6xl"
+      />
 
-      {/* Desktop: items and checkout details on the left, a sticky order summary on the right. */}
-      <div className="flex flex-1 flex-col lg:mx-auto lg:grid lg:w-full lg:max-w-6xl lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-10 lg:px-8 lg:pb-16">
-      <div className="flex-1 space-y-3 px-4 pb-6 lg:space-y-5 lg:px-0 lg:pb-0">
-        <div className="rounded-2xl border border-gray-100 p-3 shadow-card lg:bg-white lg:p-5">
-          <h2 className="text-[13px] font-semibold text-gray-900 lg:text-[16px] lg:font-bold">When do you need the service?</h2>
-          <p className="mt-0.5 text-[11.5px] text-gray-400">One date and time for everything in your cart</p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-2">
-              <CalendarIcon width={14} height={14} className="flex-shrink-0 text-gray-400" />
-              <input
-                type="date"
-                value={schedule.date}
-                min={new Date().toISOString().slice(0, 10)}
-                onChange={(e) => e.target.value && setCartSchedule({ date: e.target.value })}
-                className="w-full bg-transparent text-[12px] text-gray-800 outline-none"
-                aria-label="Service date"
-              />
-            </div>
-            <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-2">
-              <ClockIcon width={14} height={14} className="flex-shrink-0 text-gray-400" />
-              <select
-                value={schedule.time}
-                onChange={(e) => setCartSchedule({ time: e.target.value })}
-                className="w-full bg-transparent text-[12px] text-gray-800 outline-none"
-                aria-label="Service time"
-              >
-                {timeSlots.map((slot) => (
-                  <option key={slot} value={slot}>
-                    {slot}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {lines.map(({ item, service }) => (
-          <div
-            key={item.serviceId}
-            className={`rounded-2xl border p-3 shadow-card lg:bg-white lg:p-5 ${unavailableIds.has(service.id) ? "border-amber-300" : "border-gray-100"}`}
-          >
-            <div className="flex items-start gap-3">
-              <CategoryIcon categoryId={service.categoryId} imageUrl={service.imageUrl} size={48} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13.5px] font-semibold text-gray-900">{service.name}</p>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[13px] font-bold text-brand">₹{service.price}</span>
-                  {discountPct(service.price, service.originalPrice) > 0 && (
-                    <span className="text-[11px] text-gray-400 line-through">₹{service.originalPrice}</span>
-                  )}
-                </div>
-                <div className="mt-2 flex items-center gap-3">
-                  <div className="inline-flex items-center overflow-hidden rounded-lg border border-gray-200" role="group" aria-label={`Quantity of ${service.name}`}>
-                    <button
-                      type="button"
-                      onClick={() => updateCartItem(item.serviceId, { quantity: Math.max(1, (item.quantity || 1) - 1) })}
-                      disabled={(item.quantity || 1) <= 1}
-                      className="h-8 w-8 text-[16px] font-semibold text-gray-600 hover:bg-gray-50 disabled:text-gray-300"
-                      aria-label="Fewer"
-                    >
-                      −
-                    </button>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min="1"
-                      max="50"
-                      value={item.quantity || 1}
-                      onChange={(e) => {
-                        const n = Math.round(Number(e.target.value));
-                        if (Number.isFinite(n)) updateCartItem(item.serviceId, { quantity: Math.min(50, Math.max(1, n)) });
-                      }}
-                      className="h-8 w-11 border-x border-gray-200 text-center text-[13px] font-semibold text-gray-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                      aria-label="Quantity"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => updateCartItem(item.serviceId, { quantity: Math.min(50, (item.quantity || 1) + 1) })}
-                      disabled={(item.quantity || 1) >= 50}
-                      className="h-8 w-8 text-[16px] font-semibold text-gray-600 hover:bg-gray-50 disabled:text-gray-300"
-                      aria-label="More"
-                    >
-                      +
-                    </button>
-                  </div>
-                  {(item.quantity || 1) > 1 && (
-                    <span className="text-[12.5px] font-bold text-gray-900">₹{service.price * (item.quantity || 1)}</span>
-                  )}
-                </div>
-              </div>
-              <button
-                onClick={() => removeFromCart(item.serviceId)}
-                className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-red-500"
-                aria-label={`Remove ${service.name}`}
-              >
-                <XIcon width={14} height={14} />
-              </button>
-            </div>
-
-            <textarea
-              value={item.issue}
-              onChange={(e) => updateCartItem(item.serviceId, { issue: e.target.value })}
-              placeholder="Describe your issue (optional)..."
-              rows={2}
-              className="mt-2 w-full resize-none rounded-lg border border-gray-200 px-2.5 py-2 text-[12px] text-gray-800 outline-none placeholder:text-gray-400"
-            />
-          </div>
-        ))}
-
-        <AddOns anchorIds={lines.map((l) => l.service.id)} title="Add more services" subtitle="From the same provider — done in the same visit" />
-
-        <div className="lg:rounded-2xl lg:bg-white lg:p-5 lg:shadow-card">
-          <h2 className="mb-1.5 text-[13px] font-semibold text-gray-900 lg:mb-3 lg:text-[16px] lg:font-bold">Where do you need the service?</h2>
-          <div className="space-y-2">
-            {places.map((p) => {
-              const selected = chosenKey === p.key && !!p.data;
-              const isCurrent = p.key === "current";
+      <div className="flex flex-1 flex-col lg:mx-auto lg:grid lg:w-full lg:max-w-6xl lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-8 lg:px-8 lg:pb-16">
+        <div className="flex flex-col gap-3 px-4 pb-4 lg:px-0">
+          {/* items */}
+          <div className="rounded-[20px] bg-white px-4 pt-1.5 shadow-card">
+            {lines.map(({ item, service }) => {
+              const unit = unitPrice(service, item);
+              const chosenText = (item.optionLines || []).map((o) => o.choice).join(" · ");
               return (
-                <div
-                  key={p.key}
-                  className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 ${
-                    selected ? "border-brand bg-brand-light/30" : "border-gray-200"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => (p.data ? setPlaceKey(p.key) : isCurrent ? detectLocation() : navigate(`/address?slot=${p.key}`))}
-                    className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
-                    aria-pressed={selected}
-                  >
-                    <span
-                      className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border ${
-                        selected ? "border-brand" : "border-gray-300"
-                      }`}
-                    >
-                      {selected && <span className="h-2 w-2 rounded-full bg-brand" />}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-800">
-                        <MapPinIcon width={13} height={13} className="flex-shrink-0 text-gray-400" />
-                        {p.title}
-                        {p.data?.pincode && (
-                          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">
-                            PIN {p.data.pincode}
-                          </span>
-                        )}
-                      </span>
-                      {p.data ? (
-                        <span className="mt-0.5 block text-[11.5px] leading-snug text-gray-500">{p.data.line}</span>
-                      ) : isCurrent ? (
-                        <span className="mt-0.5 block text-[11.5px] font-medium text-amber-600">
-                          {locationStatus === "detecting"
-                            ? "Detecting…"
-                            : locationStatus === "denied"
-                              ? "Location access denied — enable it in your device settings, then tap here."
-                              : "Tap to detect where you are now"}
-                        </span>
-                      ) : (
-                        <span className="mt-0.5 block text-[11.5px] font-medium text-brand">+ Add {p.title} address</span>
-                      )}
-                    </span>
-                  </button>
-                  {isCurrent && p.data && (
-                    <button type="button" onClick={detectLocation} className="flex-shrink-0 text-[11.5px] font-semibold text-brand">
-                      {locationStatus === "detecting" ? "Detecting…" : "Refresh"}
-                    </button>
-                  )}
-                  {!isCurrent && p.data && (
-                    <button
-                      type="button"
-                      onClick={() => (p.key === "pinned" ? setPicking(true) : navigate(`/address?slot=${p.key}`))}
-                      className="flex-shrink-0 text-[11.5px] font-semibold text-gray-400"
-                    >
-                      {p.key === "pinned" ? "Adjust" : "Edit"}
-                    </button>
-                  )}
+                <div key={item.serviceId} className={`flex items-center gap-3 border-b border-[#F0EEF7] py-3 ${unavailableIds.has(service.id) ? "opacity-60" : ""}`}>
+                  <span className="h-[52px] w-[52px] flex-shrink-0 overflow-hidden rounded-xl">
+                    <CategoryPhoto categoryId={service.categoryId} imageUrl={service.imageUrl} size={52} />
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="line-clamp-2 text-[14.5px] font-bold leading-snug text-ink">{service.name}</span>
+                    {chosenText ? (
+                      <span className="truncate text-[12px] text-ink-muted">{chosenText}</span>
+                    ) : (
+                      <span className="text-[12px] text-ink-muted">{inr(unit)} each</span>
+                    )}
+                    {service.options?.length > 0 && (
+                      <button onClick={() => openOptions(service)} className="w-fit text-[12px] font-bold text-brand">
+                        Change
+                      </button>
+                    )}
+                    {unavailableIds.has(service.id) && <span className="text-[11.5px] font-semibold text-marigold-dark">Not available at this address</span>}
+                  </span>
+                  <div className="w-[100px] flex-shrink-0">
+                    <QtyStepper
+                      value={qtyOf({ item })}
+                      variant="outline"
+                      size="sm"
+                      label={service.name}
+                      onChange={(n) => (n <= 0 ? removeFromCart(item.serviceId) : updateCartItem(item.serviceId, { quantity: n }))}
+                    />
+                  </div>
+                  <span className="w-[58px] text-right text-[14px] font-bold text-ink tabular">{inr(unit * qtyOf({ item }))}</span>
                 </div>
               );
             })}
-          </div>
-          <button
-            type="button"
-            onClick={() => setPicking(true)}
-            className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-brand/50 bg-brand-light/30 py-2.5 text-[12.5px] font-semibold text-brand hover:bg-brand-light/60"
-          >
-            <MapPinIcon width={14} height={14} /> Pin exact location on map
-          </button>
-          <div className="mt-2.5">
-            <label className="mb-1 block text-[12px] font-semibold text-gray-700">
-              House / flat / landmark <span className="font-normal text-gray-400">(optional)</span>
-            </label>
-            <input
-              value={landmark}
-              onChange={(e) => setLandmark(e.target.value.slice(0, 120))}
-              placeholder="e.g. House 14, near Jama Masjid, 2nd floor"
-              maxLength={120}
-              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[13px] text-gray-800 outline-none placeholder:text-gray-400 focus:border-brand"
-            />
-            <p className="mt-1 text-[11px] text-gray-400">Helps the provider find you. They'll see it with your address.</p>
-          </div>
-          {unavailable.length > 0 && (
-            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11.5px] font-medium text-amber-700">
-              {unavailable.map((l) => l.service.name).join(", ")} {unavailable.length > 1 ? "aren't" : "isn't"} available at PIN{" "}
-              {bookingPin}. Choose another location or remove {unavailable.length > 1 ? "them" : "it"} from your cart.
-            </p>
-          )}
-        </div>
-
-        <div className="lg:rounded-2xl lg:bg-white lg:p-5 lg:shadow-card">
-          <h2 className="mb-1.5 text-[13px] font-semibold text-gray-900 lg:mb-3 lg:text-[16px] lg:font-bold">Offer Code</h2>
-          {appliedOffer ? (
-            <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-3 py-2.5">
-              <div>
-                <p className="text-[12.5px] font-semibold text-emerald-700">
-                  {appliedOffer.code} applied — {appliedOffer.discountPercent}% off
-                </p>
-                {appliedOffer.description && <p className="text-[11px] text-emerald-600">{appliedOffer.description}</p>}
-              </div>
-              <button onClick={clearOffer} className="text-[11.5px] font-semibold text-emerald-700 underline">
-                Remove
+            <div className="flex gap-2 py-3">
+              <button
+                onClick={() => navigate(lines[0] ? `/provider/${lines[0].service.providerId}` : "/categories")}
+                className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-line text-[13px] font-bold text-brand active:scale-[0.98]"
+              >
+                <PlusIcon width={14} height={14} strokeWidth={2.8} /> Add more
+              </button>
+              <button
+                onClick={() => setNoteOpen((v) => !v)}
+                aria-expanded={noteOpen}
+                className={`flex h-10 flex-[1.3] items-center justify-center gap-1.5 rounded-xl border text-[13px] font-semibold active:scale-[0.98] ${note.trim() ? "border-brand bg-brand-light text-brand-dark" : "border-line text-ink"}`}
+              >
+                <NoteIcon width={15} height={15} /> {note.trim() ? "Note added" : "Note for the pro"}
               </button>
             </div>
-          ) : (
-            <div>
-              <div className="flex gap-2">
-                <input
-                  value={couponInput}
-                  onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                  placeholder="Enter offer code"
-                  className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-[13px] uppercase text-gray-800 outline-none focus:border-brand"
-                />
-                <button
-                  onClick={handleApplyCoupon}
-                  disabled={!couponInput.trim() || applyingCoupon}
-                  className="flex-shrink-0 rounded-xl bg-gray-900 px-4 py-2.5 text-[12.5px] font-semibold text-white disabled:opacity-50"
-                >
-                  {applyingCoupon ? "Checking…" : "Apply"}
-                </button>
-              </div>
-              {offerError && <p className="mt-1.5 text-[11.5px] font-medium text-red-500">{offerError}</p>}
-            </div>
-          )}
-        </div>
+            {noteOpen && (
+              <textarea
+                autoFocus
+                value={note}
+                onChange={(e) => setNote(e.target.value.slice(0, 300))}
+                rows={2}
+                placeholder="e.g. Ring the bell twice, the dog is friendly"
+                className="mb-3 w-full animate-fade-up resize-none rounded-2xl border border-line px-3 py-2.5 text-[14px] text-ink outline-none focus:border-brand"
+              />
+            )}
+          </div>
 
-        {isFirstOrder && (
-          <div className="lg:rounded-2xl lg:bg-white lg:p-5 lg:shadow-card">
-            <h2 className="mb-1.5 text-[13px] font-semibold text-gray-900 lg:mb-3 lg:text-[16px] lg:font-bold">Referral Code</h2>
-            {appliedReferral ? (
-              <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-3 py-2.5">
-                <p className="text-[12.5px] font-semibold text-emerald-700">
-                  {appliedReferral.code} applied — ₹{appliedReferral.discount} off
-                </p>
-                <button
-                  onClick={() => {
-                    setAppliedReferral(null);
-                    setReferralInput("");
-                  }}
-                  className="text-[11.5px] font-semibold text-emerald-700 underline"
-                >
-                  Remove
-                </button>
-              </div>
-            ) : (
-              <div>
-                <div className="flex gap-2">
-                  <input
-                    value={referralInput}
-                    onChange={(e) => setReferralInput(e.target.value.toUpperCase())}
-                    placeholder="Have a friend's referral code?"
-                    className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-[13px] uppercase text-gray-800 outline-none focus:border-brand"
-                  />
+          <div className="py-1">
+            <AddOns anchorIds={lines.map((l) => l.service.id)} title="Add in the same visit" subtitle="Same professional, no extra visit" />
+          </div>
+
+          {/* ONE schedule for the whole visit */}
+          <div className={card}>
+            <p className={h2}>When should they come?</p>
+            <p className="text-[12.5px] text-ink-muted">One time for everything in this booking</p>
+            <div className="no-scrollbar -mx-4 mt-3 flex gap-2 overflow-x-auto px-4">
+              {days.map((d) => {
+                const on = d.iso === schedule.date;
+                return (
                   <button
-                    onClick={handleApplyReferral}
-                    disabled={!referralInput.trim() || applyingReferral}
-                    className="flex-shrink-0 rounded-xl bg-gray-900 px-4 py-2.5 text-[12.5px] font-semibold text-white disabled:opacity-50"
+                    key={d.iso}
+                    onClick={() => {
+                      setOtherDate(false);
+                      setCartSchedule({ date: d.iso });
+                    }}
+                    aria-pressed={on}
+                    className={`flex w-[54px] flex-shrink-0 flex-col items-center rounded-2xl py-2 transition-colors ${on ? "bg-ink text-white" : "border border-line text-ink"}`}
                   >
-                    {applyingReferral ? "Checking…" : "Apply"}
+                    <span className={`text-[11px] font-semibold ${on ? "text-[#C9C0F2]" : "text-ink-muted"}`}>{d.top}</span>
+                    <span className="font-display text-[18px] font-extrabold">{d.day}</span>
                   </button>
-                </div>
-                {referralError && <p className="mt-1.5 text-[11.5px] font-medium text-red-500">{referralError}</p>}
+                );
+              })}
+              <button
+                onClick={() => setOtherDate(true)}
+                className={`flex w-[64px] flex-shrink-0 flex-col items-center justify-center rounded-2xl px-1 text-center text-[11.5px] font-bold leading-tight ${!dateInChips || otherDate ? "bg-ink text-white" : "border border-line text-brand"}`}
+              >
+                {!dateInChips && schedule.date ? new Date(schedule.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "Another date"}
+              </button>
+            </div>
+            {otherDate && (
+              <input
+                type="date"
+                value={schedule.date}
+                min={days[0].iso}
+                onChange={(e) => e.target.value && setCartSchedule({ date: e.target.value })}
+                className="mt-2 w-full rounded-xl border border-line px-3 py-2.5 text-[14px] text-ink outline-none focus:border-brand"
+                aria-label="Service date"
+              />
+            )}
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {timeSlots.map((slot) => {
+                const past = slotPast(slot);
+                const on = slot === schedule.time && !past;
+                return (
+                  <button
+                    key={slot}
+                    onClick={() => setCartSchedule({ time: slot })}
+                    disabled={past}
+                    aria-pressed={on}
+                    className={`rounded-xl py-2.5 text-[13px] font-semibold transition-colors ${
+                      on ? "bg-brand font-bold text-white" : past ? "bg-mist text-ink-muted/50 line-through" : "border border-line text-ink"
+                    }`}
+                  >
+                    {shortSlot(slot)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* where */}
+          <div className={card}>
+            <p className={h2}>Where should they come?</p>
+            <div className="mt-3 space-y-2">
+              {places.map((p) => {
+                const selected = chosenKey === p.key && !!p.data;
+                const isCurrent = p.key === "current";
+                return (
+                  <div key={p.key} className={`flex items-start gap-2.5 rounded-2xl border px-3 py-2.5 ${selected ? "border-brand bg-brand-light/40" : "border-line"}`}>
+                    <button
+                      type="button"
+                      onClick={() => (p.data ? setPlaceKey(p.key) : isCurrent ? detectLocation() : navigate(`/address?slot=${p.key}`))}
+                      className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
+                      aria-pressed={selected}
+                    >
+                      <span className={`mt-0.5 flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full border-2 ${selected ? "border-brand" : "border-[#C9C4D9]"}`}>
+                        {selected && <span className="h-2 w-2 rounded-full bg-brand" />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1.5 text-[14px] font-bold text-ink">
+                          {p.title}
+                          {p.data?.pincode && <span className="rounded-full bg-mist px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-muted">PIN {p.data.pincode}</span>}
+                        </span>
+                        {p.data ? (
+                          <span className="mt-0.5 block text-[12.5px] leading-snug text-ink-muted">{p.data.line}</span>
+                        ) : isCurrent ? (
+                          <span className="mt-0.5 block text-[12.5px] font-semibold text-marigold-dark">
+                            {locationStatus === "detecting"
+                              ? "Detecting…"
+                              : locationStatus === "denied"
+                                ? "Location access is off — turn it on in your phone settings, then tap here."
+                                : "Tap to use where you are now"}
+                          </span>
+                        ) : (
+                          <span className="mt-0.5 block text-[12.5px] font-semibold text-brand">+ Add {p.title.toLowerCase()} address</span>
+                        )}
+                      </span>
+                    </button>
+                    {isCurrent && p.data && (
+                      <button type="button" onClick={detectLocation} className="flex-shrink-0 text-[12px] font-bold text-brand">
+                        {locationStatus === "detecting" ? "Detecting…" : "Refresh"}
+                      </button>
+                    )}
+                    {!isCurrent && p.data && (
+                      <button type="button" onClick={() => (p.key === "pinned" ? setPicking(true) : navigate(`/address?slot=${p.key}`))} className="flex-shrink-0 text-[12px] font-bold text-ink-muted">
+                        {p.key === "pinned" ? "Adjust" : "Edit"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {farKm >= 2 && (
+              <div className="mt-2.5 rounded-2xl bg-marigold-light px-3 py-2.5 text-[12.5px] text-[#6B4600]">
+                This address is {farKm.toFixed(1)} km from where you are now.{" "}
+                {location && (
+                  <button onClick={() => setPlaceKey("current")} className="font-bold text-brand">
+                    Use current location
+                  </button>
+                )}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setPicking(true)}
+              className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-brand/50 bg-brand-light/40 py-2.5 text-[13px] font-bold text-brand"
+            >
+              <CrosshairIcon width={15} height={15} /> Pin the exact spot on the map
+            </button>
+            <label className="mt-3 block">
+              <span className="text-[13px] font-bold text-ink">House / flat / landmark</span>
+              <input
+                value={landmark}
+                onChange={(e) => setLandmark(e.target.value.slice(0, 120))}
+                placeholder="e.g. H.No 14, 2nd floor, near the park"
+                maxLength={120}
+                className="mt-1.5 w-full rounded-xl border border-line px-3 py-2.5 text-[14px] text-ink outline-none placeholder:text-ink-muted/70 focus:border-brand"
+              />
+            </label>
+            {unavailable.length > 0 && (
+              <p className="mt-2 rounded-xl bg-marigold-light px-3 py-2 text-[12.5px] font-medium text-[#6B4600]">
+                {unavailable.map((l) => l.service.name).join(", ")} {unavailable.length > 1 ? "aren't" : "isn't"} available at PIN {bookingPin}. Choose another address or remove{" "}
+                {unavailable.length > 1 ? "them" : "it"}.
+              </p>
+            )}
+            <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-2xl bg-mist px-3 py-3">
+              <span className="flex items-center gap-2.5">
+                <UserPlusIcon width={20} height={20} className="flex-shrink-0 text-brand" />
+                <span className="flex flex-col">
+                  <span className="text-[14px] font-bold text-ink">Booking for someone else?</span>
+                  <span className="text-[12px] text-ink-muted">The pro will call them, not you</span>
+                </span>
+              </span>
+              <input type="checkbox" checked={forSomeone} onChange={(e) => setForSomeone(e.target.checked)} className="peer sr-only" />
+              <span className={`relative h-7 w-12 flex-shrink-0 rounded-full transition-colors ${forSomeone ? "bg-brand" : "bg-[#C9C4D9]"}`}>
+                <span className={`absolute top-[3px] h-[22px] w-[22px] rounded-full bg-white transition-all ${forSomeone ? "left-[23px]" : "left-[3px]"}`} />
+              </span>
+            </label>
+            {forSomeone && (
+              <div className="mt-2 grid animate-fade-up grid-cols-2 gap-2">
+                <input
+                  value={contact.name}
+                  onChange={(e) => setContact((c) => ({ ...c, name: e.target.value.slice(0, 60) }))}
+                  placeholder="Their name"
+                  className="rounded-xl border border-line px-3 py-2.5 text-[14px] outline-none focus:border-brand"
+                />
+                <input
+                  value={contact.phone}
+                  onChange={(e) => setContact((c) => ({ ...c, phone: e.target.value.replace(/[^\d+ ]/g, "").slice(0, 15) }))}
+                  inputMode="tel"
+                  placeholder="Mobile number"
+                  className="rounded-xl border border-line px-3 py-2.5 text-[14px] outline-none focus:border-brand"
+                />
               </div>
             )}
           </div>
-        )}
 
-        {referral && referral.balance > 0 && (
-          <label className="flex items-center justify-between rounded-xl border border-gray-200 px-3.5 py-3 lg:bg-white lg:px-5 lg:py-4">
-            <span className="text-[12.5px] font-medium text-gray-700">
-              Use your ₹{referral.balance} referral credit
-            </span>
-            <input
-              type="checkbox"
-              checked={useCredits}
-              onChange={(e) => setUseCredits(e.target.checked)}
-              className="h-4 w-4 accent-brand"
-            />
-          </label>
-        )}
-      </div>
+          {/* savings: tap to apply */}
+          <div className="overflow-hidden rounded-[20px] bg-white shadow-card">
+            <div className="flex items-center justify-between bg-brand-light px-4 py-3">
+              <span className="font-display text-[16px] font-extrabold text-brand-night">Savings for this booking</span>
+              <TagIcon width={20} height={20} className="text-brand" />
+            </div>
+            {appliedOffer && (
+              <div className="flex items-center gap-2.5 border-b border-dashed border-line px-4 py-3">
+                <span className="flex h-6 w-6 flex-shrink-0 animate-pop items-center justify-center rounded-full bg-trust">
+                  <CheckIcon width={13} height={13} stroke="#fff" strokeWidth={3.4} />
+                </span>
+                <span className="flex flex-1 flex-col">
+                  <b className="text-[14px] text-trust-dark">
+                    {inr(offerDiscount)} saved with {appliedOffer.code}
+                  </b>
+                  {appliedOffer.description && <span className="text-[12px] text-ink-muted">{appliedOffer.description}</span>}
+                </span>
+                <button onClick={clearOffer} className="text-[12.5px] font-bold text-ink-muted">
+                  Remove
+                </button>
+              </div>
+            )}
+            {offers
+              .filter((o) => o.code !== appliedOffer?.code)
+              .slice(0, 4)
+              .map((o) => {
+                const short = o.minOrder > total ? o.minOrder - total : 0;
+                return (
+                  <div key={o.code} className="flex items-center gap-3 border-b border-dashed border-line px-4 py-3 last:border-0">
+                    <span className="flex flex-1 flex-col">
+                      <b className="text-[14px] text-ink">
+                        Save {inr(Math.round((total * o.discountPercent) / 100))} with {o.code}
+                      </b>
+                      <span className="text-[12px] text-ink-muted">
+                        {short > 0 ? `Add ${inr(short)} more to use it` : o.description || `${o.discountPercent}% off this booking`}
+                      </span>
+                    </span>
+                    <button
+                      onClick={() => applyCode(o.code)}
+                      disabled={short > 0 || !!applyingCoupon}
+                      className="rounded-xl border-[1.5px] border-brand px-3 py-1.5 text-[12.5px] font-extrabold text-brand disabled:border-line disabled:text-ink-muted"
+                    >
+                      {applyingCoupon === o.code ? "…" : appliedOffer ? "SWITCH" : "APPLY"}
+                    </button>
+                  </div>
+                );
+              })}
+            <div className="px-4 py-3">
+              {showCodeBox ? (
+                <div className="flex gap-2">
+                  <input
+                    autoFocus
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    placeholder="Enter a code"
+                    className="min-w-0 flex-1 rounded-xl border border-line px-3 py-2.5 text-[14px] uppercase text-ink outline-none focus:border-brand"
+                  />
+                  <button onClick={() => applyCode(couponInput.trim())} disabled={!couponInput.trim() || !!applyingCoupon} className="rounded-xl bg-ink px-4 text-[13px] font-bold text-white disabled:opacity-50">
+                    {applyingCoupon ? "Checking…" : "Apply"}
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setShowCodeBox(true)} className="text-[13px] font-bold text-brand">
+                  Have a code? Enter it
+                </button>
+              )}
+              {offerError && <p className="mt-1.5 text-[12px] font-semibold text-accent-red">{offerError}</p>}
+            </div>
+          </div>
 
-      <div className="flex-shrink-0 border-t border-gray-100 bg-white px-4 py-3 lg:sticky lg:top-6 lg:rounded-2xl lg:border lg:p-6 lg:shadow-card">
-        <h2 className="mb-4 hidden text-[18px] font-extrabold text-gray-900 lg:block">Order summary</h2>
-        <div className="mb-2.5 flex items-center justify-between text-[12.5px]">
-          <span className="text-gray-500">Subtotal ({lines.length} item{lines.length > 1 ? "s" : ""})</span>
-          <span className="font-semibold text-gray-800">₹{total}</span>
+          {isFirstOrder && (
+            <div className={card}>
+              <p className="text-[14px] font-bold text-ink">Got a friend's referral code?</p>
+              {appliedReferral ? (
+                <div className="mt-2 flex items-center justify-between rounded-xl bg-trust-light px-3 py-2.5">
+                  <p className="text-[13px] font-bold text-trust-dark">
+                    {appliedReferral.code} applied — {inr(appliedReferral.discount)} off
+                  </p>
+                  <button
+                    onClick={() => {
+                      setAppliedReferral(null);
+                      setReferralInput("");
+                    }}
+                    className="text-[12.5px] font-bold text-trust-dark"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      value={referralInput}
+                      onChange={(e) => setReferralInput(e.target.value.toUpperCase())}
+                      placeholder="Referral code"
+                      className="min-w-0 flex-1 rounded-xl border border-line px-3 py-2.5 text-[14px] uppercase text-ink outline-none focus:border-brand"
+                    />
+                    <button onClick={handleApplyReferral} disabled={!referralInput.trim() || applyingReferral} className="rounded-xl bg-ink px-4 text-[13px] font-bold text-white disabled:opacity-50">
+                      {applyingReferral ? "Checking…" : "Apply"}
+                    </button>
+                  </div>
+                  {referralError && <p className="mt-1.5 text-[12px] font-semibold text-accent-red">{referralError}</p>}
+                </>
+              )}
+            </div>
+          )}
         </div>
-        {savings > 0 && (
-          <div className="mb-2.5 flex items-center justify-between text-[12.5px]">
-            <span className="text-emerald-600">You save</span>
-            <span className="font-semibold text-emerald-600">₹{savings}</span>
+
+        {/* bill, payment, policy + confirm (a sticky summary on desktop) */}
+        <div className="flex flex-col gap-3 px-4 pb-4 lg:sticky lg:top-6 lg:px-0">
+          <div className={`${card} space-y-2.5 text-[14px] tabular`}>
+            <p className={h2}>Bill</p>
+            <Row label={`Services (${lines.reduce((n, l) => n + qtyOf(l), 0)})`} value={inr(total)} />
+            {savings > 0 && <Row label="You already save" value={inr(savings)} tone="good" muted />}
+            {offerDiscount > 0 && <Row label={`Offer ${appliedOffer.code}`} value={`−${inr(offerDiscount)}`} tone="good" />}
+            {referralDiscount > 0 && <Row label="Referral" value={`−${inr(referralDiscount)}`} tone="good" />}
+            {creditDiscount > 0 && <Row label="Tikdum credits" value={`−${inr(creditDiscount)}`} tone="good" />}
+            <div className="flex justify-between border-t border-dashed border-line pt-2.5 text-[16px] font-extrabold text-ink">
+              <span>To pay</span>
+              <span key={payable} className="animate-bump">
+                {inr(payable)}
+              </span>
+            </div>
           </div>
-        )}
-        {offerDiscount > 0 && (
-          <div className="mb-2.5 flex items-center justify-between text-[12.5px]">
-            <span className="text-emerald-600">{appliedOffer.code} discount</span>
-            <span className="font-semibold text-emerald-600">-₹{offerDiscount}</span>
+
+          <div className={card}>
+            <p className={h2}>How you'll pay</p>
+            {referral && referral.balance > 0 && (
+              <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-2xl bg-marigold-light px-3 py-3">
+                <span className="flex flex-col">
+                  <span className="text-[14px] font-bold text-ink">Use Tikdum credits</span>
+                  <span className="text-[12px] text-ink-muted">{inr(referral.balance)} from referrals</span>
+                </span>
+                <input type="checkbox" checked={useCredits} onChange={(e) => setUseCredits(e.target.checked)} className="sr-only" />
+                <span className={`relative h-7 w-12 flex-shrink-0 rounded-full transition-colors ${useCredits ? "bg-brand" : "bg-[#C9C4D9]"}`}>
+                  <span className={`absolute top-[3px] h-[22px] w-[22px] rounded-full bg-white transition-all ${useCredits ? "left-[23px]" : "left-[3px]"}`} />
+                </span>
+              </label>
+            )}
+            <div className="mt-3 flex items-center gap-3 rounded-2xl border-2 border-brand px-3 py-3">
+              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-trust-light text-trust">
+                <CashIcon width={20} height={20} />
+              </span>
+              <span className="flex flex-1 flex-col">
+                <span className="text-[14px] font-bold text-ink">Pay after service</span>
+                <span className="text-[12px] text-ink-muted">Cash or UPI to the professional when the job is done</span>
+              </span>
+              <span className="flex h-[22px] w-[22px] flex-shrink-0 items-center justify-center rounded-full border-2 border-brand">
+                <span className="h-2.5 w-2.5 rounded-full bg-brand" />
+              </span>
+            </div>
           </div>
-        )}
-        {referralDiscount > 0 && (
-          <div className="mb-2.5 flex items-center justify-between text-[12.5px]">
-            <span className="text-emerald-600">Referral discount</span>
-            <span className="font-semibold text-emerald-600">-₹{referralDiscount}</span>
+
+          <div className="flex flex-col gap-1.5 px-1">
+            <SectionLabel>Cancellation</SectionLabel>
+            <p className="flex gap-2 text-[12.5px] leading-relaxed text-ink-muted">
+              <ShieldCheckIcon width={16} height={16} className="mt-0.5 flex-shrink-0 text-trust" />
+              Free cancellation until the professional starts the work. They start only after you share your OTP.
+            </p>
           </div>
-        )}
-        {creditDiscount > 0 && (
-          <div className="mb-2.5 flex items-center justify-between text-[12.5px]">
-            <span className="text-emerald-600">Referral credit used</span>
-            <span className="font-semibold text-emerald-600">-₹{creditDiscount}</span>
-          </div>
-        )}
-        <button
-          onClick={handleCheckout}
-          disabled={submitting || !bookingAddress || unavailable.length > 0 || checkingAvailability}
-          className="w-full rounded-xl bg-brand py-3.5 text-sm font-semibold text-white shadow-card hover:bg-brand-dark active:scale-[0.98] disabled:opacity-60"
-        >
-          {submitting
-            ? "Placing order..."
-            : !bookingAddress
-              ? "Choose a location to continue"
-              : checkingAvailability
-                ? "Checking availability…"
-                : unavailable.length > 0
-                  ? "Not available at this location"
-                  : `Checkout · ₹${payable}`}
-        </button>
-        <p className="mt-2 text-center text-[10.5px] text-gray-400">
-          You won't be charged now. Payment after service completion.
-        </p>
+          <div className="h-20 lg:hidden" />
+        </div>
       </div>
+
+      {/* confirm bar */}
+      <div className="sticky bottom-0 z-20 mt-auto bg-white px-4 pb-4 pt-2.5 shadow-[0_-8px_24px_rgba(27,21,48,0.08)] lg:static lg:mx-auto lg:mb-10 lg:w-full lg:max-w-6xl lg:rounded-2xl lg:px-8">
+        {nudge && (
+          <p className="mb-2 flex items-center gap-2 rounded-xl bg-marigold-light px-3 py-2 text-[12.5px] font-semibold text-[#6B4600]">
+            <TagIcon width={15} height={15} className="flex-shrink-0" />
+            Add {inr(nudge.minOrder - total)} more to use {nudge.code} ({nudge.discountPercent}% off)
+          </p>
+        )}
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col">
+            <span className="text-[11.5px] text-ink-muted">Pay after service</span>
+            <span className="font-display text-[21px] font-extrabold text-ink tabular">{inr(payable)}</span>
+          </div>
+          <button
+            onClick={handleCheckout}
+            disabled={submitting || !bookingAddress || unavailable.length > 0 || checkingAvailability || !contactOk || !timeOk}
+            className="flex h-[54px] flex-1 items-center justify-center rounded-2xl bg-brand px-3 text-[15px] font-bold text-white shadow-cta active:scale-[0.98] disabled:bg-ink-muted disabled:shadow-none"
+          >
+            {submitting
+              ? "Booking…"
+              : !bookingAddress
+                ? "Choose where they should come"
+                : checkingAvailability
+                  ? "Checking availability…"
+                  : unavailable.length > 0
+                    ? "Not available at this address"
+                    : !contactOk
+                      ? "Add their name and number"
+                      : !timeOk
+                        ? "Choose a time"
+                      : `Confirm · ${whenLabel}`}
+          </button>
+        </div>
       </div>
+
       {picking && (
         <Suspense fallback={null}>
           <LocationPicker
@@ -554,6 +739,15 @@ export default function CartScreen() {
           />
         </Suspense>
       )}
+    </div>
+  );
+}
+
+function Row({ label, value, tone, muted }) {
+  return (
+    <div className="flex justify-between">
+      <span className={muted ? "text-ink-muted" : "text-ink-soft"}>{label}</span>
+      <span className={tone === "good" ? "font-semibold text-trust" : "font-semibold text-ink"}>{value}</span>
     </div>
   );
 }

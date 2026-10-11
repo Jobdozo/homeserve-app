@@ -369,6 +369,7 @@ function OfferManager() {
   const [code, setCode] = useState("");
   const [discountPercent, setDiscountPercent] = useState("");
   const [description, setDescription] = useState("");
+  const [minOrder, setMinOrder] = useState("");
   const [busy, setBusy] = useState(false);
 
   const refresh = () => api.listOffers().then(setOffers).catch(() => setOffers([]));
@@ -381,10 +382,11 @@ function OfferManager() {
     if (!code.trim() || !discountPercent || busy) return;
     setBusy(true);
     try {
-      await api.createOffer({ code: code.trim(), discountPercent: Number(discountPercent), description: description.trim() });
+      await api.createOffer({ code: code.trim(), discountPercent: Number(discountPercent), description: description.trim(), minOrder: Number(minOrder) || 0 });
       setCode("");
       setDiscountPercent("");
       setDescription("");
+      setMinOrder("");
       refresh();
     } catch (err) {
       showToast(err.message || "Failed to add offer");
@@ -429,6 +431,14 @@ function OfferManager() {
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Description (optional)"
         />
+        <input
+          className={inputCls}
+          type="number"
+          min="0"
+          value={minOrder}
+          onChange={(e) => setMinOrder(e.target.value)}
+          placeholder="Minimum booking ₹ (optional) — customers see “Add ₹X more”"
+        />
         <button type="submit" disabled={!code.trim() || !discountPercent || busy} className={primaryBtnCls}>
           {busy ? "Adding…" : "Add Offer"}
         </button>
@@ -442,6 +452,7 @@ function OfferManager() {
             <div className="min-w-0 flex-1">
               <p className="truncate text-[12.5px] font-semibold text-gray-800">
                 {o.code} — {o.discountPercent}% off
+                {o.minOrder > 0 && <span className="font-normal text-gray-400"> · on ₹{o.minOrder}+</span>}
               </p>
               {o.description && <p className="truncate text-[11px] text-gray-400">{o.description}</p>}
             </div>

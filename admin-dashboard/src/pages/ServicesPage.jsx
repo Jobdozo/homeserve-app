@@ -8,6 +8,7 @@ import { ChangeHistoryModal } from "../components/ChangeHistory";
 import { CommunicationChargesProvider, ChargesCell } from "../components/CommunicationCharges";
 import useSubcategories, { reloadSubcategories } from "../utils/useSubcategories";
 import ImageStudioPanel from "./ImageStudioPanel";
+import ServiceOptionsEditor from "../components/ServiceOptionsEditor";
 
 const TABS = [
   { label: "All", status: null },
@@ -713,6 +714,7 @@ function EditServiceModal({ editing, onClose }) {
             className={input + " resize-none"}
           />
         </div>
+        <ServiceOptionsEditor service={editing.service} />
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Price (₹)</label>

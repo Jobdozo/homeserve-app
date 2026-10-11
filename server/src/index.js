@@ -424,7 +424,7 @@ app.get("/api/app-version", (req, res) => {
 app.get("/api/bootstrap", ah(async (req, res) => {
   const pincode = typeof req.query.pincode === "string" ? req.query.pincode.trim() : undefined;
   const [providers, categories, services] = await Promise.all([
-    store.listProviders(),
+    store.listProviders().then(store.withCustomerHighlights),
     store.listCategories(),
     store.listServices({ activeOnly: true, pincode }),
   ]);
@@ -1209,22 +1209,24 @@ app.delete("/api/admin/locations/pincodes/:id", auth.requireAuth("admin"), ah(as
 }));
 
 // ---- offers / discount codes ----
+// Live offers the cart lists as tap-to-apply savings.
+app.get("/api/offers", ah(async (req, res) => res.json(store.listActiveOffers())));
 app.post("/api/offers/validate", ah(async (req, res) => {
-  const { code } = req.body || {};
+  const { code, subtotal } = req.body || {};
   if (!code) return res.status(400).json({ error: "code is required" });
-  const result = store.validateOffer(code);
+  const result = store.validateOffer(code, Number.isFinite(Number(subtotal)) && subtotal !== null && subtotal !== "" ? Number(subtotal) : undefined);
   if (!result.valid) return res.status(400).json({ error: result.error });
-  res.json({ code: result.offer.code, discountPercent: result.offer.discountPercent, description: result.offer.description });
+  res.json({ code: result.offer.code, discountPercent: result.offer.discountPercent, description: result.offer.description, minOrder: result.offer.minOrder || 0 });
 }));
 
 app.get("/api/admin/offers", auth.requireAuth("admin"), ah(async (req, res) => res.json(store.listOffers())));
 
 app.post("/api/admin/offers", auth.requireAuth("admin"), ah(async (req, res) => {
-  const { code, discountPercent, description, active, expiresAt } = req.body || {};
+  const { code, discountPercent, description, active, expiresAt, minOrder } = req.body || {};
   if (!code || !code.trim() || !discountPercent) {
     return res.status(400).json({ error: "code and discountPercent are required" });
   }
-  const offer = await store.createOffer({ code: code.trim(), discountPercent, description, active, expiresAt });
+  const offer = await store.createOffer({ code: code.trim(), discountPercent, description, active, expiresAt, minOrder });
   res.status(201).json(offer);
 }));
 
@@ -1238,6 +1240,30 @@ app.delete("/api/admin/offers/:id", auth.requireAuth("admin"), ah(async (req, re
   const ok = store.deleteOffer(req.params.id);
   if (!ok) return res.status(404).json({ error: "Offer not found" });
   res.status(204).end();
+}));
+
+// ---- service options (choices with prices, e.g. AC type; see serviceOptions.js) ----
+const serviceOptions = require("./serviceOptions");
+app.get("/api/admin/services/:id/options", auth.requireAuth("admin"), ah(async (req, res) => {
+  const service = await store.getService(req.params.id);
+  if (!service) return res.status(404).json({ error: "Service not found" });
+  const norm = (n) => String(n || "").trim().toLowerCase();
+  const sameName = (await store.listServices()).filter((s) => s.categoryId === service.categoryId && norm(s.name) === norm(service.name));
+  res.json({ groups: serviceOptions.getOptions(service.id), sameNameCount: sameName.length });
+}));
+app.put("/api/admin/services/:id/options", auth.requireAuth("admin"), ah(async (req, res) => {
+  const service = await store.getService(req.params.id);
+  if (!service) return res.status(404).json({ error: "Service not found" });
+  const norm = (n) => String(n || "").trim().toLowerCase();
+  const ids = req.body?.sameName
+    ? (await store.listServices()).filter((s) => s.categoryId === service.categoryId && norm(s.name) === norm(service.name)).map((s) => s.id)
+    : [service.id];
+  const before = serviceOptions.getOptions(service.id);
+  const groups = serviceOptions.setOptions(ids, req.body?.groups || []);
+  store.clearServiceCache();
+  const summary = (g) => g.map((x) => `${x.name}: ${x.choices.map((c) => `${c.name}${c.price ? ` +₹${c.price}` : ""}`).join(", ")}`).join(" | ") || "none";
+  audit(req, "service.options", "service", service.id, service.name, [{ field: `options${ids.length > 1 ? ` (${ids.length} services)` : ""}`, from: summary(before), to: summary(groups) }]);
+  res.json({ groups, updated: ids.length });
 }));
 
 // ---- services (catalog) ----

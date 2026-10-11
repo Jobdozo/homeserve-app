@@ -13,9 +13,43 @@ body,
 }
 
 body {
-  font-family: "Inter", system-ui, sans-serif;
+  font-family: "Figtree", system-ui, sans-serif;
   background: #fff;
-  color: #17172b;
+  color: #1b1530;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Headings and prices: Bricolage Grotesque (tailwind font-display). Numbers
+   that line up in columns (bills, totals) use tabular figures. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Loading placeholders: a soft shimmer instead of a spinner. */
+.skeleton {
+  background: linear-gradient(90deg, #eeecf6 25%, #f7f6fb 50%, #eeecf6 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+
+/* People who turn motion off in their phone settings get a still app. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Mobile: fills the browser window edge-to-edge, no phone mockup.
@@ -38,7 +72,7 @@ body {
      browser tab tints its own status bar from <meta name="theme-color">,
      but the native edge-to-edge WebView doesn't, so without this the strips
      read as a plain white gap instead of matching the app's own header. */
-  background: #5B3FE0;
+  background: #2A1A7A;
 }
 
 .app-body {
@@ -86,7 +120,7 @@ body {
   .app-shell {
     height: auto;
     min-height: 100dvh;
-    background: #f5f6fa;
+    background: #f6f5fb;
   }
   .app-body {
     justify-content: center;

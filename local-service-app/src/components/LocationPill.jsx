@@ -21,6 +21,50 @@ export default function LocationPill({ variant = "desktop" }) {
       ? "inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3.5 py-1.5 text-[13.5px] font-semibold text-gray-700 shadow-card hover:border-gray-300"
       : "flex items-center gap-1 text-sm font-semibold text-gray-900";
 
+  // On the night-violet home header: the area in big type, the city under it.
+  if (variant === "dark") {
+    const [area, ...rest] = String(label).split(",");
+    return (
+      <>
+        <span className="flex min-w-0 flex-col gap-1.5">
+          <button onClick={() => setPicking(true)} className="flex min-w-0 flex-col items-start text-left active:opacity-80">
+            <span className="flex max-w-full items-center gap-1.5 font-display text-[19px] font-bold text-white">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F5A524" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="flex-shrink-0">
+                <path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" />
+                <circle cx="12" cy="9.5" r="2.5" />
+              </svg>
+              <span className="truncate">{area}</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true" className="flex-shrink-0">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </span>
+            {(rest.join(",").trim() || location?.pincode) && (
+              <span className="max-w-full truncate pl-6 text-[12.5px] text-[#C9C0F2]">{rest.join(",").trim() || `PIN ${location.pincode}`}</span>
+            )}
+          </button>
+          {locationApproximate && (
+            <button onClick={() => setPicking(true)} className="ml-6 w-fit rounded-full bg-marigold px-2.5 py-0.5 text-[11px] font-bold text-ink">
+              Approximate · set exact spot
+            </button>
+          )}
+        </span>
+        {picking && (
+          <Suspense fallback={null}>
+            <LocationPicker
+              title="Set your location"
+              initial={location && !locationApproximate ? { lat: location.lat, lng: location.lng, pincode: location.pincode } : null}
+              onClose={() => setPicking(false)}
+              onConfirm={(loc) => {
+                setPinnedLocation(loc);
+                setPicking(false);
+              }}
+            />
+          </Suspense>
+        )}
+      </>
+    );
+  }
+
   return (
     <>
       <span className="inline-flex flex-wrap items-center gap-2">

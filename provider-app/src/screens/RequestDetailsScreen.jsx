@@ -84,6 +84,18 @@ export default function RequestDetailsScreen() {
           <p className="text-lg font-extrabold text-brand">₹{request.amount}</p>
         </div>
 
+        {/* What the customer chose (service options), priced into the amount above */}
+        {request.options?.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {request.options.map((o) => (
+              <span key={`${o.group}-${o.choice}`} className="rounded-lg bg-brand-light px-2 py-1 text-[11.5px] font-semibold text-brand-dark">
+                {o.group}: {o.choice}
+                {o.price ? ` (+₹${o.price})` : ""}
+              </span>
+            ))}
+          </div>
+        )}
+
         {siblings.length > 0 && (
           <div>
             <h2 className="mb-2 text-[13px] font-bold text-gray-900">Services in this request ({siblings.length + 1})</h2>
@@ -94,7 +106,10 @@ export default function RequestDetailsScreen() {
                   onClick={() => r.id !== request.id && navigate(`/requests/${r.id}`)}
                   className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
                 >
-                  <span className="min-w-0 truncate text-gray-800">{r.service?.name}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-gray-800">{r.service?.name}</span>
+                    {r.options?.length > 0 && <span className="block truncate text-[11px] text-gray-400">{r.options.map((o) => o.choice).join(" · ")}</span>}
+                  </span>
                   <span className="flex-shrink-0 font-semibold text-gray-900">₹{r.amount}</span>
                 </button>
               ))}
@@ -119,6 +134,25 @@ export default function RequestDetailsScreen() {
                 {request.assignedStaff ? "Change" : "Assign"}
               </button>
             )}
+          </div>
+        )}
+
+        {/* Booked for someone else: the person at the address is who to call */}
+        {request.contact && (
+          <div>
+            <h2 className="mb-2 text-[13px] font-bold text-gray-900">Person at the address</h2>
+            <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-semibold text-gray-900">{request.contact.name}</p>
+                {request.status !== "Completed" && <p className="text-[11px] text-gray-500">{request.contact.phone}</p>}
+                <p className="text-[10.5px] text-amber-700">Booked for them by the customer below</p>
+              </div>
+              {request.status !== "Completed" && (
+                <a href={`tel:${request.contact.phone}`} className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-brand" aria-label="Call the person at the address">
+                  <PhoneIcon width={16} height={16} />
+                </a>
+              )}
+            </div>
           </div>
         )}
 
@@ -193,7 +227,7 @@ export default function RequestDetailsScreen() {
 
         {request.issue && (
           <div>
-            <h2 className="mb-1.5 text-[13px] font-bold text-gray-900">Issue Description</h2>
+            <h2 className="mb-1.5 text-[13px] font-bold text-gray-900">Customer's note</h2>
             <p className="text-[12.5px] leading-relaxed text-gray-600">{request.issue}</p>
           </div>
         )}

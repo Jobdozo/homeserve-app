@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { AppProvider, useApp } from "./context/AppContext";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { OptionsSheetProvider } from "./components/ServiceOptionsSheet";
 import { MainLayout, DetailLayout } from "./components/PhoneFrame";
 import LoginScreen from "./screens/LoginScreen";
 import LogoMark from "./components/LogoMark";
@@ -197,7 +198,9 @@ export default function App() {
     <AppProvider>
       <ErrorBoundary>
         <BrowserRouter>
-          <AppRoutes />
+          <OptionsSheetProvider>
+            <AppRoutes />
+          </OptionsSheetProvider>
         </BrowserRouter>
       </ErrorBoundary>
     </AppProvider>

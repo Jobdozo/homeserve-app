@@ -1,22 +1,23 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import useIsDesktop from "../utils/useIsDesktop";
-import ScreenHeader from "../components/ScreenHeader";
-import { StarIcon, CheckIcon } from "../components/icons";
+import { BackIcon, CheckIcon } from "../components/icons";
 import { useApp } from "../context/AppContext";
 import { api } from "../api";
-import { formatCount, discountPct } from "../utils/format";
+import { discountPct } from "../utils/format";
+import { RatingPill, VerifiedBadge, OfferTag, AddButton, ProviderMark, SectionTitle, inr } from "../components/ui";
 import CategoryPhoto from "../components/CategoryPhoto";
 import Seo, { SITE_URL } from "../components/Seo";
 import DesktopServiceDetails from "../components/DesktopServiceDetails";
-import Avatar from "../components/Avatar";
 import AddOns from "../components/AddOns";
+import { useAddService } from "../components/optionsSheetContext";
 
 export default function ServiceDetailsScreen() {
   const { serviceId } = useParams();
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
-  const { getService, getProvider, cart, addToCart, categories } = useApp();
+  const { getService, getProvider, cart, categories } = useApp();
+  const addService = useAddService();
   const service = getService(serviceId);
   const provider = service ? getProvider(service.providerId) : null;
   const pct = service ? discountPct(service.price, service.originalPrice) : 0;
@@ -84,132 +85,87 @@ export default function ServiceDetailsScreen() {
         category={categories.find((c) => c.id === service.categoryId)}
         pct={pct}
         inCart={inCart}
-        onCart={() => (inCart ? navigate("/cart") : addToCart(service.id))}
+        onCart={() => (inCart ? navigate("/cart") : addService(service))}
       />
     </div>
     )}
-    <div className="flex flex-1 flex-col lg:hidden">
-      <ScreenHeader title="Service Details" maxWidth="lg:max-w-5xl" />
-
-      <div className="flex flex-1 flex-col lg:mx-auto lg:w-full lg:max-w-5xl lg:flex-row lg:gap-10 lg:px-8 lg:pb-16">
-        <div className="flex h-40 flex-shrink-0 items-center justify-center overflow-hidden lg:h-72 lg:w-80 lg:flex-shrink-0 lg:rounded-3xl">
-          <CategoryPhoto categoryId={service.categoryId} imageUrl={service.imageUrl} size={160} rounded="" />
-        </div>
-
-        <div className="flex-1 px-4 pb-24 pt-4 lg:px-0 lg:pb-0 lg:pt-0">
-          {service.isAd && (
-            <span className="mb-1.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
-              Sponsored
-            </span>
-          )}
-          <h1 className="text-xl font-bold text-gray-900 lg:text-3xl">{service.name}</h1>
-          {service.reviewCount > 0 ? (
-            <div className="mt-1 flex items-center gap-1 text-sm text-gray-500">
-              <StarIcon filled width={15} height={15} />
-              <span className="font-semibold text-gray-800">{service.rating}</span>
-              <span>({formatCount(service.reviewCount)})</span>
-            </div>
-          ) : (
-            <p className="mt-1 text-sm text-gray-400">New service — no reviews yet</p>
-          )}
-          {provider && (
-            <button
-              onClick={() => navigate(`/provider/${provider.id}`)}
-              className="mt-1.5 flex items-center gap-1.5 text-[12.5px] text-gray-500 hover:text-brand"
-            >
-              <span className="flex h-5 w-5 items-center justify-center overflow-hidden rounded-full bg-brand-light text-[12px]"><Avatar provider={provider} fallback="" /></span> by <span className="font-semibold underline">{provider.name}</span>
-            </button>
-          )}
-          {(service.tagline || service.description) && (
-            <p className="mt-2 text-[13px] leading-relaxed text-gray-500 lg:max-w-lg lg:text-[14px]">
-              {service.tagline || service.description}
-            </p>
-          )}
-
-          <p className="mt-3 text-xs text-gray-400 lg:hidden">Starting from</p>
-          <div className="flex items-center gap-2 lg:hidden">
-            <p className="text-2xl font-extrabold text-brand">₹{service.price}</p>
-            {pct > 0 && (
-              <>
-                <p className="text-sm text-gray-400 line-through">₹{service.originalPrice}</p>
-                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                  {pct}% OFF
-                </span>
-              </>
-            )}
-          </div>
-
-          <div className="mt-4 grid grid-cols-4 gap-2 lg:max-w-lg lg:gap-3">
-            {service.highlights.map((h) => (
-              <div
-                key={h.label}
-                className="flex flex-col items-center gap-1 rounded-xl bg-gray-50 px-1.5 py-3 text-center lg:gap-1.5 lg:py-4"
-              >
-                <span className="text-xl lg:text-2xl">{h.icon}</span>
-                <span className="text-[9.5px] font-medium leading-tight text-gray-600 lg:text-[11px]">{h.label}</span>
-              </div>
-            ))}
-          </div>
-
-          {service.includes?.length > 0 && (
-            <>
-              <h2 className="mt-5 text-[15px] font-bold text-gray-900 lg:text-lg">Service Includes</h2>
-              <ul className="mt-2 space-y-2 lg:max-w-lg">
-                {service.includes.map((item) => (
-                  <li key={item} className="flex items-center gap-2 text-[13px] text-gray-700 lg:text-[14px]">
-                    <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                      <CheckIcon width={12} height={12} strokeWidth={3} />
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-
-          <div className="mt-6">
-            <AddOns anchorIds={[service.id]} title={provider ? `Add more from ${provider.name}` : "Add more services"} subtitle="Book together — same provider, same visit" />
-          </div>
-
-          <div className="mt-8 hidden items-center gap-5 lg:flex">
-            <div>
-              <p className="text-xs text-gray-400">Starting from</p>
-              <div className="flex items-center gap-2">
-                <p className="text-2xl font-extrabold text-gray-900">₹{service.price}</p>
-                {pct > 0 && (
-                  <>
-                    <p className="text-sm text-gray-400 line-through">₹{service.originalPrice}</p>
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                      {pct}% OFF
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={() => (inCart ? navigate("/cart") : addToCart(service.id))}
-              className="rounded-xl bg-brand px-8 py-3.5 text-sm font-semibold text-white shadow-card hover:bg-brand-dark active:scale-[0.98]"
-            >
-              {inCart ? "Go to Cart" : "Add to Cart"}
-            </button>
-          </div>
-        </div>
+    <div className="flex min-h-full flex-shrink-0 flex-col bg-mist lg:hidden">
+      <div className="relative h-[260px] flex-shrink-0 bg-brand-night">
+        <CategoryPhoto categoryId={service.categoryId} imageUrl={service.imageUrl} size={260} />
+        <span className="absolute inset-0 bg-gradient-to-b from-ink/50 to-transparent to-50%" />
+        <button onClick={() => navigate(-1)} aria-label="Go back" className="absolute left-4 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-ink/55 text-white active:scale-95">
+          <BackIcon width={19} height={19} />
+        </button>
+        {pct > 0 && <OfferTag className="absolute bottom-10 left-4">{pct}% OFF</OfferTag>}
       </div>
 
-      <div className="flex flex-shrink-0 items-center justify-between gap-3 border-t border-gray-100 bg-white px-4 py-3 lg:hidden">
-        <div>
-          <p className="text-[11px] text-gray-400">Starting from</p>
-          <div className="flex items-center gap-1.5">
-            <p className="text-lg font-extrabold text-gray-900">₹{service.price}</p>
-            {pct > 0 && <p className="text-[11px] text-gray-400 line-through">₹{service.originalPrice}</p>}
-          </div>
+      <div className="relative -mt-7 flex flex-col gap-3 rounded-t-[26px] bg-white px-4 pb-5 pt-3">
+        <span className="mx-auto h-1 w-10 rounded-full bg-line" />
+        {service.isAd && <span className="w-fit rounded-full bg-marigold-light px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-marigold-dark">Sponsored</span>}
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="font-display text-[24px] font-extrabold leading-tight text-ink">{service.name}</h1>
+          <RatingPill rating={service.rating} count={service.reviewCount} showCount />
         </div>
-        <button
-          onClick={() => (inCart ? navigate("/cart") : addToCart(service.id))}
-          className="rounded-xl bg-brand px-6 py-3 text-sm font-semibold text-white shadow-card active:scale-[0.98]"
-        >
-          {inCart ? "Go to Cart" : "Add to Cart"}
-        </button>
+        {provider && (
+          <button onClick={() => navigate(`/provider/${provider.id}`)} className="flex items-center gap-2.5 rounded-2xl bg-mist p-2.5 text-left active:scale-[0.99]">
+            <ProviderMark provider={provider} className="h-10 w-10 rounded-xl text-[15px]" />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-[14px] font-bold text-ink">{provider.name}</span>
+              <span className="text-[12px] text-ink-muted">{provider.verified ? <VerifiedBadge className="text-[12px]" /> : "Service provider"}</span>
+            </span>
+            <span className="text-[12.5px] font-bold text-brand">Profile</span>
+          </button>
+        )}
+        {(service.tagline || service.description) && <p className="text-[14px] leading-relaxed text-ink-soft">{service.tagline || service.description}</p>}
+        {service.highlights?.length > 0 && (
+          <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
+            {service.highlights.map((h) => (
+              <span key={h.label} className="flex flex-shrink-0 items-center gap-1.5 rounded-xl bg-mist px-2.5 py-1.5 text-[12.5px] font-semibold text-brand-dark">
+                <span aria-hidden="true">{h.icon}</span> {h.label}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {service.includes?.length > 0 && (
+        <div className="mt-2 bg-white px-4 py-4">
+          <SectionTitle>What's included</SectionTitle>
+          <ul className="mt-3 space-y-2.5">
+            {service.includes.map((item) => (
+              <li key={item} className="flex items-start gap-2.5 text-[14px] text-ink-soft">
+                <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-trust-light text-trust">
+                  <CheckIcon width={12} height={12} strokeWidth={3} />
+                </span>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="mt-2 bg-white px-4 py-4">
+        <AddOns anchorIds={[service.id]} title="Often booked in the same visit" subtitle={provider ? `More from ${provider.name}` : undefined} />
+      </div>
+
+      <div className="h-24" />
+      <div className="sticky bottom-0 z-20 mt-auto flex items-center gap-3 bg-white px-4 pb-4 pt-3 shadow-[0_-8px_24px_rgba(27,21,48,0.08)]">
+        <div className="flex flex-col">
+          <span className="text-[11.5px] text-ink-muted">{pct > 0 ? <s>{inr(service.originalPrice)}</s> : "Price"}</span>
+          <span className="font-display text-[22px] font-extrabold text-ink">{inr(service.price)}</span>
+        </div>
+        {inCart ? (
+          <div className="flex flex-1 items-center gap-2">
+            <AddButton service={service} size="lg" className="w-[132px]" />
+            <button onClick={() => navigate("/cart")} className="flex h-[54px] flex-1 items-center justify-center rounded-2xl bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]">
+              Cart
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => addService(service)} className="flex h-[54px] flex-1 items-center justify-center rounded-2xl bg-brand text-[16px] font-bold text-white shadow-cta active:scale-[0.98]">
+            {service.options?.length ? "Choose options" : "Add to booking"}
+          </button>
+        )}
       </div>
     </div>
     </>
