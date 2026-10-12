@@ -33,7 +33,22 @@ KEEP_OFFSITE_DAYS="${KEEP_OFFSITE_DAYS:-30}"
 BACKUP_MAX_OFFSITE_MB="${BACKUP_MAX_OFFSITE_MB:-45}"
 
 log() { echo "$(date '+%F %T') $*"; }
-fail() { log "BACKUP FAILED: $*"; exit 1; }
+
+# A one-line status for the API's /api/health (and so the uptime check) to read:
+# written however the run ends. No file names or keys, only how each step went.
+STATUS_FILE="${STATUS_FILE:-$SRC/backup-status.json}"
+st_db="not run"; st_archive="failed"; st_offsite="off"; st_note=""
+write_status() {
+  local code=$?
+  local note="${st_note//\"/}"
+  { printf '{"at":"%s","exitCode":%d,"database":"%s","archive":"%s","offsite":"%s","note":"%s"}\n' \
+      "$(date -u +%FT%TZ)" "$code" "$st_db" "$st_archive" "$st_offsite" "$note" > "$STATUS_FILE.tmp" \
+    && chmod 644 "$STATUS_FILE.tmp" && mv "$STATUS_FILE.tmp" "$STATUS_FILE"; } 2> /dev/null || true
+}
+trap write_status EXIT
+
+fail() { st_note="$*"; log "BACKUP FAILED: $*"; exit 1; }
+offsite_fail() { st_offsite="failed"; st_note="$*"; log "OFF-SERVER COPY FAILED: $*"; exit 1; }
 
 [ -d "$SRC" ] || fail "source folder $SRC not found"
 mkdir -p "$DEST/daily" "$DEST/weekly"
@@ -50,8 +65,10 @@ run_export() {
 }
 if out=$(run_export 2>&1); then
   log "$out"
+  st_db="ok"
 else
   log "DATABASE EXPORT FAILED: $out"
+  st_db="failed"
   problems=1
 fi
 
@@ -77,6 +94,7 @@ listing=$(tar -tzf "$tmp") || { rm -f "$tmp"; fail "archive is unreadable"; }
 # (not `tar | grep -q`: grep quitting early would SIGPIPE tar and trip pipefail)
 grep -q '\.json$' <<< "$listing" || { rm -f "$tmp"; fail "archive has no data files"; }
 mv "$tmp" "$DEST/daily/$name"
+st_archive="ok"
 
 # One copy per week (Sundays) is kept much longer.
 [ "$(date +%u)" = "7" ] && cp "$DEST/daily/$name" "$DEST/weekly/$name"
@@ -90,13 +108,13 @@ log "backup ok: $name ($size); $(ls "$DEST/daily" | wc -l) daily, $(ls "$DEST/we
 
 # ---- 3. copy off this server, encrypted ----
 if [ -n "${BACKUP_RCLONE_REMOTE:-}" ]; then
-  command -v rclone > /dev/null || { log "OFF-SERVER COPY FAILED: rclone isn't installed"; exit 1; }
+  command -v rclone > /dev/null || offsite_fail "rclone isn't installed"
   upload="$DEST/daily/$name"
   if [ -n "${BACKUP_ENCRYPT_KEY_FILE:-}" ]; then
-    [ -s "$BACKUP_ENCRYPT_KEY_FILE" ] || { log "OFF-SERVER COPY FAILED: encryption key file $BACKUP_ENCRYPT_KEY_FILE is missing or empty"; exit 1; }
+    [ -s "$BACKUP_ENCRYPT_KEY_FILE" ] || offsite_fail "encryption key file $BACKUP_ENCRYPT_KEY_FILE is missing or empty"
     upload="$DEST/daily/.$name.enc.partial"
     openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt -in "$DEST/daily/$name" -out "$upload" -pass "file:$BACKUP_ENCRYPT_KEY_FILE" \
-      || { rm -f "$upload"; log "OFF-SERVER COPY FAILED: encryption failed"; exit 1; }
+      || { rm -f "$upload"; offsite_fail "encryption failed"; }
     remote_name="$name.enc"
   else
     log "WARNING: no BACKUP_ENCRYPT_KEY_FILE set — the off-server copy is NOT encrypted"
@@ -105,15 +123,14 @@ if [ -n "${BACKUP_RCLONE_REMOTE:-}" ]; then
   up_mb=$(( ($(stat -c %s "$upload") + 1048575) / 1048576 ))
   if [ "$up_mb" -gt "$BACKUP_MAX_OFFSITE_MB" ]; then
     rm -f "$upload"
-    log "OFF-SERVER COPY FAILED: backup is ${up_mb} MB, over the ${BACKUP_MAX_OFFSITE_MB} MB limit (upgrade the plan or raise BACKUP_MAX_OFFSITE_MB)"
-    exit 1
+    offsite_fail "backup is ${up_mb} MB, over the ${BACKUP_MAX_OFFSITE_MB} MB limit (upgrade the plan or raise BACKUP_MAX_OFFSITE_MB)"
   fi
   if rclone copyto "$upload" "$BACKUP_RCLONE_REMOTE/$remote_name" --s3-no-check-bucket; then
     log "copied off-server: $remote_name (${up_mb} MB) -> $BACKUP_RCLONE_REMOTE"
+    st_offsite="copied"
   else
     rm -f "$upload"
-    log "OFF-SERVER COPY FAILED: upload error"
-    exit 1
+    offsite_fail "upload error"
   fi
   [ "$upload" != "$DEST/daily/$name" ] && rm -f "$upload"
   rclone delete "$BACKUP_RCLONE_REMOTE" --min-age "${KEEP_OFFSITE_DAYS}d" --s3-no-check-bucket > /dev/null 2>&1 || true

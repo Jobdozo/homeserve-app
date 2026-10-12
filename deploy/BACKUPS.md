@@ -62,6 +62,12 @@ tail -8 /var/log/tikdum-backup.log
 ls -lh /root/tikdum-backups/daily | tail -3
 ```
 
+Each run also writes `/root/tikdum-data/backup-status.json`, which
+`https://api.tikdum.com/api/health` reports as `backup`. The `uptime` GitHub workflow
+checks it every 10 minutes and fails (GitHub emails you) when a backup failed or is more
+than 30 hours old; it warns while the off-server copy is still off. After changing
+`backup-data.sh`, re-run `deploy/install-backup.sh` so the VPS uses the new copy.
+
 Lines to look for: `database export ok: customers=… bookings=…`, `backup ok`, and (once
 Supabase is on) `copied off-server`. Anything with `FAILED` needs attention. The exit code
 is 2 if only the database export failed (the folder backup still ran), 1 for other failures.

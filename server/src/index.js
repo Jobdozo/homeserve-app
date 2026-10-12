@@ -36,6 +36,8 @@ const imageStudio = require("./imageStudio");
 const { groupByProvider, describeGroup } = require("./orderGroups");
 const providerAdmin = require("./providerAdmin");
 const partnerHub = require("./partnerHub");
+const rateLimit = require("./rateLimit");
+const health = require("./health");
 const jsonStore = require("./jsonStore");
 auth.setBlockCheck(blockedPhones.isBlocked);
 const liveLocation = require("./liveLocation");
@@ -61,6 +63,8 @@ app.use(compression());
 app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json());
 app.use("/uploads", express.static(UPLOADS_DIR));
+// Flood protection for the whole API (see rateLimit.js); /api/health is never limited.
+app.use("/api", rateLimit.apiLimits);
 
 // Every authenticated provider request doubles as a presence heartbeat for
 // Live Service Provider Monitoring (the app polls every ~30s while open).
@@ -429,6 +433,23 @@ app.get("/api/auth/me", auth.requireAuth(), ah(async (req, res) => {
     return res.json({ role: "provider", user: provider, ...(req.staff ? { staff: staff.loginProfile(req.staff) } : {}) });
   }
   res.json({ role: "admin", user: adminProfile(req.admin) });
+}));
+
+// ---- health: what the outside uptime check (.github/workflows/uptime.yml) reads ----
+// 200 while the API and database answer, 503 when the database doesn't. Last
+// night's backup is reported alongside; a missed backup is an alert, not a 503.
+const STARTED_AT = Date.now();
+app.get("/api/health", ah(async (req, res) => {
+  const database = await health.databaseHealth(() => store.listCategories());
+  const ok = database === "ok";
+  res.status(ok ? 200 : 503).json({
+    ok,
+    time: new Date().toISOString(),
+    uptimeMin: Math.round((Date.now() - STARTED_AT) / 60000),
+    database,
+    backup: health.backupHealth(),
+    limits: rateLimit.stats(),
+  });
 }));
 
 // ---- forced app updates: the Android apps ask this on open and when resumed ----

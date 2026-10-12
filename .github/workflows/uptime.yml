@@ -1,0 +1,54 @@
+name: uptime
+
+# Every 10 minutes from outside the server: the three websites answer, the API and
+# its database answer (/api/health), and last night's backup worked. A failed run
+# is the alert — GitHub emails the account that last changed this schedule.
+# GitHub may start scheduled runs a few minutes late; that's fine for this.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Websites and API
+        run: |
+          fail=0
+          for url in https://tikdum.com/ https://provider.tikdum.com/ https://admin.tikdum.com/; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 --retry 2 --retry-delay 15 --retry-all-errors "$url" || true)
+            echo "$url -> ${code:-no answer}"
+            [ "$code" = "200" ] || { echo "::error::$url is down (${code:-no answer})"; fail=1; }
+          done
+          code=$(curl -s -o health.json -w '%{http_code}' --max-time 20 --retry 2 --retry-delay 15 --retry-all-errors https://api.tikdum.com/api/health || true)
+          echo "api health -> ${code:-no answer}"
+          cat health.json 2>/dev/null || true
+          echo
+          [ "$code" = "200" ] || { echo "::error::The API or its database is down (${code:-no answer})"; fail=1; }
+          exit $fail
+
+      - name: Last night's backup
+        if: always()
+        run: |
+          [ -s health.json ] || { echo "::warning::Couldn't read the backup status (API down?)"; exit 0; }
+          python3 - <<'PY'
+          import json, sys
+          b = json.load(open("health.json")).get("backup", {})
+          state = b.get("state")
+          print("backup:", json.dumps(b))
+          if state == "unknown":
+              print("::warning::No backup has reported yet — re-run deploy/install-backup.sh on the VPS (see deploy/BACKUPS.md)")
+          elif state in ("failed", "overdue"):
+              print(f"::error::Backup {state}: {b.get('note') or 'see /var/log/tikdum-backup.log on the VPS'}")
+              sys.exit(1)
+          if b.get("offsite") == "off":
+              print("::warning::Backups are only on the VPS — turn on the off-server copy (deploy/BACKUPS.md)")
+          PY
