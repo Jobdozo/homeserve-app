@@ -10,7 +10,7 @@
 const fs = require("fs");
 const path = require("path");
 const jsonStore = require("./jsonStore");
-const { UPLOADS_DIR } = require("./uploads");
+const { UPLOADS_DIR, removeFile } = require("./uploads");
 
 const SUBS = "subcategories";
 const LINKS = "serviceSubcategories";
@@ -19,9 +19,9 @@ const LINKS = "serviceSubcategories";
 function deleteUploaded(url) {
   if (!url || !url.startsWith("/uploads/") || !/^[A-Za-z0-9._-]+$/.test(url.slice("/uploads/".length))) return;
   try {
-    fs.unlinkSync(path.join(UPLOADS_DIR, url.slice("/uploads/".length)));
+    removeFile(url);
   } catch (e) {
-    if (e.code !== "ENOENT") console.error("Could not remove old sub-category picture", e.message);
+    console.error("Could not remove old sub-category picture", e.message);
   }
 }
 

@@ -14,7 +14,7 @@ const crypto = require("crypto");
 const jsonStore = require("./jsonStore");
 const store = require("./store");
 const subcategories = require("./subcategories");
-const { UPLOADS_DIR } = require("./uploads");
+const { UPLOADS_DIR, removeFile } = require("./uploads");
 const dup = require("./duplicates");
 
 const COLLECTION = "serviceCatalog";
@@ -23,9 +23,9 @@ const fail = (status, message) => Object.assign(new Error(message), { status });
 function deleteUploadedFile(url) {
   if (!url || !url.startsWith("/uploads/") || !/^[A-Za-z0-9._-]+$/.test(url.slice("/uploads/".length))) return;
   try {
-    fs.unlinkSync(path.join(UPLOADS_DIR, url.slice("/uploads/".length)));
+    removeFile(url);
   } catch (e) {
-    if (e.code !== "ENOENT") console.error("Could not remove old catalog photo", e.message);
+    console.error("Could not remove old catalog photo", e.message);
   }
 }
 

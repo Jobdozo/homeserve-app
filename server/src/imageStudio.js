@@ -17,7 +17,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const jsonStore = require("./jsonStore");
-const { UPLOADS_DIR } = require("./uploads");
+const { UPLOADS_DIR, removeFile } = require("./uploads");
 
 const CANDIDATES = "imageCandidates";
 const USAGE = "imageStudioUsage";
@@ -175,9 +175,9 @@ const extFor = (mime) => (/jpe?g/.test(mime) ? ".jpg" : /webp/.test(mime) ? ".we
 function deleteFile(url) {
   if (!url || !/^\/uploads\/[A-Za-z0-9._-]+$/.test(url)) return;
   try {
-    fs.unlinkSync(path.join(UPLOADS_DIR, url.slice("/uploads/".length)));
+    removeFile(url);
   } catch (e) {
-    if (e.code !== "ENOENT") console.error("Image studio: couldn't remove a file", e.message);
+    console.error("Image studio: couldn't remove a file", e.message);
   }
 }
 

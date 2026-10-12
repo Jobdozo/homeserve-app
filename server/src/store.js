@@ -304,9 +304,9 @@ function serviceImageUrl(serviceId) {
 function deleteUploadedFile(url) {
   if (!url || !url.startsWith("/uploads/") || !/^[A-Za-z0-9._-]+$/.test(url.slice("/uploads/".length))) return;
   try {
-    require("fs").unlinkSync(require("path").join(require("./uploads").UPLOADS_DIR, url.slice("/uploads/".length)));
+    require("./uploads").removeFile(url);
   } catch (e) {
-    if (e.code !== "ENOENT") console.error("Could not remove old service photo", e.message);
+    console.error("Could not remove old service photo", e.message);
   }
 }
 

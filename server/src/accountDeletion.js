@@ -10,7 +10,7 @@ const push = require("./push");
 const fcm = require("./fcm");
 const fs = require("fs");
 const path = require("path");
-const { UPLOADS_DIR } = require("./uploads");
+const { removeFile } = require("./uploads");
 const { query, mutate } = require("./dataconnect");
 
 const DELETED = "deletedAccounts";
@@ -103,7 +103,7 @@ function dropDevices(role, id) {
 function removeUploadedFile(url) {
   try {
     const name = path.basename(String(url || ""));
-    if (name) fs.rmSync(path.join(UPLOADS_DIR, name), { force: true });
+    if (name) removeFile(name);
   } catch (e) {
     console.error("upload cleanup failed", e);
   }

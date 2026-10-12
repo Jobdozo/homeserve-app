@@ -37,6 +37,14 @@ services:
       VAPID_SUBJECT: ${VAPID_SUBJECT}
       GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcp-service-account.json
       DATA_DIR: /app/data
+      # Cloud storage for uploads (scaling step 3, see deploy/STORAGE.md). Off until all seven are set in .env.
+      STORAGE_S3_ENDPOINT: ${STORAGE_S3_ENDPOINT:-}
+      STORAGE_S3_REGION: ${STORAGE_S3_REGION:-}
+      STORAGE_S3_ACCESS_KEY_ID: ${STORAGE_S3_ACCESS_KEY_ID:-}
+      STORAGE_S3_SECRET_ACCESS_KEY: ${STORAGE_S3_SECRET_ACCESS_KEY:-}
+      STORAGE_PUBLIC_BUCKET: ${STORAGE_PUBLIC_BUCKET:-}
+      STORAGE_PRIVATE_BUCKET: ${STORAGE_PRIVATE_BUCKET:-}
+      STORAGE_PUBLIC_BASE_URL: ${STORAGE_PUBLIC_BASE_URL:-}
     volumes:
       - /root/tikdum-secrets/gcp-service-account.json:/run/secrets/gcp-service-account.json:ro
       - /root/tikdum-data:/app/data

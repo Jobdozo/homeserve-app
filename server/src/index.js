@@ -44,7 +44,8 @@ auth.setBlockCheck(blockedPhones.isBlocked);
 const liveLocation = require("./liveLocation");
 const push = require("./push");
 const fcm = require("./fcm");
-const { upload, uploadEvidence, UPLOADS_DIR } = require("./uploads");
+const uploads = require("./uploads");
+const { upload, uploadPrivate, uploadEvidence } = uploads;
 
 const PORT = process.env.PORT || 4000;
 
@@ -63,7 +64,8 @@ const app = express();
 app.use(compression());
 app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json());
-app.use("/uploads", express.static(UPLOADS_DIR));
+// Photos copied to cloud storage go to its CDN; everything else is served from here (see uploads.js).
+app.use("/uploads", uploads.serveUpload);
 // Flood protection for the whole API (see rateLimit.js); /api/health is never limited.
 app.use("/api", rateLimit.apiLimits);
 
@@ -449,6 +451,7 @@ app.get("/api/health", ah(async (req, res) => {
     uptimeMin: Math.round((Date.now() - STARTED_AT) / 60000),
     database,
     backup: health.backupHealth(),
+    uploads: uploads.cloudStatus(),
     limits: rateLimit.stats(),
   });
 }));
@@ -2054,7 +2057,7 @@ app.get("/api/provider/kyc-documents", auth.requireAuth("provider"), ah(async (r
 app.post(
   "/api/provider/kyc-documents",
   auth.requireAuth("provider"),
-  upload.single("file"),
+  uploadPrivate.single("file"),
   ah(async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "file is required" });
     const provider = await store.getProvider(req.user.id);
@@ -2087,7 +2090,7 @@ app.get("/api/admin/providers/:id/kyc-documents", auth.requireAuth("admin"), ah(
 app.post(
   "/api/admin/providers/:id/kyc-documents",
   auth.requireAuth("admin"),
-  upload.single("file"),
+  uploadPrivate.single("file"),
   ah(async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "Choose a photo of the document" });
     const provider = await store.getProvider(req.params.id);
@@ -2131,7 +2134,7 @@ app.get("/api/bookings/:id/photos", auth.requireAuth("provider", "customer", "ad
 app.post(
   "/api/bookings/:id/photos",
   auth.requireAuth("provider"),
-  upload.single("file"),
+  uploadPrivate.single("file"),
   ah(async (req, res) => {
     const booking = await store.getBooking(req.params.id);
     if (!booking) return res.status(404).json({ error: "Booking not found" });
@@ -3093,6 +3096,7 @@ process.on("unhandledRejection", (err) => console.error("Unhandled rejection:", 
 process.on("uncaughtException", (err) => console.error("Uncaught exception:", err));
 
 server.listen(PORT, () => {
+  uploads.startCloudSync();
   console.log(`Tikdum API + realtime server listening on http://localhost:${PORT}`);
 });
 
