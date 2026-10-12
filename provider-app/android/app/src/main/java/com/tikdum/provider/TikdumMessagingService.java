@@ -80,7 +80,7 @@ public class TikdumMessagingService extends FirebaseMessagingService {
     PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(ctx, bookingId != null ? bookingId.hashCode() : 0, fullScreenIntent, flags);
 
     NotificationCompat.Builder builder = new NotificationCompat.Builder(ctx, CHANNEL_ID)
-        .setSmallIcon(R.drawable.ic_launcher_foreground)
+        .setSmallIcon(R.drawable.ic_stat_tikdum)
         // The small icon is just a white silhouette (Android's own rule for
         // status-bar icons); without an explicit color, OEM notification
         // shades that tint or badge it (MIUI, etc.) fall back to a generic
@@ -108,7 +108,7 @@ public class TikdumMessagingService extends FirebaseMessagingService {
     int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0);
     PendingIntent pendingIntent = PendingIntent.getActivity(ctx, id, intent, flags);
     NotificationCompat.Builder builder = new NotificationCompat.Builder(ctx, UPDATES_CHANNEL_ID)
-        .setSmallIcon(R.drawable.ic_launcher_foreground)
+        .setSmallIcon(R.drawable.ic_stat_tikdum)
         .setColor(0xFF634AE0)
         .setContentTitle(title)
         .setContentText(body)

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status-bar notification icon: the Tikdum tick and pin from the app icon,
+     white on transparent (Android draws small icons from the alpha only). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="76"
+    android:viewportHeight="76">
+    <group
+        android:translateX="-13"
+        android:translateY="-19">
+        <path
+            android:pathData="M25,52 L43,70 L77,30"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="12"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M43,70 L43,80"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="8"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M39,86 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 z"
+            android:fillColor="#FFFFFFFF" />
+    </group>
+</vector>
