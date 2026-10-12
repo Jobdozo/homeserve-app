@@ -75,21 +75,29 @@ async function send(c, method, bucket, key, { body, contentType } = {}) {
   return res;
 }
 
+// "403 SignatureDoesNotMatch: …" from an S3 error body (XML), or its first words.
+async function errorText(res) {
+  const body = await res.text().catch(() => "");
+  const code = (body.match(/<Code>([^<]*)<\/Code>/) || [])[1];
+  const message = (body.match(/<Message>([^<]*)<\/Message>/) || [])[1];
+  return `${res.status}${code ? ` ${code}` : ""}: ${message || body.replace(/<[^>]+>/g, " ").trim().slice(0, 160)}`;
+}
+
 async function putObject(c, bucket, key, body, contentType) {
   const res = await send(c, "PUT", bucket, key, { body, contentType });
-  if (!res.ok) throw new Error(`upload failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) throw new Error(`upload failed (${await errorText(res)})`);
 }
 
 async function getObject(c, bucket, key) {
   const res = await send(c, "GET", bucket, key);
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`download failed (${res.status})`);
+  if (!res.ok) throw new Error(`download failed (${await errorText(res)})`);
   return Buffer.from(await res.arrayBuffer());
 }
 
 async function deleteObject(c, bucket, key) {
   const res = await send(c, "DELETE", bucket, key);
-  if (!res.ok && res.status !== 404) throw new Error(`delete failed (${res.status})`);
+  if (!res.ok && res.status !== 404) throw new Error(`delete failed (${await errorText(res)})`);
 }
 
 const publicUrl = (c, key) => `${c.publicBaseUrl}/${encodePath(key)}`;
