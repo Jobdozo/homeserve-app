@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+import { usePagedList, useDebounced } from "../utils/usePagedList";
 import { useApp } from "../context/AppContext";
 import WhatsAppSend from "../components/WhatsAppSend";
 
@@ -492,38 +493,22 @@ function BlockedNumbers({ canEdit }) {
   );
 }
 
+// Customers a page at a time, searched on the server (scaling step 5).
 function AllCustomers() {
-  const { showToast } = useApp();
-  const [customers, setCustomers] = useState(null);
   const [query, setQuery] = useState("");
-
-  useEffect(() => {
-    api
-      .listCustomers()
-      .then(setCustomers)
-      .catch((e) => {
-        showToast(e.message || "Failed to load customers");
-        setCustomers([]);
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const filtered = useMemo(() => {
-    if (!customers) return [];
-    const q = query.trim().toLowerCase();
-    if (!q) return customers;
-    return customers.filter(
-      (c) => c.name?.toLowerCase().includes(q) || c.phone?.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q)
-    );
-  }, [customers, query]);
+  const q = useDebounced(query.trim());
+  const list = usePagedList(({ offset, limit }) => api.listCustomersPage({ q: q || undefined, offset, limit }), q);
+  const rows = list.items || [];
 
   return (
     <div className="space-y-4">
       <div className="rounded-2xl bg-white p-3 shadow-card">
         <input
+          type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by name, phone, or email…"
+          aria-label="Search customers"
           className="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-[13px] text-gray-800 outline-none focus:border-brand"
         />
       </div>
@@ -541,14 +526,14 @@ function AllCustomers() {
               </tr>
             </thead>
             <tbody>
-              {customers === null && (
+              {list.items === null && !list.error && (
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-gray-400">
                     Loading…
                   </td>
                 </tr>
               )}
-              {filtered.map((c) => (
+              {rows.map((c) => (
                 <tr key={c.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
                   <td className="flex items-center gap-2 px-4 py-3 font-semibold text-gray-800">
                     <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-sm">
@@ -559,19 +544,45 @@ function AllCustomers() {
                   <td className="px-4 py-3 text-gray-500">{c.phone}</td>
                   <td className="px-4 py-3 text-gray-500">{c.email || "—"}</td>
                   <td className="px-4 py-3 text-gray-700">{c.totalBookings}</td>
-                  <td className="px-4 py-3 font-semibold text-gray-900">₹{c.totalSpent.toLocaleString("en-IN")}</td>
+                  <td className="px-4 py-3 font-semibold text-gray-900">₹{(c.totalSpent || 0).toLocaleString("en-IN")}</td>
                 </tr>
               ))}
-              {customers !== null && filtered.length === 0 && (
+              {list.items !== null && rows.length === 0 && !list.error && (
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-gray-400">
-                    No customers found.
+                    {q ? `No customers match “${q}”.` : "No customers yet."}
+                  </td>
+                </tr>
+              )}
+              {list.error && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-10 text-center text-red-500">
+                    {list.error}.{" "}
+                    <button onClick={list.reload} className="font-semibold text-brand underline">
+                      Try again
+                    </button>
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        {rows.length > 0 && (
+          <div className="flex items-center justify-between gap-3 border-t border-gray-100 px-4 py-3 text-[12.5px] text-gray-500">
+            <span>
+              Showing {rows.length.toLocaleString("en-IN")} of {list.total.toLocaleString("en-IN")}
+            </span>
+            {list.hasMore && (
+              <button
+                onClick={list.loadMore}
+                disabled={list.loading}
+                className="rounded-xl border border-gray-200 px-4 py-2 font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {list.loading ? "Loading…" : "Show more"}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

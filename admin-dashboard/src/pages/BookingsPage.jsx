@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
+import { api } from "../api";
 import CategoryIcon from "../components/CategoryIcon";
 import BookingDetailModal from "../components/BookingDetailModal";
+import { usePagedList, useDebounced } from "../utils/usePagedList";
 
 const TABS = ["All", "Pending", "Accepted", "In Progress", "Completed", "Rejected", "Cancelled"];
 
@@ -14,33 +16,58 @@ const statusStyles = {
   Rejected: "bg-red-100 text-red-600",
 };
 
+// Every booking, newest first, a page at a time from the server (scaling step 5):
+// the status tabs and the search box (booking code, customer, provider, service,
+// phone) are worked out in the database, so this stays fast with any number of bookings.
 export default function BookingsPage() {
   const { bookings, providers } = useApp();
   const [tab, setTab] = useState("All");
-  const [openBookingId, setOpenBookingId] = useState(null);
+  const [search, setSearch] = useState("");
+  const q = useDebounced(search.trim());
+  const [openBooking, setOpenBooking] = useState(null);
+
+  const list = usePagedList(
+    ({ offset, limit }) => api.listBookingsPage({ status: tab === "All" ? undefined : tab, q: q || undefined, offset, limit }),
+    `${tab}|${q}`
+  );
+
+  // Live updates: rows on screen take a new status as it happens, and a brand-new
+  // booking (it arrives at the top of the app's recent list) refreshes the first page.
+  const newest = useRef(bookings[0]?.id);
+  useEffect(() => {
+    list.patch(bookings);
+    if (newest.current && bookings[0]?.id !== newest.current) list.reload();
+    newest.current = bookings[0]?.id;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookings]);
 
   const providerName = (id) => providers.find((p) => p.id === id)?.name || "—";
-
-  const filtered = useMemo(() => {
-    const sorted = [...bookings].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    if (tab === "All") return sorted;
-    return sorted.filter((b) => b.status === tab);
-  }, [bookings, tab]);
+  const rows = list.items || [];
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 overflow-x-auto rounded-2xl bg-white p-1.5 shadow-card">
-        {TABS.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`flex-shrink-0 rounded-xl px-4 py-2 text-[12.5px] font-semibold transition-colors ${
-              tab === t ? "bg-brand text-white" : "text-gray-500 hover:bg-gray-50"
-            }`}
-          >
-            {t}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex gap-2 overflow-x-auto rounded-2xl bg-white p-1.5 shadow-card">
+          {TABS.map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`flex-shrink-0 rounded-xl px-4 py-2 text-[12.5px] font-semibold transition-colors ${
+                tab === t ? "bg-brand text-white" : "text-gray-500 hover:bg-gray-50"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search code, customer, provider, service or phone"
+          aria-label="Search bookings"
+          className="min-w-[240px] flex-1 rounded-2xl border border-gray-100 bg-white px-4 py-2.5 text-[13px] text-gray-800 shadow-card outline-none focus:border-brand"
+        />
       </div>
 
       <div className="overflow-hidden rounded-2xl bg-white shadow-card">
@@ -58,10 +85,10 @@ export default function BookingsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((b) => (
+              {rows.map((b) => (
                 <tr
                   key={b.id}
-                  onClick={() => setOpenBookingId(b.id)}
+                  onClick={() => setOpenBooking(b)}
                   className="cursor-pointer border-b border-gray-50 last:border-0 hover:bg-gray-50/60"
                 >
                   <td className="px-4 py-3 font-semibold text-gray-800">#{b.ref || b.id}</td>
@@ -75,25 +102,58 @@ export default function BookingsPage() {
                   </td>
                   <td className="px-4 py-3 font-semibold text-gray-900">₹{b.amount}</td>
                   <td className="px-4 py-3">
-                    <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${statusStyles[b.status]}`}>
+                    <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${statusStyles[b.status] || "bg-gray-100 text-gray-600"}`}>
                       {b.status}
                     </span>
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && (
+              {list.items === null && !list.error && (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
-                    No {tab.toLowerCase()} bookings.
+                    Loading bookings…
+                  </td>
+                </tr>
+              )}
+              {list.items !== null && rows.length === 0 && !list.error && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
+                    {q ? `No bookings match “${q}”.` : `No ${tab === "All" ? "" : `${tab.toLowerCase()} `}bookings.`}
+                  </td>
+                </tr>
+              )}
+              {list.error && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-red-500">
+                    {list.error}.{" "}
+                    <button onClick={list.reload} className="font-semibold text-brand underline">
+                      Try again
+                    </button>
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        {rows.length > 0 && (
+          <div className="flex items-center justify-between gap-3 border-t border-gray-100 px-4 py-3 text-[12.5px] text-gray-500">
+            <span>
+              Showing {rows.length.toLocaleString("en-IN")} of {list.total.toLocaleString("en-IN")}
+            </span>
+            {list.hasMore && (
+              <button
+                onClick={list.loadMore}
+                disabled={list.loading}
+                className="rounded-xl border border-gray-200 px-4 py-2 font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {list.loading ? "Loading…" : "Show more"}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {openBookingId && <BookingDetailModal bookingId={openBookingId} onClose={() => setOpenBookingId(null)} />}
+      {openBooking && <BookingDetailModal bookingId={openBooking.id} fallback={openBooking} onClose={() => setOpenBooking(null)} />}
     </div>
   );
 }

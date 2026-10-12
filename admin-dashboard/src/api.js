@@ -6,6 +6,8 @@ export function setAuthToken(token) {
   authToken = token;
 }
 
+const pageQuery = (params) => new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")).toString();
+
 async function request(path, options) {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: {
@@ -144,6 +146,8 @@ export const api = {
 
   getOverview: () => request("/admin/overview"),
   listCustomers: () => request("/admin/customers"),
+  // One page of customers, searched on the server: { items, total }.
+  listCustomersPage: ({ q, offset = 0, limit = 50 } = {}) => request(`/admin/customers?${pageQuery({ q, offset, limit })}`),
   listLoginAttempts: () => request("/admin/customers/login-attempts"),
   updateLoginAttempt: (id, patch) => request(`/admin/customers/login-attempts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
   listDeletedAccounts: () => request("/admin/customers/deleted-accounts"),
@@ -189,6 +193,9 @@ export const api = {
   listCategories: () => request("/categories"),
   listServices: () => request("/services"),
   listBookings: () => request("/bookings"),
+  // One page of bookings, newest first, filtered on the server: { items, total }.
+  listBookingsPage: ({ status, provider, customer, from, to, q, offset = 0, limit = 50 } = {}) =>
+    request(`/admin/bookings?${pageQuery({ status, provider, customer, from, to, q, offset, limit })}`),
   getBookingMessages: (id) => request(`/messages/${id}`),
   getBookingPhotos: (id) => request(`/bookings/${id}/photos`),
   getBookingCheckpoints: (id) => request(`/bookings/${id}/checkpoints`),

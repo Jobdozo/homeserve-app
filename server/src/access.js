@@ -347,6 +347,8 @@ const RULES = [
   [/^\/admin\/settings/, (m) => (m === "GET" ? "settings.view" : "settings.edit")],
   [/^\/admin\/remove-seed-data/, () => "settings.delete"],
   [/^\/admin\/import\//, () => "data.import"],
+  // A page of bookings (scaling step 5): the same people who can load the booking list.
+  [/^\/admin\/bookings$/, () => ["bookings.view", "reviews.view", "payments.view", "monitoring.view", "complaints.view", "customers.view", "dashboard.view", "reports.view"]],
   [/^\/admin\/bookings\//, () => "bookings.view"],
   [/^\/bookings$/, () => ["bookings.view", "reviews.view", "payments.view", "monitoring.view", "complaints.view", "customers.view", "dashboard.view", "reports.view"]],
   [/^\/bookings(\/|$)/, (m) => (m === "GET" ? "bookings.view" : "bookings.edit")],

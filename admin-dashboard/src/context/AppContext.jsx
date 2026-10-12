@@ -4,6 +4,7 @@ import { socket, setSocketToken } from "../socket";
 
 const AppContext = createContext(null);
 const AUTH_KEY = "tikdum-admin-auth-v1";
+const RECENT_BOOKINGS = 500;
 
 function loadAuth() {
   try {
@@ -37,6 +38,7 @@ export function AppProvider({ children }) {
   const [connected, setConnected] = useState(socket.connected);
   const [toast, setToast] = useState(null);
   const refreshTimer = useRef(null);
+  const overviewTimer = useRef(null);
 
   const login = useCallback((token, user) => {
     setAuthToken(token);
@@ -66,7 +68,9 @@ export function AppProvider({ children }) {
       soft(api.listCategories(), []),
       soft(api.listProviders(), []),
       soft(api.listServices(), []),
-      soft(api.listBookings(), []),
+      // The newest 500 bookings (scaling step 5): enough for the live views; the
+      // Bookings page pages through the rest on the server.
+      soft(api.listBookingsPage({ limit: RECENT_BOOKINGS }).then((r) => r.items), []),
       soft(api.listActivities(20), []),
     ]);
     setOverview(overviewData);
@@ -144,11 +148,23 @@ export function AppProvider({ children }) {
     };
   }, []);
 
+  // Live events only re-fetch the summary numbers; the changed record itself
+  // arrives with the event, so nothing else is reloaded (scaling step 5).
+  const refreshOverview = useCallback(() => {
+    if (overviewTimer.current) clearTimeout(overviewTimer.current);
+    overviewTimer.current = setTimeout(() => {
+      api.getOverview().then(setOverview).catch(() => {});
+    }, 1500);
+  }, []);
+
   useEffect(() => {
-    const onBookingChanged = () => scheduleRefresh();
+    const onBookingChanged = (booking) => {
+      if (booking?.id) setBookings((prev) => upsertById(prev, booking).slice(0, RECENT_BOOKINGS));
+      refreshOverview();
+    };
     const onServiceChanged = (service) => {
-      setServices((prev) => upsertById(prev, service));
-      scheduleRefresh();
+      if (service?.id) setServices((prev) => upsertById(prev, service));
+      refreshOverview();
     };
     const onProviderUpdated = (provider) => {
       // The broadcast omits phone/email; merge so they aren't wiped from view.
@@ -157,11 +173,11 @@ export function AppProvider({ children }) {
           ? prev.map((p) => (p.id === provider.id ? { ...p, ...provider } : p))
           : upsertById(prev, provider)
       );
-      scheduleRefresh();
+      refreshOverview();
     };
     const onProviderDeleted = (providerId) => {
       setProviders((prev) => prev.filter((p) => p.id !== providerId));
-      scheduleRefresh();
+      refreshOverview();
     };
     const onActivityCreated = (activity) => {
       if (!activity) return;
@@ -184,7 +200,7 @@ export function AppProvider({ children }) {
       socket.off("provider:deleted", onProviderDeleted);
       socket.off("activity:created", onActivityCreated);
     };
-  }, [scheduleRefresh]);
+  }, [refreshOverview]);
 
   useEffect(() => {
     if (!toast) return;

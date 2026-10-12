@@ -870,6 +870,9 @@ app.get("/api/providers/:id/reviews", ah(async (req, res) => {
   res.json(reviews.map((r) => ({ ...r, customer: { name: r.customer?.name || "Customer", avatar: r.customer?.avatar || null }, reply: replies.get(r.id) || null })));
 }));
 
+// A short text query parameter, or undefined.
+const queryText = (v) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 120) : undefined);
+
 // ---- Business app: insights, money, offers, reviews, complaints (see partnerHub.js) ----
 const staffLacks = (req, ...perms) => Boolean(req.staff) && !perms.some((p) => req.staff.permissions.includes(p));
 const firstName = (name) => String(name || "Customer").trim().split(/\s+/).map((w, i) => (i === 0 ? w : `${w[0]}.`)).slice(0, 2).join(" ");
@@ -2384,8 +2387,30 @@ app.delete("/api/admin/customers/blocked-numbers/:id", auth.requireAuth("admin")
   res.status(204).end();
 }));
 
+// With ?limit: one page of customers, searched in the database (scaling step 5) —
+// { items, total }. Without it, the full list as before (exports, older screens).
 app.get("/api/admin/customers", auth.requireAuth("admin"), ah(async (req, res) => {
-  res.json(await store.listCustomers());
+  if (req.query.limit === undefined) return res.json(await store.listCustomers());
+  res.json(await store.listCustomersPage({ q: queryText(req.query.q), offset: req.query.offset, limit: req.query.limit }));
+}));
+
+// One page of bookings, newest first, filtered and searched in the database (scaling
+// step 5): ?status=Pending,Accepted &provider= &customer= &from=YYYY-MM-DD &to= &q= &offset= &limit=
+const isoDay = (v) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) ? v : undefined);
+app.get("/api/admin/bookings", auth.requireAuth("admin"), ah(async (req, res) => {
+  const to = isoDay(req.query.to);
+  res.json(
+    await store.listBookingsPage({
+      statuses: queryText(req.query.status)?.split(",").map((x) => x.trim()).filter(Boolean),
+      providerId: queryText(req.query.provider),
+      customerId: queryText(req.query.customer),
+      from: isoDay(req.query.from),
+      to: to && `${to}T23:59:59.999Z`,
+      q: queryText(req.query.q),
+      offset: req.query.offset,
+      limit: req.query.limit,
+    })
+  );
 }));
 
 app.get("/api/admin/settings", auth.requireAuth("admin"), ah(async (req, res) => {

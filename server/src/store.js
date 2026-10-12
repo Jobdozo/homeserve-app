@@ -4801,7 +4801,144 @@ async function removeSeedData() {
   return result;
 }
 
+// ---- Admin at scale (scaling step 5): bookings and customers a page at a time,
+// filtered, searched and counted in the database instead of loading every row. ----
+
+// "%text%" for a LIKE pattern, with the pattern's own special characters escaped.
+const likeOf = (text) => `%${String(text).replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+const pageSize = (limit) => Math.min(200, Math.max(1, Number(limit) || 50));
+
+// The booking whose short code (e.g. AB12CD34) is `text`, if any.
+function bookingIdByRef(text) {
+  const code = String(text || "").trim().replace(/^#/, "").toUpperCase();
+  if (!/^[A-Z0-9]{6,12}$/.test(code)) return null;
+  loadBookingRefs();
+  for (const [id, ref] of refByBooking) if (ref === code) return id;
+  return null;
+}
+
+// Bookings newest first. Filters: statuses (array), providerId, customerId, from/to
+// (ISO dates, by when booked), q (booking code, customer or provider name, customer
+// phone, service name). Returns { items, total, offset, limit }.
+async function listBookingsPage({ statuses, providerId, customerId, from, to, q, offset = 0, limit = 50 } = {}) {
+  const conds = [];
+  const defs = ["$limit: Int!", "$offset: Int!"];
+  const vars = { limit: pageSize(limit), offset: Math.max(0, Number(offset) || 0) };
+  const add = (cond, def, name, value) => {
+    conds.push(cond);
+    defs.push(def);
+    vars[name] = value;
+  };
+  if (Array.isArray(statuses) && statuses.length) add("status: { in: $statuses }", "$statuses: [String!]", "statuses", statuses);
+  if (providerId) add("provider: { id: { eq: $providerId } }", "$providerId: UUID", "providerId", providerId);
+  if (customerId) add("customer: { id: { eq: $customerId } }", "$customerId: UUID", "customerId", customerId);
+  if (from || to) {
+    const range = [];
+    if (from) {
+      range.push("ge: $from");
+      defs.push("$from: Timestamp");
+      vars.from = new Date(from).toISOString();
+    }
+    if (to) {
+      range.push("le: $to");
+      defs.push("$to: Timestamp");
+      vars.to = new Date(to).toISOString();
+    }
+    conds.push(`createdAt: { ${range.join(", ")} }`);
+  }
+  const text = String(q || "").trim().slice(0, 80);
+  if (text) {
+    const or = [
+      "{ customer: { name: { pattern: { like: $like, ignoreCase: true } } } }",
+      "{ provider: { name: { pattern: { like: $like, ignoreCase: true } } } }",
+      "{ service: { name: { pattern: { like: $like, ignoreCase: true } } } }",
+    ];
+    defs.push("$like: String");
+    vars.like = likeOf(text);
+    const refId = bookingIdByRef(text);
+    if (refId) {
+      or.push("{ id: { eq: $refId } }");
+      defs.push("$refId: UUID");
+      vars.refId = refId;
+    }
+    const digits = text.replace(/\D/g, "");
+    if (digits.length >= 4) {
+      or.push("{ customer: { phone: { contains: $digits } } }");
+      defs.push("$digits: String");
+      vars.digits = digits.slice(-10);
+    }
+    conds.push(`_or: [${or.join(", ")}]`);
+  }
+  const where = conds.length ? `where: { ${conds.join(", ")} }` : "";
+  const pageArgs = where ? `${where}, ` : "";
+  const countArgs = where ? `(${where})` : "";
+  const data = await query(
+    `query(${defs.join(", ")}) {
+      bookings(${pageArgs}orderBy: { createdAt: DESC }, limit: $limit, offset: $offset) { ${BOOKING_FIELDS} }
+      total: bookings${countArgs} { _count }
+    }`,
+    vars
+  );
+  const serviceById = new Map((await listServices()).map((s) => [s.id, s]));
+  const items = [];
+  for (const b of data.bookings) {
+    let s = b.service?.id ? serviceById.get(b.service.id) : null;
+    if (!s && b.service?.id) s = await getService(b.service.id);
+    items.push(mapBooking(b, b.customer, s ? { id: s.id, name: s.name, icon: s.icon, categoryId: s.categoryId, price: s.price } : null));
+  }
+  return { items, total: data.total?.[0]?._count ?? items.length, offset: vars.offset, limit: vars.limit };
+}
+
+// Customers A–Z with their booking count and spend, one page at a time.
+// q matches name, phone or email. Returns { items, total, offset, limit }.
+async function listCustomersPage({ q, offset = 0, limit = 50 } = {}) {
+  const defs = ["$limit: Int!", "$offset: Int!"];
+  const vars = { limit: pageSize(limit), offset: Math.max(0, Number(offset) || 0) };
+  const text = String(q || "").trim().slice(0, 80);
+  let where = "";
+  if (text) {
+    const or = ["{ name: { pattern: { like: $like, ignoreCase: true } } }", "{ email: { pattern: { like: $like, ignoreCase: true } } }"];
+    defs.push("$like: String");
+    vars.like = likeOf(text);
+    const digits = text.replace(/\D/g, "");
+    if (digits.length >= 4) {
+      or.push("{ phone: { contains: $digits } }");
+      defs.push("$digits: String");
+      vars.digits = digits.slice(-10);
+    }
+    where = `where: { _or: [${or.join(", ")}] }`;
+  }
+  const pageArgs = where ? `${where}, ` : "";
+  const countArgs = where ? `(${where})` : "";
+  const data = await query(
+    `query(${defs.join(", ")}) {
+      customers(${pageArgs}orderBy: { name: ASC }, limit: $limit, offset: $offset) { id name avatar phone email }
+      total: customers${countArgs} { _count }
+    }`,
+    vars
+  );
+  const ids = data.customers.map((c) => c.id);
+  const stats = new Map(ids.map((id) => [id, { totalBookings: 0, totalSpent: 0 }]));
+  if (ids.length) {
+    const { bookings } = await query(`query($ids: [UUID!]) { bookings(where: { customer: { id: { in: $ids } } }) { customer { id } status amount } }`, { ids });
+    for (const b of bookings) {
+      const st = stats.get(b.customer?.id);
+      if (!st) continue;
+      st.totalBookings += 1;
+      if (b.status === "Completed") st.totalSpent += b.amount;
+    }
+  }
+  return {
+    items: data.customers.map((c) => ({ id: c.id, name: c.name, phone: c.phone, email: c.email, avatar: c.avatar, ...stats.get(c.id) })),
+    total: data.total?.[0]?._count ?? ids.length,
+    offset: vars.offset,
+    limit: vars.limit,
+  };
+}
+
 module.exports = {
+  listBookingsPage,
+  listCustomersPage,
   getCustomerById,
   getCustomerByPhone,
   createCustomer,

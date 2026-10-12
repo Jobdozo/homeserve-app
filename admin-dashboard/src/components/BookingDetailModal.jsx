@@ -32,9 +32,11 @@ const CHECKPOINT_LABELS = {
 
 const PHOTO_LABELS = { before: "Before", after: "After" };
 
-export default function BookingDetailModal({ bookingId, onClose }) {
+// `fallback` is the row the caller already has, for a booking older than the
+// newest ones the app keeps in memory.
+export default function BookingDetailModal({ bookingId, fallback, onClose }) {
   const { bookings, providers } = useApp();
-  const booking = bookings.find((b) => b.id === bookingId);
+  const booking = bookings.find((b) => b.id === bookingId) || fallback;
   const [photos, setPhotos] = useState(null);
   const [checkpoints, setCheckpoints] = useState(null);
   const [messages, setMessages] = useState(null);
