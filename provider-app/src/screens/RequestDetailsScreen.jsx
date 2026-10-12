@@ -2,9 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { api, SERVER_URL } from "../api";
-import ScreenHeader from "../components/ScreenHeader";
-import { MapPinIcon, CalendarIcon, ClockIcon, PhoneIcon, CameraIcon, CheckIcon } from "../components/icons";
-import CategoryIcon from "../components/CategoryIcon";
+import { MapPinIcon, PhoneIcon, CameraIcon, CheckIcon, BackIcon, ChatIcon, NavigateIcon } from "../components/icons";
+import { Card, inr, initials, whenLabel, JOB_STATUS } from "../components/biz";
 import { compressImage } from "../utils/imageCompress";
 
 const LOCATION_TRACKED_STATUSES = ["Pending", "Accepted", "In Progress"];
@@ -52,8 +51,8 @@ export default function RequestDetailsScreen() {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
         <p className="text-sm text-gray-500">Request not found.</p>
-        <button onClick={() => navigate("/requests")} className="text-sm font-semibold text-brand">
-          Back to Requests
+        <button onClick={() => navigate("/dashboard")} className="text-sm font-semibold text-brand-dark">
+          Back to orders
         </button>
       </div>
     );
@@ -64,216 +63,192 @@ export default function RequestDetailsScreen() {
   const siblings = request.orderId ? requests.filter((r) => r.orderId === request.orderId && r.id !== request.id) : [];
   const requestTotal = siblings.reduce((sum, r) => sum + (r.amount || 0), request.amount || 0);
 
+  const steps = ["Accepted", "On the way", "Started", "Done"];
+  const stepIndex = { Pending: -1, Accepted: 0, "In Progress": 2, Completed: 3 }[request.status] ?? -1;
+  const headline =
+    request.status === "Pending"
+      ? { eyebrow: "New request", title: whenLabel(request.date, request.time), tone: "text-marigold" }
+      : request.status === "Accepted"
+        ? { eyebrow: "Confirmed", title: `Ask ${firstName(customer?.name)} for the start code`, tone: "text-brand-glow" }
+        : request.status === "In Progress"
+          ? { eyebrow: "Working", title: "Finish, then ask for the completion code", tone: "text-go" }
+          : request.status === "Completed"
+            ? { eyebrow: "Done", title: "Job finished", tone: "text-go" }
+            : { eyebrow: JOB_STATUS[request.status]?.label || request.status, title: request.service?.name || "Request", tone: "text-red-400" };
+  const lat = liveLocation?.lat ?? request.address?.lat;
+  const lng = liveLocation?.lng ?? request.address?.lng;
+  const mapsUrl = lat && lng ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}` : null;
+  const live = ["Accepted", "In Progress"].includes(request.status);
+  const lines = [request, ...siblings];
+
   return (
     <div className="flex flex-1 flex-col">
-      <ScreenHeader title="Request Details" subtitle={`Request ID: #${request.ref || request.id}`} />
+      <div className="flex items-center justify-between px-4 pt-4 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8">
+        <button onClick={() => navigate(-1)} aria-label="Back" className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink">
+          <BackIcon width={20} height={20} />
+        </button>
+        <span className="text-[13px] font-semibold text-ink-muted">Job #{request.ref || request.id.slice(0, 8)}</span>
+        <button onClick={() => navigate("/profile/help")} className="h-11 rounded-full bg-card px-4 text-[13.5px] font-bold text-ink">
+          Help
+        </button>
+      </div>
 
-      <div className="flex-1 space-y-5 px-4 pb-6 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-10">
-        {request.status === "Pending" && (
-          <span className="inline-block rounded-full bg-emerald-100 px-2.5 py-1 text-[10.5px] font-bold text-emerald-700">
-            NEW REQUEST
-          </span>
-        )}
-
-        <div className="flex items-center gap-3 rounded-2xl bg-gray-50 p-3">
-          <CategoryIcon categoryId={request.service?.categoryId} size={48} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[14px] font-semibold text-gray-900">{request.service?.name}</p>
-            <p className="text-[11px] text-gray-400">Starting Price</p>
-          </div>
-          <p className="text-lg font-extrabold text-brand">₹{request.amount}</p>
+      <div className="flex-1 space-y-3 px-4 pb-6 pt-4 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:pb-10">
+        <div>
+          <p className={`text-[12px] font-extrabold uppercase tracking-[0.12em] ${headline.tone}`}>{headline.eyebrow}</p>
+          <h1 className="mt-1 font-display text-[26px] font-extrabold leading-[1.1] text-ink">{headline.title}</h1>
+          <p className="mt-1 text-[13.5px] text-ink-muted">
+            {whenLabel(request.date, request.time)} · {lines.length} service{lines.length === 1 ? "" : "s"}
+          </p>
         </div>
 
-        {/* What the customer chose (service options), priced into the amount above */}
-        {request.options?.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {request.options.map((o) => (
-              <span key={`${o.group}-${o.choice}`} className="rounded-lg bg-brand-light px-2 py-1 text-[11.5px] font-semibold text-brand-dark">
-                {o.group}: {o.choice}
-                {o.price ? ` (+₹${o.price})` : ""}
+        {stepIndex >= 0 && (
+          <div className="grid grid-cols-4 gap-1.5 pt-1">
+            {steps.map((s, i) => (
+              <span key={s} className="flex flex-col gap-1.5">
+                <span className={`h-[5px] rounded-full ${i < stepIndex || stepIndex === 3 ? "bg-go" : i === stepIndex ? "bg-ink" : "bg-gray-200"}`} />
+                <span className={`text-[11.5px] font-bold ${i <= stepIndex ? "text-ink" : "text-ink-muted"}`}>{s}</span>
               </span>
             ))}
           </div>
         )}
 
-        {siblings.length > 0 && (
-          <div>
-            <h2 className="mb-2 text-[13px] font-bold text-gray-900">Services in this request ({siblings.length + 1})</h2>
-            <div className="divide-y divide-gray-100 rounded-2xl border border-gray-100 text-[12.5px]">
-              {[request, ...siblings].map((r) => (
-                <button
-                  key={r.id}
-                  onClick={() => r.id !== request.id && navigate(`/requests/${r.id}`)}
-                  className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-gray-800">{r.service?.name}</span>
-                    {r.options?.length > 0 && <span className="block truncate text-[11px] text-gray-400">{r.options.map((o) => o.choice).join(" · ")}</span>}
-                  </span>
-                  <span className="flex-shrink-0 font-semibold text-gray-900">₹{r.amount}</span>
-                </button>
-              ))}
-              <div className="flex items-center justify-between px-3 py-2.5 font-bold text-gray-900">
-                <span>Total</span>
-                <span>₹{requestTotal}</span>
-              </div>
-            </div>
-            <p className="mt-1.5 text-[11px] text-gray-400">One code starts and finishes all of these together.</p>
-          </div>
+        {!["Pending", "Rejected", "Cancelled", "Swapped", "Completed"].includes(request.status) && canAct && (
+          <OtpVerifyCard bookingId={request.id} type={request.status === "Accepted" ? "start" : "complete"} />
         )}
 
-        {!["Rejected", "Cancelled", "Swapped"].includes(request.status) &&
-          (request.assignedStaff || (can("orders.assign") && request.status !== "Completed")) && (
-          <div className="flex items-center gap-3 rounded-2xl border border-gray-100 p-3">
+        {/* customer */}
+        <Card className="space-y-3.5 p-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-marigold font-display text-[18px] font-extrabold text-marigold-ink">
+              {initials(customer?.name)}
+            </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Assigned to</p>
-              <p className="truncate text-[13.5px] font-semibold text-gray-900">{request.assignedStaff?.name || "Not assigned yet"}</p>
+              <p className="truncate text-[16px] font-extrabold text-ink">{customer?.name || "Customer"}</p>
+              {live && customer?.phone && <p className="text-[12.5px] text-ink-muted">{customer.phone}</p>}
             </div>
-            {can("orders.assign") && request.status !== "Completed" && (
-              <button onClick={() => setAssignOpen(true)} className="rounded-xl border border-gray-200 px-3.5 py-2 text-[12.5px] font-semibold text-gray-700">
-                {request.assignedStaff ? "Change" : "Assign"}
-              </button>
-            )}
           </div>
-        )}
-
-        {/* Booked for someone else: the person at the address is who to call */}
-        {request.contact && (
-          <div>
-            <h2 className="mb-2 text-[13px] font-bold text-gray-900">Person at the address</h2>
-            <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-semibold text-gray-900">{request.contact.name}</p>
-                {request.status !== "Completed" && <p className="text-[11px] text-gray-500">{request.contact.phone}</p>}
-                <p className="text-[10.5px] text-amber-700">Booked for them by the customer below</p>
-              </div>
-              {request.status !== "Completed" && (
-                <a href={`tel:${request.contact.phone}`} className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-brand" aria-label="Call the person at the address">
-                  <PhoneIcon width={16} height={16} />
+          {live && (
+            <div className="grid grid-cols-3 gap-2">
+              {customer?.phone ? (
+                <a href={`tel:${customer.phone}`} className="flex h-[46px] items-center justify-center gap-2 rounded-2xl bg-raised text-[13.5px] font-bold text-ink">
+                  <PhoneIcon width={17} height={17} /> Call
                 </a>
+              ) : (
+                <span />
+              )}
+              {can("messages.use") ? (
+                <button onClick={() => navigate(`/chat/${request.id}`)} className="flex h-[46px] items-center justify-center gap-2 rounded-2xl bg-raised text-[13.5px] font-bold text-ink">
+                  <ChatIcon width={17} height={17} /> Chat
+                </button>
+              ) : (
+                <span />
+              )}
+              {mapsUrl ? (
+                <a href={mapsUrl} target="_blank" rel="noreferrer" className="flex h-[46px] items-center justify-center gap-2 rounded-2xl bg-raised text-[13.5px] font-bold text-ink">
+                  <NavigateIcon width={17} height={17} /> Map
+                </a>
+              ) : (
+                <span />
+              )}
+            </div>
+          )}
+          <div className="flex gap-2.5 border-t border-dashed border-gray-200 pt-3">
+            <MapPinIcon width={18} height={18} className="mt-0.5 flex-shrink-0 text-brand-dark" />
+            <div className="min-w-0">
+              <p className="text-[14px] font-bold leading-snug text-ink">{request.address?.line || request.address?.label}</p>
+              {request.address?.label && request.address?.line && <p className="text-[12.5px] text-ink-muted">{request.address.label}</p>}
+              {liveLocation && live && (
+                <p className="mt-0.5 text-[11.5px] font-semibold text-go-soft">
+                  Directions use the customer's live location{typeof liveLocation.accuracy === "number" ? ` (±${Math.round(liveLocation.accuracy)} m)` : ""}
+                </p>
               )}
             </div>
           </div>
-        )}
+        </Card>
 
-        <div>
-          <h2 className="mb-2 text-[13px] font-bold text-gray-900">Customer Details</h2>
-          <div className="flex items-center gap-3 rounded-2xl border border-gray-100 p-3">
-            <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-brand-light text-xl">
-              {customer?.avatar}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-semibold text-gray-900">{customer?.name}</p>
-              {request.status !== "Completed" && <p className="text-[11px] text-gray-500">{customer?.phone}</p>}
-            </div>
-            {request.status !== "Completed" && customer?.phone && (
-              <a
-                href={`tel:${customer.phone}`}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-light text-brand"
-                aria-label="Call customer"
-              >
-                <PhoneIcon width={16} height={16} />
-              </a>
+        {(request.contact || request.issue) && (
+          <Card className="space-y-3 p-4">
+            {request.contact && (
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11.5px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Person at the address</p>
+                  <p className="truncate text-[14.5px] font-bold text-ink">
+                    {request.contact.name}
+                    {live ? ` · ${request.contact.phone}` : ""}
+                  </p>
+                </div>
+                {live && (
+                  <a href={`tel:${request.contact.phone}`} aria-label="Call the person at the address" className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-raised text-ink">
+                    <PhoneIcon width={17} height={17} />
+                  </a>
+                )}
+              </div>
             )}
-          </div>
-        </div>
-
-        <div>
-          <h2 className="mb-2 text-[13px] font-bold text-gray-900">Service Location</h2>
-          <div className="flex items-start gap-2 rounded-2xl border border-gray-100 p-3">
-            <MapPinIcon width={16} height={16} className="mt-0.5 flex-shrink-0 text-gray-400" />
-            <div className="flex-1">
-              <p className="text-[12.5px] leading-snug text-gray-700">
-                {request.address?.label} — {request.address?.line}
-              </p>
-              {(() => {
-                const lat = liveLocation?.lat ?? request.address?.lat;
-                const lng = liveLocation?.lng ?? request.address?.lng;
-                if (!lat || !lng) return null;
-                return (
-                  <>
-                    <a
-                      href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1.5 inline-block text-[12px] font-semibold text-brand"
-                    >
-                      Get Directions →
-                    </a>
-                    {liveLocation && (
-                      <p className="mt-0.5 text-[10.5px] font-medium text-emerald-600">
-                        Using customer's live location
-                        {typeof liveLocation.accuracy === "number" && ` (±${Math.round(liveLocation.accuracy)}m)`}
-                      </p>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <h2 className="mb-2 text-[13px] font-bold text-gray-900">Preferred Date & Time</h2>
-          <div className="space-y-1.5 rounded-2xl border border-gray-100 p-3">
-            <div className="flex items-center gap-2 text-[12.5px] text-gray-700">
-              <CalendarIcon width={15} height={15} className="text-gray-400" /> {formatDate(request.date)}
-            </div>
-            <div className="flex items-center gap-2 text-[12.5px] text-gray-700">
-              <ClockIcon width={15} height={15} className="text-gray-400" /> {request.time}
-            </div>
-          </div>
-        </div>
-
-        {request.issue && (
-          <div>
-            <h2 className="mb-1.5 text-[13px] font-bold text-gray-900">Customer's note</h2>
-            <p className="text-[12.5px] leading-relaxed text-gray-600">{request.issue}</p>
-          </div>
+            {request.issue && <p className="rounded-2xl bg-raised px-3 py-2.5 text-[13.5px] leading-relaxed text-ink-soft">“{request.issue}”</p>}
+          </Card>
         )}
 
-        {["Accepted", "In Progress", "Completed"].includes(request.status) && (
-          <JobCheckpoints bookingId={request.id} locked={request.status === "Completed"} />
-        )}
+        {/* what to do */}
+        <Card className="space-y-3.5 p-4">
+          <h2 className="font-display text-[18px] font-bold text-ink">What to do</h2>
+          {lines.map((r) => (
+            <button key={r.id} onClick={() => r.id !== request.id && navigate(`/requests/${r.id}`)} className="flex w-full justify-between gap-3 text-left">
+              <span className="min-w-0">
+                <span className="block text-[15px] font-bold text-ink">{r.service?.name}</span>
+                {r.options?.length > 0 && (
+                  <span className="mt-1.5 flex flex-wrap gap-1.5">
+                    {r.options.map((o) => (
+                      <span key={`${o.group}-${o.choice}`} className="rounded-lg bg-raised px-2 py-0.5 text-[12px] font-semibold text-brand-dark">
+                        {o.choice}
+                        {o.price ? ` +₹${o.price}` : ""}
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </span>
+              <span className="flex-shrink-0 text-[15px] font-extrabold text-ink tabular">{inr(r.amount)}</span>
+            </button>
+          ))}
+          {siblings.length > 0 && <p className="text-[12px] text-ink-muted">One code starts and finishes all of these together.</p>}
+        </Card>
 
+        {!["Rejected", "Cancelled", "Swapped"].includes(request.status) &&
+          (request.assignedStaff || (can("orders.assign") && request.status !== "Completed")) && (
+            <Card className="flex items-center gap-3 p-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11.5px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Assigned to</p>
+                <p className="truncate text-[14.5px] font-bold text-ink">{request.assignedStaff?.name || "Not assigned yet"}</p>
+              </div>
+              {can("orders.assign") && request.status !== "Completed" && (
+                <button onClick={() => setAssignOpen(true)} className="h-11 rounded-2xl border border-gray-300 px-4 text-[13.5px] font-bold text-ink">
+                  {request.assignedStaff ? "Change" : "Assign"}
+                </button>
+              )}
+            </Card>
+          )}
+
+        {["Accepted", "In Progress", "Completed"].includes(request.status) && <JobCheckpoints bookingId={request.id} locked={request.status === "Completed"} />}
         {["Accepted", "In Progress", "Completed"].includes(request.status) && <JobPhotos bookingId={request.id} />}
 
-        {!["Pending", "Rejected", "Cancelled", "Swapped"].includes(request.status) && (
-          <div>
-            <StatusPill status={request.status} />
-            {request.status !== "Completed" && canAct && (
-              <OtpVerifyCard bookingId={request.id} type={request.status === "Accepted" ? "start" : "complete"} />
-            )}
+        {/* money for this job */}
+        <Card className="space-y-2 p-4">
+          <div className="flex items-baseline justify-between">
+            <span className="text-[15px] font-extrabold text-ink">{request.status === "Completed" ? "Collected from customer" : "Collect after the job"}</span>
+            <span className="font-display text-[24px] font-extrabold text-ink tabular">{inr(requestTotal)}</span>
           </div>
-        )}
-
-        {request.status === "Completed" && (
-          <p className="rounded-xl bg-gray-50 px-4 py-3 text-center text-[12px] text-gray-500">
-            This order is completed — contacting the customer is no longer available.
-          </p>
-        )}
+          <p className="text-[12.5px] text-ink-muted">Cash or UPI, paid to you. Tikdum's fee comes out of your wallet when the job is finished.</p>
+        </Card>
 
         {request.status === "Swapped" && (
-          <p className="rounded-xl bg-violet-50 px-4 py-3 text-center text-[12px] text-violet-700">
-            You released this order to another provider{request.swapReason ? ` (${request.swapReason})` : ""}. It's kept here for your records.
+          <p className="rounded-2xl bg-card px-4 py-3 text-center text-[12.5px] text-ink-muted">
+            You passed this order to another provider{request.swapReason ? ` (${request.swapReason})` : ""}. It's kept here for your records.
           </p>
-        )}
-
-        {["Accepted", "In Progress"].includes(request.status) && can("messages.use") && (
-          <button
-            onClick={() => navigate(`/chat/${request.id}`)}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-light py-3 text-sm font-semibold text-brand-dark"
-          >
-            Message {customer?.name}
-          </button>
         )}
 
         {request.status === "Accepted" && canAct && swapRules?.enabled !== false && (
-          <button
-            onClick={() => setSwapOpen(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 py-3 text-sm font-semibold text-amber-800 active:scale-[0.98]"
-          >
-            Swap Order
+          <button onClick={() => setSwapOpen(true)} className="h-12 w-full rounded-2xl border border-amber-300 text-[14px] font-bold text-amber-700">
+            Can't do it? Pass to another pro
           </button>
         )}
       </div>
@@ -286,7 +261,7 @@ export default function RequestDetailsScreen() {
           onConfirm={async (data) => {
             await swapRequest(request.id, data);
             setSwapOpen(false);
-            navigate("/requests");
+            navigate("/dashboard");
           }}
         />
       )}
@@ -304,27 +279,26 @@ export default function RequestDetailsScreen() {
       )}
 
       {request.status === "Pending" && canAct && (
-        <div className="flex flex-shrink-0 gap-3 border-t border-gray-100 bg-white px-4 py-3 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:py-4">
+        <div className="sticky bottom-0 grid flex-shrink-0 grid-cols-[1fr_2fr] gap-2.5 border-t border-gray-100 bg-ground px-4 py-3 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:py-4">
           <button
             onClick={() => {
               rejectRequest(request.id);
               navigate(-1);
             }}
-            className="flex-1 rounded-xl border border-red-200 py-3 text-sm font-semibold text-red-600 active:scale-[0.98]"
+            className="h-[52px] rounded-2xl border-[1.5px] border-gray-300 text-[15px] font-extrabold text-ink active:scale-[0.98]"
           >
-            Reject
+            Decline
           </button>
-          <button
-            onClick={() => acceptRequest(request.id)}
-            className="flex-1 rounded-xl bg-brand py-3 text-sm font-semibold text-white active:scale-[0.98]"
-          >
-            Accept Request
+          <button onClick={() => acceptRequest(request.id)} className="h-[52px] rounded-2xl bg-go text-[16px] font-extrabold text-go-ink active:scale-[0.98]">
+            Accept job · {inr(requestTotal)}
           </button>
         </div>
       )}
     </div>
   );
 }
+
+const firstName = (name) => String(name || "the customer").trim().split(/\s+/)[0];
 
 const pinOf = (text) => (String(text || "").match(/\b\d{6}\b/) || [])[0] || "";
 
@@ -365,7 +339,7 @@ function AssignOrderModal({ request, onClose, onAssigned }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-5 sm:rounded-3xl">
+      <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-card p-5 sm:rounded-3xl">
         <h2 className="text-[16px] font-bold text-gray-900">Assign this order</h2>
         <p className="mt-1 text-[12px] text-gray-500">{request.service?.name}{pin ? ` · PIN ${pin}` : ""}</p>
         <div className="mt-3 space-y-2">
@@ -429,7 +403,7 @@ function SwapOrderModal({ serviceName, reasons = SWAP_REASONS, onClose, onConfir
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <div className="w-full max-w-md rounded-t-3xl bg-white p-5 sm:rounded-3xl">
+      <div className="w-full max-w-md rounded-t-3xl bg-card p-5 sm:rounded-3xl">
         <h2 className="text-[16px] font-bold text-gray-900">Swap this order?</h2>
         <p className="mt-1 text-[12.5px] leading-relaxed text-gray-500">
           {serviceName ? `${serviceName} will be released and sent to another provider as a new order. ` : ""}
@@ -467,66 +441,107 @@ function SwapOrderModal({ serviceName, reasons = SWAP_REASONS, onClose, onConfir
 
 const OTP_COPY = {
   start: {
-    title: "Ask the customer to start the job",
-    hint: "Once you've reached them, they'll see a 4-digit Start OTP in their app.",
+    title: "Start code from the customer",
+    hint: "They see it in their Tikdum app. The job starts only when it matches — it protects you if a visit is disputed.",
   },
   complete: {
-    title: "Ask the customer to confirm completion",
-    hint: "Once they're happy with the job, they'll see a 4-digit Completion OTP in their app.",
+    title: "Completion code from the customer",
+    hint: "Once they're happy with the work, they read out the 4-digit code from their app.",
   },
 };
 
+const PAID_BY = [
+  { id: "cash", label: "Cash" },
+  { id: "upi", label: "UPI" },
+  { id: "other", label: "Other" },
+];
+
+// The code the customer reads out, typed into four big boxes. Closing a job also
+// asks how the customer paid, which is what splits Money into cash and UPI.
 function OtpVerifyCard({ bookingId, type }) {
   const { verifyJobOtp, showToast } = useApp();
   const [code, setCode] = useState("");
+  const [paidBy, setPaidBy] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const copy = OTP_COPY[type];
+  const needsPayment = type === "complete";
+  const ready = code.length === 4 && (!needsPayment || paidBy);
 
   const submit = async (e) => {
     e.preventDefault();
-    if (code.length !== 4) return;
+    if (!ready) return;
     setSubmitting(true);
     try {
-      await verifyJobOtp(bookingId, type, code);
+      await verifyJobOtp(bookingId, type, code, needsPayment ? paidBy : undefined);
       setCode("");
-      showToast(type === "start" ? "Job started" : "Job marked complete");
+      showToast(type === "start" ? "Job started" : "Job finished — well done");
     } catch (err) {
-      showToast(err.message || "Incorrect OTP");
+      showToast(err.message || "That code doesn't match — ask the customer again");
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <form onSubmit={submit} className="mt-3 rounded-2xl border border-dashed border-brand/40 bg-brand-light/40 p-3.5">
-      <p className="text-[12.5px] font-semibold text-gray-800">{copy.title}</p>
-      <p className="mt-0.5 text-[11px] text-gray-500">{copy.hint}</p>
-      <div className="mt-3 flex gap-2">
+    <form onSubmit={submit} className="flex flex-col gap-3 rounded-[22px] bg-card p-4">
+      <div>
+        <label htmlFor={`otp-${type}`} className="text-[15px] font-bold text-ink">
+          {copy.title}
+        </label>
+        <p className="mt-0.5 text-[12.5px] text-ink-muted">{copy.hint}</p>
+      </div>
+      <div className="relative grid grid-cols-4 gap-2.5">
+        {[0, 1, 2, 3].map((i) => (
+          <span
+            key={i}
+            aria-hidden="true"
+            className={`flex h-[60px] items-center justify-center rounded-2xl border-2 bg-raised font-display text-[28px] font-extrabold text-ink ${
+              code.length === i ? "border-brand-glow" : code[i] ? "border-brand/60" : "border-gray-300"
+            }`}
+          >
+            {code[i] || ""}
+          </span>
+        ))}
         <input
+          id={`otp-${type}`}
           type="text"
           inputMode="numeric"
+          autoComplete="one-time-code"
           maxLength={4}
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
-          placeholder="Enter 4-digit OTP"
-          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-center text-[15px] font-bold tracking-widest text-gray-800 outline-none focus:border-brand"
+          className="absolute inset-0 h-full w-full cursor-text opacity-0"
         />
-        <button
-          type="submit"
-          disabled={submitting || code.length !== 4}
-          className="flex-shrink-0 rounded-xl bg-brand px-4 py-2.5 text-[12.5px] font-semibold text-white disabled:opacity-50"
-        >
-          {submitting ? "Checking…" : "Verify"}
-        </button>
       </div>
+      {needsPayment && (
+        <fieldset>
+          <legend className="text-[13.5px] font-bold text-ink">How did the customer pay?</legend>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {PAID_BY.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPaidBy(p.id)}
+                aria-pressed={paidBy === p.id}
+                className={`h-11 rounded-xl text-[14px] font-bold ${paidBy === p.id ? "bg-ink text-ground" : "border border-gray-300 text-ink"}`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      )}
+      <button type="submit" disabled={submitting || !ready} className="h-[52px] rounded-2xl bg-go text-[16px] font-extrabold text-go-ink disabled:opacity-40">
+        {submitting ? "Checking…" : type === "start" ? "Verify code & start job" : "Verify code & finish job"}
+      </button>
     </form>
   );
 }
 
 const CHECKPOINT_STEPS = [
-  { type: "reached_location", label: "Reached the Location" },
-  { type: "started_job", label: "Started the Job" },
-  { type: "left_location", label: "Left the Location" },
+  { type: "reached_location", label: "Reached the address" },
+  { type: "started_job", label: "Started the work" },
+  { type: "left_location", label: "Left the address" },
 ];
 
 function JobCheckpoints({ bookingId, locked }) {
@@ -559,14 +574,14 @@ function JobCheckpoints({ bookingId, locked }) {
 
   return (
     <div>
-      <h2 className="mb-2 text-[13px] font-bold text-gray-900">Job Checkpoints</h2>
-      <div className="divide-y divide-gray-50 rounded-2xl border border-gray-100">
+      <h2 className="mb-2 mt-1 font-display text-[18px] font-bold text-ink">Checkpoints</h2>
+      <div className="divide-y divide-gray-100 rounded-[22px] bg-card">
         {CHECKPOINT_STEPS.map(({ type, label }) => {
           const done = checkpoints.find((c) => c.type === type);
           return (
-            <div key={type} className="flex items-center justify-between px-3 py-2.5">
+            <div key={type} className="flex items-center justify-between px-4 py-3">
               <div>
-                <p className={`text-[12.5px] font-medium ${done ? "text-gray-900" : "text-gray-600"}`}>{label}</p>
+                <p className={`text-[14px] font-semibold ${done ? "text-ink" : "text-ink-soft"}`}>{label}</p>
                 {done && (
                   <p className="text-[10.5px] text-gray-400">
                     {new Date(done.at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
@@ -581,9 +596,9 @@ function JobCheckpoints({ bookingId, locked }) {
                 <button
                   onClick={markDone(type)}
                   disabled={locked || saving === type}
-                  className="flex-shrink-0 rounded-lg bg-brand-light px-3 py-1.5 text-[11px] font-semibold text-brand-dark disabled:opacity-50"
+                  className="h-10 flex-shrink-0 rounded-xl bg-raised px-3.5 text-[13px] font-bold text-ink disabled:opacity-50"
                 >
-                  {saving === type ? "Saving…" : "Mark Done"}
+                  {saving === type ? "Saving…" : "Mark done"}
                 </button>
               )}
             </div>
@@ -634,13 +649,13 @@ function JobPhotos({ bookingId }) {
 
   return (
     <div>
-      <h2 className="mb-2 text-[13px] font-bold text-gray-900">Job Photos</h2>
+      <h2 className="mb-2 mt-1 font-display text-[18px] font-bold text-ink">Before & after photos</h2>
       <div className="grid grid-cols-2 gap-3">
         {PHOTO_SLOTS.map(({ photoType, label }) => {
           const slotPhotos = photos.filter((p) => p.photoType === photoType);
           const isUploading = uploadingType === photoType;
           return (
-            <div key={photoType} className="rounded-2xl border border-gray-100 p-3">
+            <div key={photoType} className="rounded-[22px] bg-card p-3">
               <p className="mb-2 text-[11.5px] font-semibold text-gray-600">{label}</p>
               {slotPhotos.length > 0 ? (
                 <div className="mb-2 grid grid-cols-2 gap-1.5">
@@ -661,7 +676,7 @@ function JobPhotos({ bookingId }) {
               <button
                 onClick={() => fileInputs.current[photoType]?.click()}
                 disabled={isUploading}
-                className="w-full rounded-lg bg-brand-light py-2 text-[11.5px] font-semibold text-brand-dark disabled:opacity-50"
+                className="h-11 w-full rounded-xl bg-raised text-[13px] font-bold text-ink disabled:opacity-50"
               >
                 {isUploading ? "Uploading…" : `Add ${label} Photo`}
               </button>
@@ -679,17 +694,4 @@ function JobPhotos({ bookingId }) {
       </div>
     </div>
   );
-}
-
-function StatusPill({ status }) {
-  const styles = {
-    Accepted: "bg-emerald-100 text-emerald-700",
-    "In Progress": "bg-blue-100 text-blue-700",
-    Completed: "bg-gray-200 text-gray-600",
-  };
-  return <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${styles[status]}`}>{status}</span>;
-}
-
-function formatDate(iso) {
-  return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }

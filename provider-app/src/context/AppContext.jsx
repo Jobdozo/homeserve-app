@@ -544,8 +544,8 @@ export function AppProvider({ children }) {
   // Starting and completing a job both require the code the customer sees in
   // their app — the provider asks for it in person and submits a guess here.
   const verifyJobOtp = useCallback(
-    async (id, type, code) => {
-      const booking = await api.verifyBookingOtp(id, type, code);
+    async (id, type, code, paidBy) => {
+      const booking = await api.verifyBookingOtp(id, type, code, paidBy);
       setRequests((prev) => upsertById(prev, booking));
       if (booking.status === "Completed") {
         refreshEarnings();
@@ -676,7 +676,7 @@ export function AppProvider({ children }) {
       if (!provider) return;
       const coverage = await api.setAcceptingRequests(provider.id, value);
       setProvider((prev) => (prev ? { ...prev, coverage } : prev));
-      showToast(value ? "You're now receiving requests" : "Requests paused — your services are hidden");
+      showToast(value ? "You're online — taking new jobs" : "You're offline — customers can't book you");
       return coverage;
     },
     [provider, showToast]

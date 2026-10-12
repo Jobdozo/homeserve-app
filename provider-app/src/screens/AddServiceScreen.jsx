@@ -202,7 +202,7 @@ export default function AddServiceScreen() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="w-full rounded-xl bg-brand py-3.5 text-sm font-semibold text-white shadow-card hover:bg-brand-dark active:scale-[0.98] disabled:opacity-50 lg:w-auto lg:px-10"
+          className="w-full rounded-xl bg-brand py-3.5 text-sm font-semibold text-white shadow-card hover:bg-brand-glow active:scale-[0.98] disabled:opacity-50 lg:w-auto lg:px-10"
         >
           {saving ? "Saving…" : "Save Service"}
         </button>

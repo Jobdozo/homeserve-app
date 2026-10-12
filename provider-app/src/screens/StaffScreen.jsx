@@ -62,7 +62,7 @@ export default function StaffScreen() {
             ["staff", "Staff"],
             ["activity", "Recent activity"],
           ].map(([key, label]) => (
-            <button key={key} onClick={() => setTab(key)} className={`flex-1 rounded-lg py-2 text-[12.5px] font-semibold ${tab === key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>
+            <button key={key} onClick={() => setTab(key)} className={`flex-1 rounded-lg py-2 text-[12.5px] font-semibold ${tab === key ? "bg-card text-gray-900 shadow-sm" : "text-gray-500"}`}>
               {label}
             </button>
           ))}

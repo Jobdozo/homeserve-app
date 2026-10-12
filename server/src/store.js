@@ -7,6 +7,7 @@ const fcm = require("./fcm");
 const taxIds = require("./taxIds");
 const serviceOptions = require("./serviceOptions");
 const orderExtras = require("./orderExtras");
+const partnerHub = require("./partnerHub");
 const presence = require("./presence");
 const rules = require("./rules");
 const whatsapp = require("./whatsapp");
@@ -2151,13 +2152,33 @@ async function createOrder({ items, address, customerId, offerCode, referralCode
   // Check every line against the chosen location (and its options) up front, so one
   // unavailable item can't leave a half-created order (and a spent referral) behind.
   let subtotal = 0;
+  const lineTotals = [];
   for (const item of items) {
     const svc = await getService(item.serviceId);
-    if (!svc) continue;
+    if (!svc) {
+      lineTotals.push({ providerId: null, total: 0 });
+      continue;
+    }
     assertServedAtPincode(svc, address);
-    subtotal += (svc.price + serviceOptions.priceSelection(svc, item.options).extra) * normalizeQuantity(item.quantity);
+    const total = (svc.price + serviceOptions.priceSelection(svc, item.options).extra) * normalizeQuantity(item.quantity);
+    lineTotals.push({ providerId: svc.providerId, total });
+    subtotal += total;
   }
-  if (offerCode) {
+  // A provider's own offer comes off that provider's lines only, as a flat amount
+  // spread over them in order; Tikdum's offers stay a percentage off every line.
+  const providerFlat = items.map(() => 0);
+  let providerOffer = null;
+  if (offerCode && partnerHub.findProviderOffer(offerCode)) {
+    const check = await checkOffer(offerCode, { lines: lineTotals, customerId });
+    if (!check.valid) throw Object.assign(new Error(check.error), { status: 400 });
+    providerOffer = check.offer;
+    let left = check.discount;
+    lineTotals.forEach((l, i) => {
+      if (left <= 0 || l.providerId !== providerOffer.providerId) return;
+      providerFlat[i] = Math.min(left, l.total);
+      left -= providerFlat[i];
+    });
+  } else if (offerCode) {
     const result = validateOffer(offerCode, subtotal);
     if (!result.valid) throw Object.assign(new Error(result.error), { status: 400 });
   }
@@ -2188,11 +2209,12 @@ async function createOrder({ items, address, customerId, offerCode, referralCode
         address,
         customerId,
         orderId,
-        offerCode,
-        flatDiscount: i === 0 ? referralDiscount + creditAmount : 0,
+        offerCode: providerOffer ? undefined : offerCode,
+        flatDiscount: (i === 0 ? referralDiscount + creditAmount : 0) + providerFlat[i],
       })
     );
   }
+  if (providerOffer) partnerHub.countOfferUse(providerOffer.id);
 
   orderExtras.saveContact(orderId, forContact);
 
@@ -3591,6 +3613,43 @@ function validateOffer(code, subtotal) {
   return { valid: true, offer };
 }
 
+// Any offer code — Tikdum's or a provider's own — against a cart. `lines` are
+// [{ providerId, total }]; a client sends `items` ({ serviceId, quantity, options })
+// and they're priced here. `discount` is what it takes off, in rupees.
+async function checkOffer(code, { lines, items, subtotal, customerId } = {}) {
+  if (!lines && Array.isArray(items) && items.length) {
+    lines = [];
+    for (const it of items) {
+      const svc = await getService(it.serviceId);
+      if (svc) lines.push({ providerId: svc.providerId, total: (svc.price + serviceOptions.priceSelection(svc, it.options).extra) * normalizeQuantity(it.quantity) });
+    }
+  }
+  const sub = lines ? lines.reduce((n, l) => n + l.total, 0) : Number(subtotal);
+  const own = partnerHub.findProviderOffer(code);
+  if (!own) {
+    const r = validateOffer(code, Number.isFinite(sub) ? sub : undefined);
+    if (!r.valid) return r;
+    return { valid: true, offer: r.offer, discount: Number.isFinite(sub) ? Math.round((sub * r.offer.discountPercent) / 100) : null };
+  }
+  if (!partnerHub.isLive(own)) return { valid: false, error: "This offer has ended" };
+  const provider = await getProvider(own.providerId);
+  const name = provider?.name || "this provider";
+  const providerSub = lines ? lines.filter((l) => l.providerId === own.providerId).reduce((n, l) => n + l.total, 0) : sub;
+  if (lines && providerSub <= 0) return { valid: false, error: `${own.code} is only for bookings with ${name}` };
+  if (own.minOrder > 0 && providerSub < own.minOrder) return { valid: false, error: `${own.code} needs ₹${own.minOrder} or more with ${name}` };
+  if (own.audience === "new" && customerId) {
+    const mine = await listBookings({ customerId });
+    if (mine.some((b) => b.providerId === own.providerId && !["Cancelled", "Rejected", "Swapped"].includes(b.status))) {
+      return { valid: false, error: `${own.code} is for your first booking with ${name}` };
+    }
+  }
+  return {
+    valid: true,
+    offer: { ...partnerHub.publicOffer(own), id: own.id, providerName: name },
+    discount: Number.isFinite(providerSub) ? partnerHub.offerDiscount(own, providerSub) : null,
+  };
+}
+
 // ---- platform settings (single record, same jsonStore approach as banners/offers) ----
 
 // Communication fee (what Tikdum charges the provider per completed job):
@@ -4870,6 +4929,7 @@ module.exports = {
   updateOffer,
   deleteOffer,
   validateOffer,
+  checkOffer,
   getSettings,
   updateSettings,
   getProviderNotificationPrefs,

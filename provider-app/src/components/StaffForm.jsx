@@ -74,7 +74,7 @@ export default function StaffForm({ staff, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 sm:rounded-3xl">
+      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-card p-5 sm:rounded-3xl">
         <h2 className="text-[16px] font-bold text-gray-900">{editing ? "Edit staff member" : "Add staff member"}</h2>
         {!catalogue ? (
           <p className="py-10 text-center text-[13px] text-gray-400">Loading…</p>

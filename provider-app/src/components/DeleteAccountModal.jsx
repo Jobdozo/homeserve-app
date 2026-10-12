@@ -39,7 +39,7 @@ export default function DeleteAccountModal({ onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <div className="w-full max-w-md rounded-t-3xl bg-white p-5 sm:rounded-3xl">
+      <div className="w-full max-w-md rounded-t-3xl bg-card p-5 sm:rounded-3xl">
         <h2 className="text-[16px] font-bold text-gray-900">Delete your provider account?</h2>
         <p className="mt-2 text-[12.5px] leading-relaxed text-gray-500">
           This permanently removes your business profile, phone number, email, documents and staff logins, and takes your services off Tikdum. It
@@ -47,7 +47,7 @@ export default function DeleteAccountModal({ onClose }) {
           your account while you have orders in progress.
         </p>
         <label className="mt-4 block text-[12px] font-semibold text-gray-700">Why are you leaving? <span className="font-normal text-gray-400">(optional)</span></label>
-        <select value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-red-400">
+        <select value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-200 bg-card px-3.5 py-2.5 text-sm outline-none focus:border-red-400">
           <option value="">Choose a reason</option>
           {REASONS.map(([id, label]) => (
             <option key={id} value={id}>{label}</option>

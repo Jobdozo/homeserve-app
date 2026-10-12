@@ -9,7 +9,7 @@ import CategoryPhoto from "../components/CategoryPhoto";
 import AddOns from "../components/AddOns";
 import { QtyStepper, SectionLabel, inr } from "../components/ui";
 import { useOptionsSheet } from "../components/optionsSheetContext";
-import { unitPrice } from "../utils/cartMath";
+import { unitPrice, offerSaving, offerBase } from "../utils/cartMath";
 
 // The map (Leaflet) is only needed when a customer opens it, so it loads on demand.
 const LocationPicker = lazy(() => import("../components/LocationPicker"));
@@ -75,7 +75,8 @@ export default function CartScreen() {
   const [couponInput, setCouponInput] = useState("");
   const [showCodeBox, setShowCodeBox] = useState(false);
   const [applyingCoupon, setApplyingCoupon] = useState("");
-  const [offers, setOffers] = useState([]);
+  const [globalOffers, setOffers] = useState([]);
+  const [providerOffers, setProviderOffers] = useState([]);
   const [referralInput, setReferralInput] = useState("");
   const [appliedReferral, setAppliedReferral] = useState(null);
   const [referralError, setReferralError] = useState("");
@@ -109,16 +110,28 @@ export default function CartScreen() {
   const qtyOf = (l) => l.item.quantity || 1;
   const total = lines.reduce((sum, l) => sum + unitPrice(l.service, l.item) * qtyOf(l), 0);
   const savings = lines.reduce((sum, l) => sum + (l.service.originalPrice > l.service.price ? (l.service.originalPrice - l.service.price) * qtyOf(l) : 0), 0);
-  const offerDiscount = appliedOffer ? Math.round(total * (appliedOffer.discountPercent / 100)) : 0;
+  const offerLines = lines.map((l) => ({ providerId: l.service.providerId, total: unitPrice(l.service, l.item) * qtyOf(l) }));
+  const offerDiscount = offerSaving(appliedOffer, offerLines);
   const referralDiscount = appliedReferral ? appliedReferral.discount : 0;
   const creditDiscount = useCredits && referral ? Math.min(referral.balance, total - offerDiscount - referralDiscount) : 0;
   const discountAmount = offerDiscount + referralDiscount + creditDiscount;
   const payable = Math.max(0, total - discountAmount);
   const providerNames = [...new Set(lines.map((l) => getProvider(l.service.providerId)?.name).filter(Boolean))];
+  // The cart's providers' own offers come first: they're only for these services.
+  const cartProviderIds = [...new Set(lines.map((l) => l.service.providerId).filter(Boolean))].sort().join(",");
+  useEffect(() => {
+    if (!cartProviderIds) return setProviderOffers([]);
+    api
+      .listProviderOffers(cartProviderIds.split(","))
+      .then((list) => setProviderOffers(list.map((o) => ({ ...o, providerName: getProvider(o.providerId)?.name }))))
+      .catch(() => setProviderOffers([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartProviderIds]);
+  const offers = [...providerOffers, ...globalOffers];
 
   // An offer that needs a bigger booking drops off by itself if the cart shrinks below it.
   useEffect(() => {
-    if (appliedOffer?.minOrder > 0 && total < appliedOffer.minOrder) {
+    if (appliedOffer?.minOrder > 0 && offerBase(appliedOffer, offerLines) < appliedOffer.minOrder) {
       clearOffer();
       showToast(`${appliedOffer.code} removed — it needs ${inr(appliedOffer.minOrder)} or more`);
     }
@@ -251,7 +264,7 @@ export default function CartScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schedule.date, schedule.time, timeOk]);
   const nudge = offers
-    .filter((o) => o.minOrder > total && (!appliedOffer || o.code !== appliedOffer.code))
+    .filter((o) => !o.providerId && o.minOrder > total && (!appliedOffer || o.code !== appliedOffer.code))
     .sort((a, b) => a.minOrder - b.minOrder)[0];
 
   if (lines.length === 0) {
@@ -553,14 +566,16 @@ export default function CartScreen() {
               .filter((o) => o.code !== appliedOffer?.code)
               .slice(0, 4)
               .map((o) => {
-                const short = o.minOrder > total ? o.minOrder - total : 0;
+                const base = offerBase(o, offerLines);
+                const short = o.minOrder > base ? o.minOrder - base : 0;
                 return (
                   <div key={o.code} className="flex items-center gap-3 border-b border-dashed border-line px-4 py-3 last:border-0">
                     <span className="flex flex-1 flex-col">
                       <b className="text-[14px] text-ink">
-                        Save {inr(Math.round((total * o.discountPercent) / 100))} with {o.code}
+                        Save {inr(short > 0 ? 0 : offerSaving(o, offerLines))} with {o.code}
                       </b>
                       <span className="text-[12px] text-ink-muted">
+                        {o.providerName ? `${o.providerName} · ` : ""}
                         {short > 0 ? `Add ${inr(short)} more to use it` : o.description || `${o.discountPercent}% off this booking`}
                       </span>
                     </span>

@@ -93,7 +93,7 @@ export default function ChatScreen() {
         <div ref={endRef} />
       </div>
 
-      <div className="flex flex-shrink-0 items-center gap-2 border-t border-gray-100 bg-white px-3 py-2.5 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:py-4">
+      <div className="flex flex-shrink-0 items-center gap-2 border-t border-gray-100 bg-card px-3 py-2.5 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-8 lg:py-4">
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -103,7 +103,7 @@ export default function ChatScreen() {
         />
         <button
           onClick={handleSend}
-          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand text-white hover:bg-brand-dark active:scale-95"
+          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand text-white hover:bg-brand-glow active:scale-95"
           aria-label="Send message"
         >
           <SendIcon width={16} height={16} />

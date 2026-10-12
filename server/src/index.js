@@ -35,6 +35,8 @@ const subcategories = require("./subcategories");
 const imageStudio = require("./imageStudio");
 const { groupByProvider, describeGroup } = require("./orderGroups");
 const providerAdmin = require("./providerAdmin");
+const partnerHub = require("./partnerHub");
+const jsonStore = require("./jsonStore");
 auth.setBlockCheck(blockedPhones.isBlocked);
 const liveLocation = require("./liveLocation");
 const push = require("./push");
@@ -154,11 +156,29 @@ async function dispatchBooking(booking, triedProviderIds = [booking.providerId],
         if (current && current.status === "Pending") still.push(current); // not yet accepted/rejected/cancelled
       }
       for (const b of still) providerAdmin.recordDecline(b.providerId, b.id, "timeout");
+      if (still.length) await takeOfflineIfMissing(still[0].providerId);
       if (still.length) await reassignGroup(still, triedProviderIds);
     } catch (e) {
       console.error("dispatchBooking timeout failed:", e);
     }
   }, ringTimeoutMs());
+}
+
+// After AUTO_OFFLINE_AFTER requests in a row ring out unanswered, the provider is switched
+// offline so the next customers aren't left waiting; they're told why and can switch back on.
+async function takeOfflineIfMissing(providerId) {
+  if (!partnerHub.noteTimeout(providerId)) return;
+  if (!store.getProviderCoverage(providerId).acceptingRequests) return;
+  store.updateProviderCoverage(providerId, { acceptingRequests: false }, { allowServeAllAreas: false });
+  partnerHub.logOnline(providerId, false, "missed");
+  const message = `${partnerHub.AUTO_OFFLINE_AFTER} requests in a row went unanswered, so we've taken you offline. Switch "Online" back on in the Business app when you're ready for jobs.`;
+  await store
+    .addNotification({ recipientType: "provider", recipientId: providerId, type: "account", title: "You're offline now", message })
+    .then((n) => rt.notification(n))
+    .catch((e) => console.error("auto-offline notice failed", e));
+  push.sendPush("provider", providerId, { title: "You're offline now", body: message, type: "account" }).catch(() => {});
+  fcm.sendToDevices("provider", providerId, { title: "You're offline now", body: message, type: "account" }).catch(() => {});
+  io.emit("provider:updated", publicProvider(await store.getProvider(providerId)));
 }
 
 // Hand pending bookings to other providers and ring each new provider once for the bookings they received.
@@ -463,11 +483,15 @@ app.patch("/api/providers/:id/coverage", auth.requireAuth("provider"), ah(async 
     changeRequest = await store.submitProviderChange(req.params.id, { pincodes });
     pincodes = undefined;
   }
+  const wasAccepting = store.getProviderCoverage(req.params.id).acceptingRequests;
   const coverage = store.updateProviderCoverage(
     req.params.id,
     { pincodes, acceptingRequests: req.body?.acceptingRequests, schedule: req.body?.schedule },
     { allowServeAllAreas: false }
   );
+  if (req.body?.acceptingRequests !== undefined && !!req.body.acceptingRequests !== wasAccepting) {
+    partnerHub.logOnline(req.params.id, !!req.body.acceptingRequests, req.staff ? "staff" : "provider");
+  }
   res.json(changeRequest ? { ...coverage, changeRequest } : coverage);
 }));
 
@@ -770,8 +794,162 @@ app.get("/api/providers/:id/earnings", auth.requireAuth("provider", "admin"), ah
   res.json(await store.getEarnings(req.params.id));
 }));
 
+// Public: what customers wrote and the provider's reply. Only the reviewer's
+// name and picture go out — never their phone or email.
 app.get("/api/providers/:id/reviews", ah(async (req, res) => {
-  res.json(await store.getProviderReviews(req.params.id));
+  const replies = partnerHub.replyMap();
+  const reviews = await store.getProviderReviews(req.params.id);
+  res.json(reviews.map((r) => ({ ...r, customer: { name: r.customer?.name || "Customer", avatar: r.customer?.avatar || null }, reply: replies.get(r.id) || null })));
+}));
+
+// ---- Business app: insights, money, offers, reviews, complaints (see partnerHub.js) ----
+const staffLacks = (req, ...perms) => Boolean(req.staff) && !perms.some((p) => req.staff.permissions.includes(p));
+const firstName = (name) => String(name || "Customer").trim().split(/\s+/).map((w, i) => (i === 0 ? w : `${w[0]}.`)).slice(0, 2).join(" ");
+
+app.get("/api/provider/insights", auth.requireAuth("provider"), ah(async (req, res) => {
+  const id = req.user.id;
+  const [bookings, allServices] = await Promise.all([store.listBookings({ providerId: id }), store.listServices()]);
+  const coverage = store.getProviderCoverage(id);
+  const declines = jsonStore.readAll("providerDeclines").filter((d) => d.providerId === id);
+  const insights = partnerHub.computeInsights({
+    bookings,
+    declines,
+    onlineLog: partnerHub.onlineLogFor(id),
+    schedule: coverage.schedule,
+    acceptingNow: coverage.acceptingRequests,
+  });
+  if (staffLacks(req, "earnings.view")) {
+    insights.today.earned = null;
+    insights.today.hourly = null;
+  }
+  const score = partnerHub.scoreReport({ myServices: allServices.filter((s) => s.providerId === id), allServices, bookings });
+  res.json({ ...insights, score, offline: partnerHub.offlineReason(id, coverage.acceptingRequests) });
+}));
+
+app.get("/api/provider/money", auth.requireAuth("provider"), ah(async (req, res) => {
+  if (staffLacks(req, "earnings.view")) return res.status(403).json({ error: "Ask the owner for access to money" });
+  const id = req.user.id;
+  const bookings = await store.listBookings({ providerId: id });
+  const fees = new Map(jsonStore.readAll("bookingFees").map((r) => [r.id, r.fee]));
+  const wallet = store.getWallet(id);
+  const recent = bookings.map((b) => fees.get(b.id)).filter((f) => f > 0).slice(0, 20);
+  const avgFee = recent.length ? Math.round(recent.reduce((a, b) => a + b, 0) / recent.length) : null;
+  const lastRecharge = [...(wallet.recharges || [])].pop();
+  const acct = accounting.getSettings();
+  res.json({
+    cycles: partnerHub.weeklyCycles({ bookings, fees, payments: partnerHub.paymentMap() }),
+    wallet: {
+      balance: wallet.balance || 0,
+      suspended: (wallet.balance || 0) <= 0,
+      avgFee,
+      jobsLeft: avgFee && wallet.balance > 0 ? Math.floor(wallet.balance / avgFee) : null,
+      lowAt: lastRecharge ? Math.round(lastRecharge.amount * 0.2) : null,
+      history: partnerHub.walletHistory(wallet),
+    },
+    invoicing: { on: acct.enabled, months: partnerHub.invoiceMonths(accounting.listInvoices({ providerId: id })) },
+  });
+}));
+
+// One month's fee invoices as a statement the provider can keep or show their accountant.
+app.get("/api/provider/invoices/:month", auth.requireAuth("provider"), ah(async (req, res) => {
+  if (staffLacks(req, "earnings.view")) return res.status(403).json({ error: "Ask the owner for access to money" });
+  const month = String(req.params.month);
+  if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: "Month should look like 2026-09" });
+  const invoices = accounting.listInvoices({ providerId: req.user.id }).filter((i) => partnerHub.istDay(Date.parse(i.date)).slice(0, 7) === month);
+  const summary = partnerHub.invoiceMonths(invoices)[0] || { month, count: 0, taxable: 0, gst: 0, total: 0 };
+  const s = accounting.getSettings();
+  res.json({
+    month,
+    supplier: { legalName: s.legalName, tradeName: s.tradeName, gstin: s.gstin, address: s.address, stateName: s.stateName },
+    summary,
+    invoices: invoices.map((i) => ({
+      id: i.id, type: i.type, number: i.number, date: i.date, bookingRef: i.bookingRef, description: i.description,
+      sacCode: i.sacCode, gstRate: i.gstRate, taxableValue: i.taxableValue, cgst: i.cgst, sgst: i.sgst, igst: i.igst, total: i.total,
+      recipient: i.recipient, placeOfSupply: i.placeOfSupply, status: i.status,
+    })),
+  });
+}));
+
+// The provider's own offers. Running them is an Advertising permission for staff.
+app.get("/api/provider/offers", auth.requireAuth("provider"), ah(async (req, res) => {
+  res.json({ offers: partnerHub.listProviderOffers(req.user.id), max: partnerHub.MAX_LIVE_OFFERS });
+}));
+app.post("/api/provider/offers", auth.requireAuth("provider"), ah(async (req, res) => {
+  if (staffLacks(req, "ads.manage")) return res.status(403).json({ error: "Ask the owner for permission to run offers" });
+  const provider = await store.getProvider(req.user.id);
+  try {
+    const offer = partnerHub.createProviderOffer(req.user.id, provider?.name, req.body || {}, store.listOffers().map((o) => o.code));
+    res.status(201).json({ ...offer, description: partnerHub.describeOffer(offer), live: true, uses: 0 });
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ error: e.message });
+    throw e;
+  }
+}));
+app.patch("/api/provider/offers/:id", auth.requireAuth("provider"), ah(async (req, res) => {
+  if (staffLacks(req, "ads.manage")) return res.status(403).json({ error: "Ask the owner for permission to run offers" });
+  try {
+    const offer = partnerHub.setProviderOfferActive(req.user.id, req.params.id, req.body?.active);
+    res.json({ ...offer, description: partnerHub.describeOffer(offer), live: partnerHub.isLive(offer) });
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ error: e.message });
+    throw e;
+  }
+}));
+// Customers: the live offers of the providers in their cart (or on a profile).
+app.get("/api/provider-offers", ah(async (req, res) => {
+  const ids = String(req.query.providers || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 50);
+  res.json(partnerHub.liveProviderOffers({ providerIds: ids.length ? ids : undefined }));
+}));
+
+// Reviews of the signed-in provider, with their replies and the star split.
+app.get("/api/provider/reviews", auth.requireAuth("provider"), ah(async (req, res) => {
+  const replies = partnerHub.replyMap();
+  const reviews = (await store.getProviderReviews(req.user.id)).map((r) => ({
+    id: r.id, rating: r.rating, text: r.text, serviceName: r.serviceName, date: r.date,
+    customerName: firstName(r.customer?.name), reply: replies.get(r.id) || null,
+  }));
+  const stars = [5, 4, 3, 2, 1].map((n) => ({ stars: n, count: reviews.filter((r) => Math.round(r.rating) === n).length }));
+  const avg = reviews.length ? Number((reviews.reduce((n, r) => n + r.rating, 0) / reviews.length).toFixed(1)) : null;
+  res.json({ average: avg, total: reviews.length, stars, reviews });
+}));
+app.post("/api/provider/reviews/:bookingId/reply", auth.requireAuth("provider"), ah(async (req, res) => {
+  if (staffLacks(req, "profile.edit")) return res.status(403).json({ error: "Ask the owner for permission to reply to reviews" });
+  const booking = await store.getBooking(req.params.bookingId);
+  try {
+    res.json(partnerHub.setReply(req.user.id, booking, req.body?.text));
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ error: e.message });
+    throw e;
+  }
+}));
+
+// Complaints about this provider: what was said and Tikdum's progress, never the customer's contact details.
+const COMPLAINT_REPLY_HOURS = 24;
+function providerComplaint(c, events = []) {
+  return {
+    id: c.id, subject: c.subject, description: c.description, category: c.category, service: c.service, bookingRef: c.bookingRef,
+    bookingId: c.bookingId, customerName: firstName(c.customerName), status: c.statusLabel, open: !["resolved", "closed"].includes(c.statusKind),
+    createdAt: c.createdAt, updatedAt: c.updatedAt,
+    replyBy: new Date(Date.parse(c.createdAt) + COMPLAINT_REPLY_HOURS * 3600000).toISOString(),
+    replies: events.filter((e) => e.type === "provider_comm" && e.direction === "inbound").map((e) => ({ text: e.text, at: e.at })),
+    resolution: c.resolution ? { outcome: c.resolution.outcome, summary: c.resolution.summary || "" } : null,
+  };
+}
+app.get("/api/provider/complaints", auth.requireAuth("provider"), ah(async (req, res) => {
+  const mine = complaints.listComplaints({}).complaints.filter((c) => c.providerId === req.user.id);
+  res.json(mine.map((c) => providerComplaint(c, complaints.getComplaint(c.id)?.events || [])));
+}));
+app.post("/api/provider/complaints/:id/reply", auth.requireAuth("provider"), ah(async (req, res) => {
+  const found = complaints.getComplaint(req.params.id);
+  if (!found || found.complaint.providerId !== req.user.id) return res.status(404).json({ error: "Complaint not found" });
+  try {
+    await complaints.addComm(req.params.id, { type: "provider_comm", direction: "inbound", channel: "Other", text: req.body?.text }, `Provider ${req.user.id}${req.staff ? ` (staff ${req.staff.name})` : ""} via Business app`);
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ error: e.message });
+    throw e;
+  }
+  const after = complaints.getComplaint(req.params.id);
+  res.json(providerComplaint(after.complaint, after.events));
 }));
 
 // ---- categories ----
@@ -1211,12 +1389,24 @@ app.delete("/api/admin/locations/pincodes/:id", auth.requireAuth("admin"), ah(as
 // ---- offers / discount codes ----
 // Live offers the cart lists as tap-to-apply savings.
 app.get("/api/offers", ah(async (req, res) => res.json(store.listActiveOffers())));
+// Tikdum's codes and providers' own. Send the cart as `items` so a provider's
+// offer is worked out on that provider's services; `discount` is the saving.
 app.post("/api/offers/validate", ah(async (req, res) => {
-  const { code, subtotal } = req.body || {};
+  const { code, subtotal, items } = req.body || {};
   if (!code) return res.status(400).json({ error: "code is required" });
-  const result = store.validateOffer(code, Number.isFinite(Number(subtotal)) && subtotal !== null && subtotal !== "" ? Number(subtotal) : undefined);
+  const who = optionalUser(req);
+  const result = await store.checkOffer(code, {
+    items: Array.isArray(items) ? items.slice(0, 50) : undefined,
+    subtotal: Number.isFinite(Number(subtotal)) && subtotal !== null && subtotal !== "" ? Number(subtotal) : undefined,
+    customerId: who?.role === "customer" ? who.id : undefined,
+  });
   if (!result.valid) return res.status(400).json({ error: result.error });
-  res.json({ code: result.offer.code, discountPercent: result.offer.discountPercent, description: result.offer.description, minOrder: result.offer.minOrder || 0 });
+  const o = result.offer;
+  res.json({
+    code: o.code, discountPercent: o.discountPercent || 0, description: o.description, minOrder: o.minOrder || 0,
+    ...(o.providerId ? { providerId: o.providerId, providerName: o.providerName, kind: o.kind, value: o.value, maxDiscount: o.maxDiscount, audience: o.audience } : {}),
+    discount: result.discount,
+  });
 }));
 
 app.get("/api/admin/offers", auth.requireAuth("admin"), ah(async (req, res) => res.json(store.listOffers())));
@@ -1589,6 +1779,7 @@ app.post("/api/orders/:orderId/respond", auth.requireAuth("provider"), ah(async 
   if (!["accept", "reject"].includes(action)) return res.status(400).json({ error: "action must be accept or reject" });
   const mine = (await store.listBookings({ providerId: req.user.id })).filter((b) => b.orderId === req.params.orderId && b.status === "Pending");
   if (mine.length === 0) return res.status(404).json({ error: "No pending requests for this order" });
+  partnerHub.noteResponse(req.user.id);
   if (action === "reject") {
     for (const b of mine) providerAdmin.recordDecline(req.user.id, b.id, "declined");
     await reassignGroup(mine, [req.user.id]);
@@ -1631,6 +1822,7 @@ app.patch("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
   // to another provider in the same category first, same as a ring timeout.
   if (req.user.role === "provider" && status === "Rejected" && existing.status === "Pending") {
     providerAdmin.recordDecline(req.user.id, existing.id, "declined");
+    partnerHub.noteResponse(req.user.id);
     const result = await store.reassignBooking(req.params.id, [req.user.id]);
     rt.booking("booking:updated", result.booking, { previous: [req.user.id] });
     rt.activity((await store.listActivities(1))[0]);
@@ -1644,6 +1836,7 @@ app.patch("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
   }
 
   const booking = await store.updateBookingStatus(req.params.id, status);
+  if (req.user.role === "provider" && status === "Accepted") partnerHub.noteResponse(req.user.id);
   // A staff member who accepts an unassigned order takes it on.
   if (req.staff && status === "Accepted" && !staff.assignmentFor(req.params.id)) {
     await staff.assignOrder(req.user.id, booking, req.staff.id, { name: req.staff.name });
@@ -1914,7 +2107,10 @@ app.post("/api/bookings/:id/otp/verify", auth.requireAuth("provider"), ah(async 
   if (!booking) return res.status(404).json({ error: "Booking not found" });
   if (booking.providerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
   const updated = await store.verifyBookingOtp(req.params.id, req.body?.type, req.body?.code);
-  for (const sibling of await store.orderGroup(updated)) rt.booking("booking:updated", sibling.id === updated.id ? updated : sibling);
+  const siblings = await store.orderGroup(updated);
+  // How the customer paid, asked when the job is closed (cash / UPI) — feeds Money's split.
+  if (req.body?.type === "complete" && req.body?.paidBy) partnerHub.recordPayment(siblings.map((b) => b.id), req.body.paidBy);
+  for (const sibling of siblings) rt.booking("booking:updated", sibling.id === updated.id ? updated : sibling);
   rt.activity((await store.listActivities(1))[0]);
   res.json(maskCompleted(updated));
 }));

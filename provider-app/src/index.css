@@ -13,9 +13,10 @@ body,
 }
 
 body {
-  font-family: "Inter", system-ui, sans-serif;
-  background: #fff;
-  color: #17172b;
+  font-family: "Figtree", system-ui, sans-serif;
+  background: #0f0d18;
+  color: #f4f2fa;
+  color-scheme: dark;
 }
 
 /* Mobile: fills the browser window edge-to-edge, no phone mockup.
@@ -37,7 +38,7 @@ body {
      browser tab tints its own status bar from <meta name="theme-color">,
      but the native edge-to-edge WebView doesn't, so without this the strips
      read as a plain white gap instead of matching the app's own header. */
-  background: #15803D;
+  background: #0f0d18;
 }
 
 /* On a phone this wrapper adds nothing; on a computer it holds the top bar and the page beside the menu. */
@@ -53,7 +54,7 @@ body {
 
 .phone-frame {
   width: 100%;
-  background: #fff;
+  background: #0f0d18;
   overflow: hidden;
   position: relative;
   display: flex;
@@ -92,7 +93,7 @@ body {
     flex-direction: row;
     height: 100dvh;
     overflow: hidden;
-    background: #f6f5fc;
+    background: #0f0d18;
   }
   .app-main {
     flex: 1;
@@ -141,30 +142,54 @@ body {
 .switch {
   position: relative;
   display: inline-flex;
-  height: 22px;
-  width: 38px;
+  height: 30px;
+  width: 52px;
   flex-shrink: 0;
   align-items: center;
   border-radius: 9999px;
   transition: background-color 0.15s ease;
 }
 .switch[data-on="true"] {
-  background: #15803d;
+  background: #2bc27a;
 }
 .switch[data-on="false"] {
-  background: #d1d5db;
+  background: #4a4363;
 }
 .switch-knob {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  height: 18px;
-  width: 18px;
+  top: 3px;
+  left: 3px;
+  height: 24px;
+  width: 24px;
   border-radius: 9999px;
   background: #fff;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   transition: transform 0.15s ease;
 }
 .switch[data-on="true"] .switch-knob {
-  transform: translateX(16px);
+  transform: translateX(22px);
+}
+.switch[data-on="false"] .switch-knob {
+  background: #d9d5e8;
+}
+
+/* Numbers that line up (money, counts, times). */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+input,
+textarea,
+select {
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -598,7 +598,8 @@ export function AppProvider({ children }) {
   const applyOfferCode = useCallback(async (code, subtotal) => {
     setOfferError("");
     try {
-      const offer = await api.validateOffer(code, subtotal);
+      const items = cart.map(({ serviceId, quantity, options }) => ({ serviceId, quantity: quantity || 1, options: options || {} }));
+      const offer = await api.validateOffer(code, subtotal, items);
       setAppliedOffer(offer);
       return offer;
     } catch (e) {
@@ -606,7 +607,7 @@ export function AppProvider({ children }) {
       setOfferError(e.message || "Invalid offer code");
       throw e;
     }
-  }, []);
+  }, [cart]);
 
   const clearOffer = useCallback(() => {
     setAppliedOffer(null);

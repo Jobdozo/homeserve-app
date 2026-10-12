@@ -81,7 +81,7 @@ export default function ProfileScreen() {
       )}
       <div className="lg:mt-6 lg:grid lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start lg:gap-6">
       <div className="flex flex-col lg:gap-4">
-      <div className="mx-4 mt-4 flex items-center gap-3 lg:mx-0 lg:mt-0 lg:rounded-2xl lg:border lg:border-gray-100 lg:bg-white lg:p-6">
+      <div className="mx-4 mt-4 flex items-center gap-3 lg:mx-0 lg:mt-0 lg:rounded-2xl lg:border lg:border-gray-100 lg:bg-card lg:p-6">
         <div className="relative flex-shrink-0">
           <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-brand-light text-3xl lg:h-20 lg:w-20 lg:text-4xl">
             <Avatar provider={providerProfile} />
@@ -116,7 +116,7 @@ export default function ProfileScreen() {
       <div className="mx-4 mt-4 lg:mx-0 lg:mt-0">
         <PendingProfileChanges />
       </div>
-      <div className="mx-4 mt-5 rounded-2xl border border-gray-100 p-4 lg:mx-0 lg:mt-0 lg:bg-white lg:p-6">
+      <div className="mx-4 mt-5 rounded-2xl border border-gray-100 p-4 lg:mx-0 lg:mt-0 lg:bg-card lg:p-6">
         <h2 className="mb-3 text-[13px] font-bold text-gray-900 lg:text-[15px]">Business Information</h2>
         <InfoRow label="Business Name" value={providerProfile.businessName} />
         <InfoRow label="Experience" value={providerProfile.experience} />
@@ -136,7 +136,7 @@ export default function ProfileScreen() {
             onClick={() =>
               item.path ? navigate(item.path) : item.href ? window.open(item.href, "_blank") : showToast(`${item.label} coming soon`)
             }
-            className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50 lg:rounded-2xl lg:border lg:border-gray-100 lg:bg-white lg:px-5 lg:py-5 lg:hover:border-brand/40 lg:hover:shadow-sm"
+            className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50 lg:rounded-2xl lg:border lg:border-gray-100 lg:bg-card lg:px-5 lg:py-5 lg:hover:border-brand/40 lg:hover:shadow-sm"
           >
             <span className="text-lg">{item.icon}</span>
             <span className="flex-1 text-[13px] font-medium text-gray-700">{item.label}</span>

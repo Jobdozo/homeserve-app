@@ -151,8 +151,9 @@ export const api = {
   listJobCheckpoints: (bookingId) => request(`/bookings/${bookingId}/checkpoints`),
   addJobCheckpoint: (bookingId, type) =>
     request(`/bookings/${bookingId}/checkpoints`, { method: "POST", body: JSON.stringify({ type }) }),
-  verifyBookingOtp: (bookingId, type, code) =>
-    request(`/bookings/${bookingId}/otp/verify`, { method: "POST", body: JSON.stringify({ type, code }) }),
+  // paidBy (cash / upi / other) goes with the completion code so Money can split takings.
+  verifyBookingOtp: (bookingId, type, code, paidBy) =>
+    request(`/bookings/${bookingId}/otp/verify`, { method: "POST", body: JSON.stringify({ type, code, ...(paidBy ? { paidBy } : {}) }) }),
   saveFcmToken: (token) => request("/provider/fcm-token", { method: "POST", body: JSON.stringify({ token }) }),
   acceptAgreement: () => request("/provider/agreement/accept", { method: "POST" }),
   getWallet: () => request("/provider/wallet"),
@@ -161,4 +162,15 @@ export const api = {
   listAds: () => request("/provider/ads"),
   createAd: (serviceId) => request("/provider/ads", { method: "POST", body: JSON.stringify({ serviceId }) }),
   setAdStatus: (id, status) => request(`/provider/ads/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  // Business app hub: insights, money, offers, reviews, complaints
+  getInsights: () => request("/provider/insights"),
+  getMoney: () => request("/provider/money"),
+  getInvoiceMonth: (month) => request(`/provider/invoices/${month}`),
+  listOffers: () => request("/provider/offers"),
+  createOffer: (offer) => request("/provider/offers", { method: "POST", body: JSON.stringify(offer) }),
+  setOfferActive: (id, active) => request(`/provider/offers/${id}`, { method: "PATCH", body: JSON.stringify({ active }) }),
+  listReviews: () => request("/provider/reviews"),
+  replyToReview: (bookingId, text) => request(`/provider/reviews/${bookingId}/reply`, { method: "POST", body: JSON.stringify({ text }) }),
+  listComplaints: () => request("/provider/complaints"),
+  replyToComplaint: (id, text) => request(`/provider/complaints/${id}/reply`, { method: "POST", body: JSON.stringify({ text }) }),
 };

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Same brand green as tailwind.config.js' `brand` color and the
-         <meta name="theme-color"> in index.html — keep all three in sync. -->
-    <color name="brand">#15803D</color>
+    <!-- Tikdum violet (tailwind.config.js 'brand'): the tint on notifications. -->
+    <color name="brand">#7B63F5</color>
+    <!-- The app's dark ground (tailwind 'ground', <meta name="theme-color">): shows behind the system bars. -->
+    <color name="ground">#0F0D18</color>
 </resources>

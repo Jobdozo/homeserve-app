@@ -76,8 +76,10 @@ export const api = {
   getVapidPublicKey: () => request("/push/vapid-public-key"),
   subscribePush: (subscription) => request("/push/subscribe", { method: "POST", body: JSON.stringify({ subscription }) }),
   unsubscribePush: (endpoint) => request("/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
-  validateOffer: (code, subtotal) => request("/offers/validate", { method: "POST", body: JSON.stringify({ code, subtotal }) }),
+  // items (serviceId, quantity, options) let the server work out a provider's own offer on their services
+  validateOffer: (code, subtotal, items) => request("/offers/validate", { method: "POST", body: JSON.stringify({ code, subtotal, ...(items ? { items } : {}) }) }),
   listOffers: () => request("/offers"),
+  listProviderOffers: (providerIds) => request(`/provider-offers?providers=${encodeURIComponent(providerIds.join(","))}`),
   saveFcmToken: (token) => request("/customer/fcm-token", { method: "POST", body: JSON.stringify({ token }) }),
   getReferralInfo: () => request("/customer/referral"),
   validateReferralCode: (code) =>

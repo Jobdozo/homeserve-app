@@ -17,8 +17,8 @@
              3-button nav bar reporting a zero safe-area-inset-bottom to the
              page, where CSS has no strip to color and this device's true
              system-bar area would otherwise show AppCompat's default white
-             instead of the app's own brand color. -->
-        <item name="android:windowBackground">@color/brand</item>
+             instead of the app's own dark ground. -->
+        <item name="android:windowBackground">@color/ground</item>
     </style>
 
 

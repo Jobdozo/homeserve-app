@@ -21,7 +21,7 @@ export default function DesktopHeader() {
   const title = TITLES[pathname] || "";
 
   return (
-    <header className="hidden h-[60px] flex-shrink-0 items-center gap-4 border-b border-gray-100 bg-white px-8 lg:flex">
+    <header className="hidden h-[60px] flex-shrink-0 items-center gap-4 border-b border-gray-100 bg-card px-8 lg:flex">
       <p className="flex-1 text-[15px] font-bold text-gray-900">{title}</p>
       <div className="hidden items-center gap-2 rounded-full bg-gray-50 px-3.5 py-1.5 text-[12.5px] xl:flex" title="Your wallet pays Tikdum's fee when you accept a request">
         <span className="text-gray-400">Wallet</span>

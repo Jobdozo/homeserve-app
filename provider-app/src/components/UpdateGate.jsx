@@ -45,7 +45,7 @@ export default function UpdateGate({ children }) {
   if (!block) return children;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-5 bg-white px-8 text-center">
+    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-5 bg-card px-8 text-center">
       <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand text-white">
         <LogoMark size={34} />
       </span>

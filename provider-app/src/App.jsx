@@ -13,12 +13,17 @@ import RingingOverlay from "./components/RingingOverlay";
 // render) and the RingingOverlay (must be ready to fire the moment a
 // booking comes in) ship in the initial bundle. Every other screen loads
 // on demand as the user navigates to it.
-const DashboardScreen = lazy(() => import("./screens/DashboardScreen"));
-const RequestsScreen = lazy(() => import("./screens/RequestsScreen"));
+const OrdersScreen = lazy(() => import("./screens/OrdersScreen"));
+const InsightsScreen = lazy(() => import("./screens/InsightsScreen"));
+const MoneyScreen = lazy(() => import("./screens/MoneyScreen"));
+const GrowScreen = lazy(() => import("./screens/GrowScreen"));
+const OffersScreen = lazy(() => import("./screens/OffersScreen"));
+const FeedbackScreen = lazy(() => import("./screens/FeedbackScreen"));
+const ReadyScreen = lazy(() => import("./screens/ReadyScreen"));
+const InvoiceMonthScreen = lazy(() => import("./screens/InvoiceMonthScreen"));
 const RequestDetailsScreen = lazy(() => import("./screens/RequestDetailsScreen"));
 const ServicesScreen = lazy(() => import("./screens/ServicesScreen"));
 const AddServiceScreen = lazy(() => import("./screens/AddServiceScreen"));
-const EarningsScreen = lazy(() => import("./screens/EarningsScreen"));
 const ProfileScreen = lazy(() => import("./screens/ProfileScreen"));
 const EditProfileScreen = lazy(() => import("./screens/EditProfileScreen"));
 const DocumentsKycScreen = lazy(() => import("./screens/DocumentsKycScreen"));
@@ -54,7 +59,7 @@ function AppRoutes() {
         <div className="app-body">
           <div className="phone-frame">
             <div className="screen flex items-center justify-center">
-              <div className="flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl bg-brand text-white">
+              <div className="flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl bg-brand-night text-white">
                 <LogoMark size={34} />
               </div>
             </div>
@@ -92,10 +97,12 @@ function AppRoutes() {
       <Suspense fallback={<ScreenFallback />}>
         <Routes>
           <Route element={<MainLayout />}>
-            <Route path="/dashboard" element={<DashboardScreen />} />
-            <Route path="/requests" element={<RequestsScreen />} />
+            <Route path="/dashboard" element={<OrdersScreen />} />
+            <Route path="/requests" element={<OrdersScreen />} />
+            <Route path="/insights" element={<InsightsScreen />} />
             <Route path="/services" element={<ServicesScreen />} />
-            <Route path="/earnings" element={<EarningsScreen />} />
+            <Route path="/earnings" element={<MoneyScreen />} />
+            <Route path="/grow" element={<GrowScreen />} />
             <Route path="/profile" element={<ProfileScreen />} />
           </Route>
 
@@ -113,6 +120,10 @@ function AppRoutes() {
             <Route path="/profile/staff/:staffId" element={<StaffDetailScreen />} />
             <Route path="/chat/:requestId" element={<ChatScreen />} />
             <Route path="/notifications" element={<NotificationsScreen />} />
+            <Route path="/grow/offers" element={<OffersScreen />} />
+            <Route path="/feedback" element={<FeedbackScreen />} />
+            <Route path="/ready" element={<ReadyScreen />} />
+            <Route path="/money/invoices/:month" element={<InvoiceMonthScreen />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -189,3 +189,137 @@ export const LogoutIcon = (p) => (
     <path d="M21 12H9" />
   </svg>
 );
+
+export const OrdersIcon = (p) => (
+  <svg {...base} {...p}>
+    <rect x="4" y="3" width="16" height="18" rx="3" />
+    <path d="M8 8h8M8 12h8M8 16h5" />
+  </svg>
+);
+
+export const InsightsIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+  </svg>
+);
+
+export const ToolIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z" />
+  </svg>
+);
+
+export const RupeeIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M7 5h10M7 10h10M13 19 7 10h2a4 4 0 0 0 0-5" />
+  </svg>
+);
+
+export const GrowIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M3 17l6-6 4 4 8-8" />
+    <path d="M14 7h7v7" />
+  </svg>
+);
+
+export const ChatIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+  </svg>
+);
+
+export const NavigateIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M3 11l19-9-9 19-2-8-8-2z" />
+  </svg>
+);
+
+export const MenuIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 7h16M4 12h16M4 17h16" />
+  </svg>
+);
+
+export const ChevronDownIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M6 9l6 6 6-6" />
+  </svg>
+);
+
+export const TagIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" />
+    <circle cx="7.5" cy="7.5" r="1.5" />
+  </svg>
+);
+
+export const MegaphoneIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z" />
+    <path d="M16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12" />
+  </svg>
+);
+
+export const LinkIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
+    <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
+  </svg>
+);
+
+export const UsersIcon = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="9" cy="8" r="4" />
+    <path d="M2 21a7 7 0 0 1 14 0M17 11a3 3 0 1 0 0-6M22 21a6 6 0 0 0-4-5.7" />
+  </svg>
+);
+
+export const DocIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+    <path d="M14 3v5h5M9 13h6M9 17h4" />
+  </svg>
+);
+
+export const DownloadIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 3v12M7 10l5 5 5-5M4 21h16" />
+  </svg>
+);
+
+export const SearchIcon = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="M20 20l-4-4" />
+  </svg>
+);
+
+export const InfoIcon = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 11v5M12 8h.01" />
+  </svg>
+);
+
+export const StoreIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M3 10h18M5 10V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4M5 10v10h14V10" />
+    <path d="M9 20v-5h6v5" />
+  </svg>
+);
+
+export const QrIcon = (p) => (
+  <svg {...base} {...p}>
+    <rect x="3" y="3" width="7" height="7" rx="1" />
+    <rect x="14" y="3" width="7" height="7" rx="1" />
+    <rect x="3" y="14" width="7" height="7" rx="1" />
+    <path d="M14 14h3v3M21 14v.01M14 21h7v-4" />
+  </svg>
+);
+
+export const SettingsIcon = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+  </svg>
+);

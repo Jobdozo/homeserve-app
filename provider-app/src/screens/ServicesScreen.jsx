@@ -6,8 +6,11 @@ import { formatCount, discountPct } from "../utils/format";
 import Pic from "../components/Pic";
 import { api } from "../api";
 import { compressImage } from "../utils/imageCompress";
+import ServiceScore from "../components/ServiceScore";
+import { PageTitle, PillTabs } from "../components/biz";
 
 const TABS = ["Active", "Pending", "Rejected", "Inactive", "Draft"];
+const TAB_LABEL = { Active: "Live", Pending: "Waiting for OK", Rejected: "Needs changes", Inactive: "Paused", Draft: "Drafts" };
 const TAB_STATUS = { Active: "active", Pending: "pending_approval", Rejected: "rejected", Inactive: "inactive", Draft: "draft" };
 
 export default function ServicesScreen() {
@@ -20,6 +23,7 @@ export default function ServicesScreen() {
     try {
       await setServicePhoto(id, await compressImage(file, { maxDimension: 1600 }));
       loadChanges();
+      loadScore();
     } catch (e) {
       showToast(e.message || "Couldn't update the photo");
     } finally {
@@ -40,8 +44,11 @@ export default function ServicesScreen() {
   const [tab, setTab] = useState("Active");
   const [changes, setChanges] = useState([]);
   const loadChanges = () => api.listServiceChanges().then(setChanges).catch(() => {});
+  const [score, setScore] = useState(null);
+  const loadScore = () => api.getInsights().then((d) => setScore(d.score)).catch(() => {});
   useEffect(() => {
     loadChanges();
+    loadScore();
   }, []);
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState({ name: "", price: "" });
@@ -82,36 +89,35 @@ export default function ServicesScreen() {
   const filtered = services.filter((s) => s.status === TAB_STATUS[tab]);
 
   return (
-    <div className="flex flex-1 flex-col lg:px-8 lg:py-8">
-      <div className="flex items-center justify-between px-4 pt-1 lg:px-0 lg:pt-0">
-        <h1 className="text-lg font-bold text-gray-900 lg:text-2xl">My Services</h1>
-        <button
-          onClick={() => navigate("/services/add")}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-white hover:bg-brand-dark lg:h-10 lg:w-10"
-          aria-label="Add new service"
-        >
-          <PlusIcon width={18} height={18} />
-        </button>
-      </div>
-
-      <div className="no-scrollbar mt-3 flex gap-4 overflow-x-auto border-b border-gray-100 px-4 lg:mt-5 lg:px-0">
-        {TABS.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`relative flex-shrink-0 pb-2.5 text-[13px] font-semibold lg:text-[14px] ${tab === t ? "text-brand" : "text-gray-400"}`}
-          >
-            {t} ({counts[t]})
-            {tab === t && <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-brand" />}
+    <div className="flex flex-1 flex-col pb-4 lg:mx-auto lg:w-full lg:max-w-5xl">
+      <PageTitle
+        eyebrow="What customers can book"
+        title="Your services"
+        right={
+          <button onClick={() => navigate("/services/add")} className="flex h-11 items-center gap-1.5 rounded-[14px] bg-brand-glow px-4 text-[14px] font-extrabold text-ground" aria-label="Add new service">
+            <PlusIcon width={16} height={16} strokeWidth={2.8} /> Add
           </button>
-        ))}
-      </div>
+        }
+      />
 
-      <div className="flex-1 space-y-3 px-4 py-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 lg:px-0 lg:py-6 xl:grid-cols-3">
+      {tab === "Active" && (
+        <div className="mt-4 px-4 lg:px-0">
+          <ServiceScore score={score} services={services} onPhoto={changePhoto} onToggle={(id) => toggleServiceStatus(id).then(loadScore)} photoBusy={photoBusy} />
+        </div>
+      )}
+
+      <PillTabs
+        className="mt-4"
+        value={tab}
+        onChange={setTab}
+        items={TABS.filter((t) => t === "Active" || counts[t] > 0).map((t) => ({ id: t, label: TAB_LABEL[t], count: counts[t] }))}
+      />
+
+      <div className="mt-3 flex-1 space-y-3 px-4 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 lg:px-0 xl:grid-cols-3">
         {filtered.length === 0 && (
           <div className="mt-10 flex flex-col items-center gap-2 text-center lg:col-span-3">
-            <span className="text-3xl">🧰</span>
-            <p className="text-sm text-gray-500">No {tab.toLowerCase()} services.</p>
+            <p className="font-display text-[18px] font-bold text-ink">Nothing here</p>
+            <p className="text-[13px] text-ink-muted">No {TAB_LABEL[tab].toLowerCase()} services.</p>
           </div>
         )}
         {filtered.map((s) => {
@@ -119,7 +125,7 @@ export default function ServicesScreen() {
           const cat = categories.find((c) => c.id === s.categoryId);
           const type = subcategories.find((t) => t.id === s.subcategoryId);
           return (
-          <div key={s.id} className="rounded-2xl border border-gray-100 p-3 shadow-card lg:p-4">
+          <div key={s.id} className="rounded-[22px] bg-card p-4">
           <div className="flex items-center gap-3">
             <div className="relative flex-shrink-0">
               <Pic key={s.imageUrl || "none"} urls={[s.imageUrl, type?.imageUrl, cat?.bannerUrl]} categoryId={s.categoryId} size={56} />
@@ -132,7 +138,12 @@ export default function ServicesScreen() {
               </label>
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13.5px] font-semibold text-gray-900">{s.name}</p>
+              <p className="truncate text-[15px] font-bold text-ink">{s.name}</p>
+              {score?.bookings60 && s.status === "active" && (
+                <p className={`text-[12px] font-semibold ${score.bookings60[s.id] ? "text-go-soft" : "text-ink-muted"}`}>
+                  {score.bookings60[s.id] || 0} booking{score.bookings60[s.id] === 1 ? "" : "s"} in 60 days
+                </p>
+              )}
               {s.imageUrl && !s.imageFromCatalog && (
                 <button onClick={() => removePhoto(s.id)} disabled={photoBusy === s.id} className="text-[10px] font-medium text-gray-400 underline disabled:opacity-50">
                   Remove my photo

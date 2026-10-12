@@ -1,32 +1,35 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { HomeIcon, RequestsIcon, GridIcon, WalletIcon, LogoutIcon } from "./icons";
+import { OrdersIcon, InsightsIcon, ToolIcon, RupeeIcon, GrowIcon, StarIcon, TagIcon, MegaphoneIcon, UsersIcon, DocIcon, CalendarIcon, BellIcon, ShieldCheckIcon, InfoIcon, ProfileIcon, LogoutIcon } from "./icons";
 import { useApp } from "../context/AppContext";
 import LogoMark from "./LogoMark";
 import Avatar from "./Avatar";
 
 // The website's left menu (computer screens only). Phones keep the bottom bar.
 const MAIN = [
-  { to: "/dashboard", label: "Dashboard", Icon: HomeIcon },
-  { to: "/requests", label: "Requests", Icon: RequestsIcon, badge: true, perm: ["orders.view_all", "orders.view_assigned"] },
-  { to: "/services", label: "My services", Icon: GridIcon, perm: ["services.view", "services.manage"] },
-  { to: "/earnings", label: "Earnings", Icon: WalletIcon, perm: "earnings.view" },
+  { to: "/dashboard", label: "Orders", Icon: OrdersIcon, badge: true },
+  { to: "/insights", label: "Insights", Icon: InsightsIcon },
+  { to: "/services", label: "Services", Icon: ToolIcon, perm: ["services.view", "services.manage"] },
+  { to: "/earnings", label: "Money", Icon: RupeeIcon, perm: "earnings.view" },
+  { to: "/grow", label: "Grow", Icon: GrowIcon, end: true },
 ];
 const BUSINESS = [
-  { to: "/profile/ads", label: "Advertisements", emoji: "📢", perm: "ads.manage" },
-  { to: "/profile/staff", label: "Staff", emoji: "👥", perm: ["staff.view", "staff.manage"] },
-  { to: "/profile/documents", label: "Documents & KYC", emoji: "📄", perm: "profile.edit" },
-  { to: "/profile/availability", label: "Availability", emoji: "🗓️", perm: "profile.edit" },
+  { to: "/feedback", label: "Reviews & complaints", Icon: StarIcon },
+  { to: "/grow/offers", label: "Offers", Icon: TagIcon },
+  { to: "/profile/ads", label: "Ads", Icon: MegaphoneIcon, perm: "ads.manage" },
+  { to: "/profile/staff", label: "Staff", Icon: UsersIcon, perm: ["staff.view", "staff.manage"] },
+  { to: "/profile/documents", label: "Documents & KYC", Icon: DocIcon, perm: "profile.edit" },
+  { to: "/profile/availability", label: "Working hours", Icon: CalendarIcon, perm: "profile.edit" },
 ];
 const ACCOUNT = [
-  { to: "/notifications", label: "Notifications", emoji: "🔔" },
-  { to: "/profile/refer", label: "Refer a friend", emoji: "🎁" },
-  { to: "/profile/help", label: "Help & support", emoji: "❓" },
-  { to: "/profile", label: "My profile", emoji: "🙂", end: true },
+  { to: "/notifications", label: "Notifications", Icon: BellIcon },
+  { to: "/ready", label: "Ready check", Icon: ShieldCheckIcon },
+  { to: "/profile/help", label: "Help & support", Icon: InfoIcon },
+  { to: "/profile", label: "My profile", Icon: ProfileIcon, end: true },
 ];
 
 const itemCls = ({ isActive }) =>
   `relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-semibold transition-colors ${
-    isActive ? "bg-brand-light text-brand-dark" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+    isActive ? "bg-ink text-ground" : "text-ink-soft hover:bg-raised hover:text-ink"
   }`;
 
 export default function DesktopSidebar() {
@@ -48,7 +51,7 @@ export default function DesktopSidebar() {
               {Icon ? <Icon width={18} height={18} /> : <span className="w-[18px] text-center text-[15px] leading-none">{emoji}</span>}
               <span className="flex-1">{label}</span>
               {badge && newCount > 0 && (
-                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">{newCount}</span>
+                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-marigold px-1.5 text-[10px] font-extrabold text-marigold-ink">{newCount}</span>
               )}
               {to === "/notifications" && unread > 0 && (
                 <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">{unread}</span>
@@ -61,14 +64,14 @@ export default function DesktopSidebar() {
   };
 
   return (
-    <aside className="hidden w-[248px] flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white px-4 py-5 lg:flex">
+    <aside className="hidden w-[248px] flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-card px-4 py-5 lg:flex">
       <button onClick={() => navigate("/dashboard")} className="flex items-center gap-2.5 px-2">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand text-white">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-night text-white">
           <LogoMark size={21} />
         </span>
         <span className="text-left leading-tight">
-          <span className="block text-[16px] font-extrabold text-gray-900">Tikdum</span>
-          <span className="block text-[11px] font-semibold text-brand">Business</span>
+          <span className="block font-display text-[17px] font-extrabold text-ink">Tikdum</span>
+          <span className="block text-[11px] font-bold uppercase tracking-[0.12em] text-marigold">Business</span>
         </span>
       </button>
 
@@ -84,7 +87,7 @@ export default function DesktopSidebar() {
           <p className="truncate text-[12.5px] font-bold text-gray-900">{provider?.name || "Provider"}</p>
           <p className="truncate text-[10.5px] text-gray-400">{provider?.category || ""}</p>
         </div>
-        <button onClick={logout} title="Log out" className="rounded-lg p-1.5 text-gray-400 hover:bg-white hover:text-red-500">
+        <button onClick={logout} title="Log out" className="rounded-lg p-1.5 text-gray-400 hover:bg-raised hover:text-red-500">
           <LogoutIcon width={16} height={16} />
         </button>
       </div>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { api } from "../api";
-import { BackIcon, ShareIcon, ShieldCheckIcon, ClockIcon, StarIcon } from "../components/icons";
+import { BackIcon, ShareIcon, ShieldCheckIcon, ClockIcon, StarIcon, TagIcon } from "../components/icons";
 import { formatCount, discountPct } from "../utils/format";
 import CategoryPhoto from "../components/CategoryPhoto";
 import CartBar from "../components/CartBar";
@@ -17,6 +17,7 @@ export default function ProviderProfileScreen() {
   const { providers, services, categories, homeLayout, showToast } = useApp();
   const [reviews, setReviews] = useState([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
+  const [offers, setOffers] = useState([]);
   const [group, setGroup] = useState("");
   const counts = homeLayout?.bookingCounts || {};
 
@@ -47,6 +48,10 @@ export default function ProviderProfileScreen() {
       .finally(() => {
         if (!cancelled) setLoadingReviews(false);
       });
+    api
+      .listProviderOffers([providerId])
+      .then((list) => !cancelled && setOffers(list))
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -143,6 +148,20 @@ export default function ProviderProfileScreen() {
         )}
       </div>
 
+      {offers.length > 0 && (
+        <div className="no-scrollbar mt-2 flex gap-2.5 overflow-x-auto bg-white px-4 py-3">
+          {offers.map((o) => (
+            <div key={o.code} className="flex min-w-[220px] flex-shrink-0 items-center gap-3 rounded-2xl border border-dashed border-marigold bg-marigold-light px-3.5 py-2.5">
+              <TagIcon width={20} height={20} className="flex-shrink-0 text-marigold-dark" />
+              <span className="min-w-0">
+                <b className="block text-[14px] text-ink">{o.description}</b>
+                <span className="block text-[12px] text-ink-muted">Applies in your cart · code {o.code}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {groups.length > 1 && (
         <div className="no-scrollbar mt-2 flex gap-2 overflow-x-auto bg-white px-4 py-3">
           {[{ id: "", name: "Most booked" }, ...groups].map((g) => (
@@ -219,6 +238,12 @@ export default function ProviderProfileScreen() {
                   </span>
                 </div>
                 {r.text && <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">{r.text}</p>}
+                {r.reply?.text && (
+                  <div className="mt-2 rounded-xl bg-mist px-3 py-2">
+                    <p className="text-[11.5px] font-bold text-brand-dark">Reply from {provider.name}</p>
+                    <p className="text-[12.5px] leading-snug text-ink-soft">{r.reply.text}</p>
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { MapPinIcon, ClockIcon, XIcon, CheckIcon } from "./icons";
+import { MapPinIcon, ClockIcon, XIcon, CheckIcon, BellIcon } from "./icons";
+import { whenLabel, inr } from "./biz";
 import { startRingtone } from "../utils/ringtone";
 
 const RING_SECONDS = 90;
@@ -86,22 +87,22 @@ export default function RingingOverlay() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6">
-      <div className="w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-2xl">
+      <div className="w-full max-w-sm rounded-[26px] border-[1.5px] border-marigold bg-card p-6 text-center shadow-float">
         <div className="relative mx-auto mb-4 flex h-20 w-20 items-center justify-center">
-          <span className="absolute inset-0 animate-ping rounded-full bg-brand/30" />
-          <span className="relative flex h-16 w-16 items-center justify-center rounded-full bg-brand text-3xl text-white">
-            🔔
+          <span className="absolute inset-0 animate-ping rounded-full bg-marigold/30" />
+          <span className="relative flex h-16 w-16 items-center justify-center rounded-full bg-marigold text-marigold-ink">
+            <BellIcon width={30} height={30} strokeWidth={2.2} />
           </span>
         </div>
 
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-brand">New Booking Request</p>
-        <h2 className="mt-1 text-lg font-bold text-gray-900">{isOrder ? `${lines.length} services` : ringingRequest.service?.name || "Service Request"}</h2>
-        <p className="text-[13px] text-gray-500">{ringingRequest.customer?.name}</p>
+        <p className="text-[12px] font-extrabold uppercase tracking-[0.12em] text-marigold">New request</p>
+        <h2 className="mt-1 font-display text-[22px] font-extrabold leading-tight text-ink">{isOrder ? `${lines.length} services` : ringingRequest.service?.name || "Service request"}</h2>
+        <p className="text-[13.5px] text-ink-muted">{ringingRequest.customer?.name}</p>
 
         <div className="mt-4 space-y-2 rounded-2xl bg-gray-50 p-3 text-left">
           <div className="flex items-center gap-2 text-[12px] text-gray-600">
             <ClockIcon width={14} height={14} className="flex-shrink-0 text-gray-400" />
-            {ringingRequest.date} · {ringingRequest.time}
+            {whenLabel(ringingRequest.date, ringingRequest.time)}
           </div>
           {ringingRequest.address?.line && (
             <div className="flex items-start gap-2 text-[12px] text-gray-600">
@@ -119,35 +120,38 @@ export default function RingingOverlay() {
               ))}
             </ul>
           )}
-          <div className="text-[13px] font-bold text-gray-900">{isOrder ? `Total ₹${orderTotal}` : `₹${ringingRequest.amount}`}</div>
+          <div className="flex items-baseline justify-between border-t border-gray-200 pt-2">
+            <span className="text-[12.5px] text-ink-muted">You collect after the job</span>
+            <span className="font-display text-[20px] font-extrabold text-ink tabular">{inr(isOrder ? orderTotal : ringingRequest.amount)}</span>
+          </div>
         </div>
 
         <div className="mt-4">
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
             <div
-              className="h-full rounded-full bg-brand transition-[width] duration-1000 ease-linear"
+              className="h-full rounded-full bg-marigold transition-[width] duration-1000 ease-linear"
               style={{ width: `${progress}%` }}
             />
           </div>
           <p className="mt-1.5 text-[11px] text-gray-400">
-            Auto-forwards to another provider in {secondsLeft}s if you don't respond
+            Goes to another pro in {secondsLeft}s if you don't answer
           </p>
         </div>
 
-        <div className="mt-5 flex gap-3">
+        <div className="mt-5 grid grid-cols-[1fr_1.6fr] gap-2.5">
           <button
             onClick={handleDecline}
             disabled={busy}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl border border-red-200 py-3 text-sm font-semibold text-red-600 disabled:opacity-50"
+            className="flex h-[52px] items-center justify-center gap-1.5 rounded-2xl border-[1.5px] border-gray-300 text-[15px] font-extrabold text-ink disabled:opacity-50"
           >
             <XIcon width={16} height={16} /> Decline
           </button>
           <button
             onClick={handleAccept}
             disabled={busy}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl bg-brand py-3 text-sm font-semibold text-white shadow-card disabled:opacity-50"
+            className="flex h-[52px] items-center justify-center gap-1.5 rounded-2xl bg-go text-[16px] font-extrabold text-go-ink disabled:opacity-50"
           >
-            <CheckIcon width={16} height={16} /> Accept
+            <CheckIcon width={18} height={18} strokeWidth={2.8} /> Accept
           </button>
         </div>
       </div>
