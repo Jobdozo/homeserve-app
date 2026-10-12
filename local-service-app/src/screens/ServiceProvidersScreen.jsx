@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
+import { useCatalogService, CatalogLoading } from "../utils/useCatalogItem";
 import { useNavigate, useParams } from "react-router-dom";
 import useIsDesktop from "../utils/useIsDesktop";
 import { useApp } from "../context/AppContext";
@@ -29,9 +30,12 @@ export default function ServiceProvidersScreen() {
   const { serviceId } = useParams();
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
-  const { services, categories, getProvider } = useApp();
+  const { services, categories, getProvider, loadCatalogScope } = useApp();
 
-  const anchor = useMemo(() => services.find((s) => s.id === serviceId), [services, serviceId]);
+  const { service: anchor, looking } = useCatalogService(serviceId);
+  useEffect(() => {
+    if (anchor?.categoryId) loadCatalogScope({ category: anchor.categoryId });
+  }, [anchor?.categoryId, loadCatalogScope]);
   const category = categories.find((c) => c.id === anchor?.categoryId);
 
   const vendors = useMemo(() => {
@@ -42,6 +46,7 @@ export default function ServiceProvidersScreen() {
       .sort((a, b) => b.service.rating - a.service.rating || a.service.price - b.service.price);
   }, [services, anchor, getProvider]);
 
+  if (!anchor && looking) return <CatalogLoading />;
   if (!anchor) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">

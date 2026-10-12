@@ -280,17 +280,32 @@ export function AppProvider({ children }) {
   // "coming soon to your area" message wait for a real answer instead of
   // flashing while a new PIN's catalog (or a failed request) is pending.
   const [catalogPin, setCatalogPin] = useState(null);
+  // Scaling step 1: the first load holds the top services of each category at this
+  // PIN (catalogCounts = how many there really are). When some were left out, a
+  // screen asks for the rest of its category, provider or search, page by page.
+  const [catalogCounts, setCatalogCounts] = useState({});
+  const catalogScope = useRef({ pin: undefined, partial: false, loaded: new Set(), typePicture: new Map() });
+  // A service with no picture of its own shows its type's picture (the one drawn or uploaded for the type).
+  const withTypePicture = (x) => {
+    const pic = catalogScope.current.typePicture.get(x.subcategoryId);
+    return x.imageUrl || !pic ? x : { ...x, imageUrl: pic };
+  };
   const loadCatalog = useCallback(async (pincode) => {
     const reqId = ++catalogReq.current;
     try {
       const [boot, layout] = await Promise.all([api.bootstrap(pincode), api.getHomeLayout().catch(() => null)]);
       if (reqId !== catalogReq.current) return; // a newer PIN's request superseded this one
+      catalogScope.current = {
+        pin: pincode,
+        partial: !!boot.partial,
+        loaded: new Set(),
+        typePicture: new Map((boot.subcategories || []).filter((x) => x.imageUrl).map((x) => [x.id, x.imageUrl])),
+      };
+      setCatalogCounts(boot.counts || {});
       setProviders(Object.fromEntries(boot.providers.map((p) => [p.id, p])));
       setCategories(boot.categories);
       setSubcategories(boot.subcategories || []);
-      // A service with no picture of its own shows its type's picture (the one drawn or uploaded for the type).
-      const typePicture = new Map((boot.subcategories || []).filter((x) => x.imageUrl).map((x) => [x.id, x.imageUrl]));
-      setServices(boot.services.map((x) => (x.imageUrl || !typePicture.has(x.subcategoryId) ? x : { ...x, imageUrl: typePicture.get(x.subcategoryId) })));
+      setServices(boot.services.map(withTypePicture));
       setCatalogPin(pincode || "");
       if (layout) {
         setBanners(layout.banners || []);
@@ -315,6 +330,108 @@ export function AppProvider({ children }) {
   }, [activePincode]);
 
   const reloadCatalog = useCallback(() => loadCatalog(activePincode || undefined), [loadCatalog, activePincode]);
+
+  // Merge services fetched later into the list. A list-card copy (lite) never
+  // replaces the fuller copy a details page already loaded.
+  const mergeCatalog = useCallback((list = [], provs = []) => {
+    if (provs.length) setProviders((prev) => ({ ...prev, ...Object.fromEntries(provs.map((p) => [p.id, { ...prev[p.id], ...p }])) }));
+    if (!list.length) return;
+    setServices((prev) => {
+      const byId = new Map(prev.map((s) => [s.id, s]));
+      for (const raw of list) {
+        const s = withTypePicture(raw);
+        const had = byId.get(s.id);
+        byId.set(s.id, had && !had.lite && s.lite ? { ...had, ...s, lite: false, includes: had.includes, highlights: had.highlights } : { ...had, ...s });
+      }
+      return [...byId.values()];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Everything for one category or provider (params: { category } or { provider }),
+  // fetched only when the first load left some out; once per PIN.
+  const loadCatalogScope = useCallback(
+    async (params) => {
+      const scope = catalogScope.current;
+      const key = JSON.stringify(params);
+      if (!scope.partial || scope.loaded.has(key)) return;
+      scope.loaded.add(key);
+      try {
+        for (let offset = 0, i = 0; i < 20; i++) {
+          const page = await api.catalog({ ...params, pincode: scope.pin, offset, limit: 100 });
+          if (catalogScope.current !== scope) return; // the PIN changed meanwhile
+          mergeCatalog(page.services, page.providers);
+          offset += page.services.length;
+          if (!page.services.length || offset >= page.total) break;
+        }
+      } catch (e) {
+        scope.loaded.delete(key);
+        console.error("Failed to load more of the catalogue", e);
+      }
+    },
+    [mergeCatalog]
+  );
+
+  // Server-side search, for when the first load didn't hold the whole catalogue.
+  const searchCatalog = useCallback(
+    async (q) => {
+      const scope = catalogScope.current;
+      if (!scope.partial || String(q || "").trim().length < 2) return;
+      try {
+        const page = await api.catalog({ q: q.trim(), pincode: scope.pin, limit: 60 });
+        if (catalogScope.current === scope) mergeCatalog(page.services, page.providers);
+      } catch (e) {
+        console.error("Catalogue search failed", e);
+      }
+    },
+    [mergeCatalog]
+  );
+
+  // A service or provider the app refers to but hasn't loaded (a cart line, a past
+  // booking's provider, a shared link), or a service page that needs its full details.
+  // key -> the request in flight (or done), so a second ask waits on the first.
+  const fetching = useRef(new Map());
+  // Only services offered at the customer's PIN come back, so nothing outside their
+  // area can reach the cart. full: every field, for a service's own page.
+  const ensureServices = useCallback(
+    (ids, { full = false } = {}) => {
+      const scope = catalogScope.current;
+      const keyOf = (id) => `s:${scope.pin || ""}:${full ? "full" : "card"}:${id}`;
+      const unique = [...new Set(ids)].filter(Boolean);
+      const waiting = unique.filter((id) => fetching.current.has(keyOf(id))).map((id) => fetching.current.get(keyOf(id)));
+      const want = unique.filter((id) => !fetching.current.has(keyOf(id))).slice(0, 50);
+      if (want.length) {
+        const req = api
+          .catalog({ ids: want.join(","), pincode: scope.pin, full: full ? 1 : undefined, limit: 100 })
+          .then((page) => {
+            if (catalogScope.current === scope) mergeCatalog(full ? page.services.map((x) => ({ ...x, lite: false })) : page.services, page.providers);
+          })
+          .catch(() => want.forEach((id) => fetching.current.delete(keyOf(id))));
+        want.forEach((id) => fetching.current.set(keyOf(id), req));
+        waiting.push(req);
+      }
+      return Promise.all(waiting);
+    },
+    [mergeCatalog]
+  );
+  const ensureService = useCallback((id, opts) => ensureServices([id], opts), [ensureServices]);
+  const ensureProvider = useCallback(
+    (id) => {
+      const key = `p:${id}`;
+      if (!id) return Promise.resolve();
+      if (!fetching.current.has(key)) {
+        fetching.current.set(
+          key,
+          api
+            .getProvider(id)
+            .then((p) => mergeCatalog([], [p]))
+            .catch(() => {})
+        );
+      }
+      return fetching.current.get(key);
+    },
+    [mergeCatalog]
+  );
   // No providers at all in the customer's area (only once we really know).
   const catalogReady = catalogPin !== null && catalogPin === (activePincode || "");
   const noCoverage = !!activePincode && catalogReady && services.length === 0;
@@ -496,6 +613,16 @@ export function AppProvider({ children }) {
 
   const getService = useCallback((id) => services.find((s) => s.id === id), [services]);
   const getProvider = useCallback((id) => providers[id], [providers]);
+
+  // Fill in what's referred to but not loaded: cart services, booking and service providers.
+  useEffect(() => {
+    if (catalogPin === null) return;
+    const have = new Set(services.map((s) => s.id));
+    const missing = cart.map((c) => c.serviceId).filter((id) => !have.has(id));
+    if (missing.length) ensureServices(missing);
+    const wanted = new Set([...bookings.map((b) => b.providerId), ...services.map((s) => s.providerId)]);
+    for (const id of wanted) if (id && !providers[id]) ensureProvider(id);
+  }, [catalogPin, cart, bookings, services, providers, ensureServices, ensureProvider]);
   const getBooking = useCallback((id) => bookings.find((b) => b.id === id), [bookings]);
 
   const createBooking = useCallback(async ({ serviceId, date, time, address, issue }) => {
@@ -699,6 +826,11 @@ export function AppProvider({ children }) {
       noCoverage,
       catalogReady,
       reloadCatalog,
+      catalogCounts,
+      loadCatalogScope,
+      searchCatalog,
+      ensureService,
+      ensureProvider,
       notifications,
       markNotificationRead,
       markAllNotificationsRead,
@@ -757,6 +889,11 @@ export function AppProvider({ children }) {
       noCoverage,
       catalogReady,
       reloadCatalog,
+      catalogCounts,
+      loadCatalogScope,
+      searchCatalog,
+      ensureService,
+      ensureProvider,
       notifications,
       markNotificationRead,
       markAllNotificationsRead,

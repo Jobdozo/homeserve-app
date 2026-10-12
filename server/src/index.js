@@ -38,6 +38,7 @@ const providerAdmin = require("./providerAdmin");
 const partnerHub = require("./partnerHub");
 const rateLimit = require("./rateLimit");
 const health = require("./health");
+const catalogView = require("./catalogView");
 const jsonStore = require("./jsonStore");
 auth.setBlockCheck(blockedPhones.isBlocked);
 const liveLocation = require("./liveLocation");
@@ -469,7 +470,49 @@ app.get("/api/bootstrap", ah(async (req, res) => {
     store.listCategories(),
     store.listServices({ activeOnly: true, pincode }),
   ]);
-  res.json({ providers: providers.map(publicProvider), categories: categories.filter((c) => c.active), subcategories: subcategories.list(), services });
+  const base = { categories: categories.filter((c) => c.active), subcategories: subcategories.list() };
+  // Apps from before scaling step 1 get everything, as they always did.
+  if (req.query.lite !== "1") return res.json({ ...base, providers: providers.map(publicProvider), services });
+  // lite: the first PER_CATEGORY services of each category at this PIN, trimmed for list
+  // cards, and only their providers; the app asks /api/catalog for the rest when needed.
+  const counts = await store.getServiceBookingCounts().catch(() => ({}));
+  const capped = catalogView.capPerCategory(catalogView.rankServices(services, counts));
+  res.json({
+    ...base,
+    services: capped.services.map(catalogView.slimService),
+    providers: catalogView.providersFor(capped.services, providers).map(publicProvider),
+    counts: capped.counts,
+    partial: capped.partial,
+  });
+}));
+
+// One page of the catalogue at a PIN: by category, type, provider or search words.
+app.get("/api/catalog", ah(async (req, res) => {
+  const str = (v) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 120) : undefined);
+  const pincode = str(req.query.pincode);
+  const [services, providers, categories, counts] = await Promise.all([
+    store.listServices({ activeOnly: true, pincode }),
+    store.listProviders(),
+    store.listCategories(),
+    store.getServiceBookingCounts().catch(() => ({})),
+  ]);
+  const names = Object.fromEntries([...categories.map((c) => [c.id, c.name]), ...subcategories.list().map((t) => [t.id, t.name])]);
+  // ids: these services, if they are offered at this PIN (a cart, a shared link); full=1 keeps every field.
+  const ids = str(req.query.ids)?.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 50);
+  const page = catalogView.catalogPage(services, {
+    ids,
+    category: str(req.query.category),
+    subcategory: str(req.query.subcategory),
+    providerId: str(req.query.provider),
+    q: str(req.query.q),
+    offset: req.query.offset,
+    limit: req.query.limit,
+    bookingCounts: counts,
+    names,
+  });
+  const pageProviders = await store.withCustomerHighlights(catalogView.providersFor(page.services, providers));
+  const full = req.query.full === "1" && ids;
+  res.json({ ...page, services: full ? page.services : page.services.map(catalogView.slimService), providers: pageProviders.map(publicProvider) });
 }));
 
 // ---- customer's registered address (drives PIN-code catalog visibility) ----

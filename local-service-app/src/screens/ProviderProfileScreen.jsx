@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useCatalogProvider, CatalogLoading } from "../utils/useCatalogItem";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { api } from "../api";
@@ -14,14 +15,18 @@ import { RatingPill, AddButton, ProviderMark, SectionTitle, OfferTag, expLabel, 
 export default function ProviderProfileScreen() {
   const { providerId } = useParams();
   const navigate = useNavigate();
-  const { providers, services, categories, homeLayout, showToast } = useApp();
+  const { services, categories, homeLayout, showToast, loadCatalogScope, catalogReady } = useApp();
+  const { provider: catalogProvider, looking } = useCatalogProvider(providerId);
+  useEffect(() => {
+    if (catalogReady && providerId) loadCatalogScope({ provider: providerId });
+  }, [catalogReady, providerId, loadCatalogScope]);
   const [reviews, setReviews] = useState([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
   const [offers, setOffers] = useState([]);
   const [group, setGroup] = useState("");
   const counts = homeLayout?.bookingCounts || {};
 
-  const provider = providers[providerId];
+  const provider = catalogProvider;
   const providerServices = useMemo(
     () => services.filter((s) => s.providerId === providerId).sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0) || b.reviewCount - a.reviewCount),
     [services, providerId, counts]
@@ -57,6 +62,7 @@ export default function ProviderProfileScreen() {
     };
   }, [providerId]);
 
+  if (!provider && looking) return <CatalogLoading />;
   if (!provider) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">

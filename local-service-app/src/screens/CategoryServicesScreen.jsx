@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import useIsDesktop from "../utils/useIsDesktop";
 import { useApp } from "../context/AppContext";
@@ -24,7 +24,10 @@ export default function CategoryServicesScreen() {
   const { categoryId } = useParams();
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
-  const { categories, subcategories, services, catalogReady, homeLayout } = useApp();
+  const { categories, subcategories, services, catalogReady, homeLayout, loadCatalogScope } = useApp();
+  useEffect(() => {
+    if (catalogReady && categoryId) loadCatalogScope({ category: categoryId });
+  }, [catalogReady, categoryId, loadCatalogScope]);
   const [filter, setFilter] = useState("");
   const counts = homeLayout?.bookingCounts || {};
   const [params, setParams] = useSearchParams();

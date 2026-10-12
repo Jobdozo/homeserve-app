@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
@@ -35,7 +35,10 @@ function sortServices(services, sort) {
 
 export default function AllServicesScreen() {
   const navigate = useNavigate();
-  const { services, noCoverage } = useApp();
+  const { services, noCoverage, catalogReady, loadCatalogScope } = useApp();
+  useEffect(() => {
+    if (catalogReady) loadCatalogScope({});
+  }, [catalogReady, loadCatalogScope]);
   const [sort, setSort] = useState("popular");
 
   const sorted = useMemo(() => dedupeByName(sortServices(services, sort)), [services, sort]);

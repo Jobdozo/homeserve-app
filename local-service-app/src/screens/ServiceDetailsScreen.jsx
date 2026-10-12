@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useCatalogService, CatalogLoading } from "../utils/useCatalogItem";
 import { useNavigate, useParams } from "react-router-dom";
 import useIsDesktop from "../utils/useIsDesktop";
 import { BackIcon, CheckIcon } from "../components/icons";
@@ -16,9 +17,9 @@ export default function ServiceDetailsScreen() {
   const { serviceId } = useParams();
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
-  const { getService, getProvider, cart, categories } = useApp();
+  const { getProvider, cart, categories } = useApp();
   const addService = useAddService();
-  const service = getService(serviceId);
+  const { service, looking } = useCatalogService(serviceId, { full: true });
   const provider = service ? getProvider(service.providerId) : null;
   const pct = service ? discountPct(service.price, service.originalPrice) : 0;
   const inCart = service ? cart.some((item) => item.serviceId === service.id) : false;
@@ -32,6 +33,7 @@ export default function ServiceDetailsScreen() {
     api.registerAdClick(service.id).catch(() => {});
   }, [service?.id, service?.isAd]);
 
+  if (!service && looking) return <CatalogLoading />;
   if (!service) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">

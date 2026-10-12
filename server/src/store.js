@@ -4930,6 +4930,7 @@ module.exports = {
   deleteOffer,
   validateOffer,
   checkOffer,
+  getServiceBookingCounts,
   getSettings,
   updateSettings,
   getProviderNotificationPrefs,

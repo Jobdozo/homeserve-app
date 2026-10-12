@@ -8,7 +8,7 @@ import CartBar from "../components/CartBar";
 
 export default function SearchScreen() {
   const navigate = useNavigate();
-  const { categories, services } = useApp();
+  const { categories, services, searchCatalog } = useApp();
   const routeState = useLocation().state;
   const [query, setQuery] = useState(routeState?.q || "");
   const inputRef = useRef(null);
@@ -16,6 +16,12 @@ export default function SearchScreen() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // When the first load held only the top services, the server searches the rest.
+  useEffect(() => {
+    const t = setTimeout(() => searchCatalog(query), 350);
+    return () => clearTimeout(t);
+  }, [query, searchCatalog]);
 
   const q = query.trim().toLowerCase();
 

@@ -50,7 +50,12 @@ export const api = {
     request("/auth/otp/verify", { method: "POST", body: JSON.stringify({ phone, code, role, name }) }),
   me: () => request("/auth/me"),
 
-  bootstrap: (pincode) => request(`/bootstrap${pincode ? `?pincode=${encodeURIComponent(pincode)}` : ""}`),
+  // lite: the first services of each category at this PIN, trimmed for list cards (scaling step 1);
+  // the rest come from catalog() when a screen needs them.
+  bootstrap: (pincode) => request(`/bootstrap?lite=1${pincode ? `&pincode=${encodeURIComponent(pincode)}` : ""}`),
+  catalog: (params) =>
+    request(`/catalog?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")).toString()}`),
+  getProvider: (id) => request(`/providers/${encodeURIComponent(id)}`),
   listBookings: () => request("/bookings"),
   createBooking: (data) => request("/bookings", { method: "POST", body: JSON.stringify(data) }),
   createOrder: (data) => request("/orders", { method: "POST", body: JSON.stringify(data) }),
