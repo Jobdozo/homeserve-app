@@ -1,4 +1,5 @@
-FROM node:20-alpine
+# Node 24: its built-in SQLite (node:sqlite) holds the server's own records (see src/jsonStore.js).
+FROM node:24-alpine
 WORKDIR /app
 COPY package*.json ./
 # The VPS build network is slow to reach the npm registry: generous timeouts/retries, IPv4 first.

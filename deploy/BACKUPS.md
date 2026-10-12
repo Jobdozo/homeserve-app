@@ -7,6 +7,9 @@ Every night the VPS runs `tikdum-backup` (installed by `deploy/install-backup.sh
 1. **Database export** — every table of the main database (customers, providers,
    services, bookings, messages, notifications…) is read from Firebase Data Connect
    and written as JSON to `/root/tikdum-data/db-export/`.
+   The server's own records (settings, wallets, coverage, KYC, staff, complaints …)
+   live in `/root/tikdum-data/records.db` (SQLite, since scaling step 2); the same
+   step saves a consistent copy of it as `records-backup.db`.
 2. **Data-folder archive** — `/root/tikdum-data` (JSON records, `db-export/`,
    `uploads/` = service photos, KYC documents, job photos, complaint evidence) is
    packed into `/root/tikdum-backups/daily/tikdum-data-<date>.tar.gz`.
@@ -73,6 +76,14 @@ Supabase is on) `copied off-server`. Anything with `FAILED` needs attention. The
 is 2 if only the database export failed (the folder backup still ran), 1 for other failures.
 
 ## Restore
+
+**Only the server's own records** (wallets, settings, KYC …) went wrong: stop the server,
+replace `records.db` with `records-backup.db` from the archive (delete `records.db-wal` and
+`records.db-shm` next to it), start the server.
+
+**Going back to a server version from before scaling step 2** (it read `<name>.json` files):
+rename each `<name>.json.migrated` in `/root/tikdum-data` back to `<name>.json` first —
+changes made since the move are only in `records.db`.
 
 **From a local backup**
 

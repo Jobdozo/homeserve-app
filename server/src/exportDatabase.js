@@ -11,6 +11,7 @@
 const fs = require("fs");
 const path = require("path");
 const { query } = require("./dataconnect");
+const jsonStore = require("./jsonStore");
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", "data");
 const OUT_DIR = path.join(DATA_DIR, "db-export");
@@ -45,7 +46,17 @@ async function readAllRows(name, fields) {
   }
 }
 
+// The server's own records (settings, wallets, KYC, staff …) as one consistent
+// SQLite copy, taken first so the folder backup always has it, even when the
+// main-database export below fails. Restore: see deploy/BACKUPS.md.
+function snapshotRecords() {
+  const dest = jsonStore.snapshot(path.join(DATA_DIR, "records-backup.db"));
+  const n = Object.values(jsonStore.counts()).reduce((a, b) => a + b, 0);
+  console.log(`records snapshot ok: ${n} rows -> ${path.basename(dest)}`);
+}
+
 async function main() {
+  snapshotRecords();
   const tmp = `${OUT_DIR}.tmp`;
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.mkdirSync(tmp, { recursive: true });
