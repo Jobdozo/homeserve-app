@@ -7,10 +7,8 @@
 //   serviceSubcategories { id (the service id), subcategoryId }
 // A service has at most one sub-category, and it must belong to the service's
 // own category.
-const fs = require("fs");
-const path = require("path");
 const jsonStore = require("./jsonStore");
-const { UPLOADS_DIR, removeFile } = require("./uploads");
+const { removeFile } = require("./uploads");
 
 const SUBS = "subcategories";
 const LINKS = "serviceSubcategories";
