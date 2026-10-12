@@ -156,6 +156,7 @@ async function syncUploads({ cfg = objectStorage.config(), client = objectStorag
     }
     status.pending = names.length - (ready.slice(0, PER_RUN).length - failed);
     status.failed = failed;
+    if (!failed) status.lastError = null; // an old error isn't shown once a run goes through
     status.lastRunAt = new Date(now).toISOString();
     return status;
   } finally {
