@@ -67,7 +67,7 @@ app.use(express.json());
 // Photos copied to cloud storage go to its CDN; everything else is served from here (see uploads.js).
 app.use("/uploads", uploads.serveUpload);
 // Flood protection for the whole API (see rateLimit.js); /api/health is never limited.
-app.use("/api", rateLimit.apiLimits);
+app.use("/api", health.countRequest, rateLimit.apiLimits);
 
 // Every authenticated provider request doubles as a presence heartbeat for
 // Live Service Provider Monitoring (the app polls every ~30s while open).
@@ -451,6 +451,7 @@ app.get("/api/health", ah(async (req, res) => {
     uptimeMin: Math.round((Date.now() - STARTED_AT) / 60000),
     database,
     backup: health.backupHealth(),
+    load: health.serverLoad(),
     uploads: uploads.cloudStatus(),
     limits: rateLimit.stats(),
   });
@@ -3097,6 +3098,7 @@ process.on("uncaughtException", (err) => console.error("Uncaught exception:", er
 
 server.listen(PORT, () => {
   uploads.startCloudSync();
+  health.startLoadMonitor();
   console.log(`Tikdum API + realtime server listening on http://localhost:${PORT}`);
 });
 

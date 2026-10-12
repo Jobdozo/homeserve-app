@@ -52,3 +52,10 @@ test("database health: ok, error, timeout", async () => {
   assert.equal(await health.databaseHealth(async () => { throw new Error("down"); }), "error");
   assert.equal(await health.databaseHealth(() => new Promise(() => {}), 20), "error");
 });
+
+test("server load: busy only on sustained high CPU or slow responses", () => {
+  assert.equal(health.judgeLoad({ cpuPct: 12, loopP99Ms: 30 }), false);
+  assert.equal(health.judgeLoad({ cpuPct: health.BUSY_CPU_PCT, loopP99Ms: 30 }), true);
+  assert.equal(health.judgeLoad({ cpuPct: 20, loopP99Ms: health.BUSY_LOOP_P99_MS }), true);
+  assert.equal(health.serverLoad(), null); // nothing until the first 5-minute window ends
+});

@@ -1,7 +1,8 @@
 name: uptime
 
 # Every 10 minutes from outside the server: the three websites answer, the API and
-# its database answer (/api/health), and last night's backup worked. A failed run
+# its database answer (/api/health), last night's backup worked, and the API isn't
+# overloaded (the sign that scaling step 4, more than one server, is due). A failed run
 # is the alert — GitHub emails the account that last changed this schedule.
 # GitHub may start scheduled runs a few minutes late; that's fine for this.
 on:
@@ -51,4 +52,17 @@ jobs:
               sys.exit(1)
           if b.get("offsite") == "off":
               print("::warning::Backups are only on the VPS — turn on the off-server copy (deploy/BACKUPS.md)")
+          PY
+
+      - name: Server load
+        if: always()
+        run: |
+          [ -s health.json ] || exit 0
+          python3 - <<'PY'
+          import json, sys
+          load = json.load(open("health.json")).get("load")
+          print("load:", json.dumps(load))
+          if load and load.get("busy"):
+              print(f"::error::The API has been busy for 5 minutes (CPU {load.get('cpuPct')}%, slowest responses {load.get('loopP99Ms')} ms) — time for scaling step 4, more than one server")
+              sys.exit(1)
           PY
