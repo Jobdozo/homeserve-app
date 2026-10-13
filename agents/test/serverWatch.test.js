@@ -9,7 +9,7 @@ const serverWatch = require("../src/serverWatch");
 
 // Each test starts with nothing remembered.
 const stateFile = () => path.join(process.env.AGENT_STATE_DIR, "server-watch.json");
-const reset = () => fs.writeFileSync(stateFile(), JSON.stringify({ hello: "2026-10-13T00:00:00Z" }));
+const reset = () => fs.writeFileSync(stateFile(), JSON.stringify({ helloAt: "2026-10-13T00:00:00Z" }));
 const silent = { info() {}, warn() {}, error() {} };
 const cfg = { healthRemindHours: 6, refusedAlert: 300 };
 const good = { ok: true, database: "ok", backup: { state: "ok", ageHours: 3 }, load: { busy: false, cpuPct: 2, loopP99Ms: 20, requestsPerMin: 40 }, uploads: { enabled: true, failed: 0, lastError: null }, limits: { refused: 0 } };

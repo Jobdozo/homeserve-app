@@ -81,11 +81,12 @@ async function check(client, log, { now = Date.now(), health, cfg = config.opera
   const found = problems(h, { missed: st.missed, refusedDelta }, cfg);
   const sent = [];
 
-  // Once, the first time it runs: proof that these messages reach the owner.
-  if (!st.hello && h) {
+  // Once, the first time it runs: proof that these messages reach the owner. (helloAt,
+  // not the first version's "hello": that one went as free text WhatsApp dropped.)
+  if (!st.helloAt && h) {
     const r = await tellOwner(client, "✅ Server watch is on. I check the Tikdum server every 5 minutes and will message you here if the API or database goes down, a backup fails, the server gets busy, or photos stop copying to cloud storage — and again when it's fixed.");
     if (r.reached) {
-      st.hello = new Date(now).toISOString();
+      st.helloAt = new Date(now).toISOString();
       sent.push(r.delivered ? "hello" : "hello (not delivered)");
     }
   }

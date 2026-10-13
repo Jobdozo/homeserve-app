@@ -2760,10 +2760,15 @@ app.post("/api/agents/notify-owner", agentOnly, crm(async (req, res) => {
   const message = `[${req.admin.name}] ${text}`;
   const results = [];
   for (const phone of auth.adminPhones()) {
-    // Free text only arrives within 24h of the owner writing to the business number;
-    // outside that, the approved notice template (when set up) still gets through.
-    let ok = await whatsapp.sendWhatsAppMessage(phone, message).catch(() => false);
-    if (!ok && whatsapp.noticeTemplate()) ok = (await whatsapp.sendNoticeTemplate(phone, { message, name: "Owner" }).catch(() => ({}))).ok === true;
+    // Free text only arrives within 24h of the owner writing to the business number.
+    // MSG91 accepts it either way and WhatsApp drops it later, so a failed send can't
+    // be relied on to tell us: outside the window, use the approved notice template.
+    const lastAt = office.ownerLastWhatsAppAt(phone);
+    const open = Boolean(lastAt && Date.now() - Date.parse(lastAt) < 23 * 3600 * 1000);
+    const template = !open && whatsapp.noticeTemplate();
+    const ok = template
+      ? (await whatsapp.sendNoticeTemplate(phone, { message, name: "Owner" }).catch(() => ({}))).ok === true
+      : await whatsapp.sendWhatsAppMessage(phone, message).catch(() => false);
     results.push(ok);
   }
   res.json({ delivered: results.filter(Boolean).length, attempted: results.length });

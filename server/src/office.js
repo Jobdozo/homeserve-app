@@ -190,6 +190,18 @@ function addOwnerWhatsApp(phone, text, waId) {
   return addMessage("ceo", { type: "person", id: `admin:${phone}`, name: "Owner (WhatsApp)" }, text, { channel: "whatsapp", bypassCaps: true, phone, waId });
 }
 
+// When the owner last wrote to the business number on WhatsApp (ISO time), or null.
+// WhatsApp only delivers free text within 24 hours of that.
+function ownerLastWhatsAppAt(phone) {
+  const last10 = (x) => String(x || "").replace(/D/g, "").slice(-10);
+  const p = last10(phone);
+  let at = null;
+  for (const m of jsonStore.readAll(MESSAGES)) {
+    if (m.channel === "whatsapp" && m.from?.type === "person" && m.phone && last10(m.phone) === p && (!at || m.at > at)) at = m.at;
+  }
+  return at;
+}
+
 // ---- weekly goals ----
 function proposeGoal(text, actor) {
   const body = str(text, 300);
@@ -224,6 +236,6 @@ function decideGoal(id, decision, actor) {
 module.exports = {
   STATUSES, PRIORITIES, LIMITS, weekOf,
   createTask, listTasks, getTask, updateTask, decideTask,
-  addMessage, listMessages, pendingForCeo, whatsappReplyTarget, addOwnerWhatsApp,
+  addMessage, listMessages, pendingForCeo, whatsappReplyTarget, addOwnerWhatsApp, ownerLastWhatsAppAt,
   proposeGoal, listGoals, decideGoal,
 };
