@@ -3134,6 +3134,7 @@ process.on("uncaughtException", (err) => console.error("Uncaught exception:", er
 server.listen(PORT, () => {
   uploads.startCloudSync();
   health.startLoadMonitor();
+  store.warmCatalog();
   console.log(`Tikdum API + realtime server listening on http://localhost:${PORT}`);
 });
 

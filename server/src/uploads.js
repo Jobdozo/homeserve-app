@@ -76,6 +76,9 @@ const PRIVATE = "privateUploads"; // { id: file name } — never goes to the pub
 const SAFE_NAME = /^[A-Za-z0-9._-]+$/;
 const SETTLE_MS = 60 * 1000; // a file this new may not have its record (KYC, job photo …) saved yet
 const PER_RUN = 200;
+// Upload names are random and never reused, so a public photo can be kept for a year
+// by phones and the CDN instead of being re-checked on every app open.
+const PHOTO_CACHE = "public, max-age=31536000, immutable";
 
 const CONTENT_TYPES = {
   ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif",
@@ -144,8 +147,8 @@ async function syncUploads({ cfg = objectStorage.config(), client = objectStorag
     for (const name of ready.slice(0, PER_RUN)) {
       const bucket = priv.has(name) ? "private" : "public";
       try {
-        await client.putObject(cfg, bucket === "private" ? cfg.privateBucket : cfg.publicBucket, name, fs.readFileSync(path.join(dir, name)), contentTypeOf(name));
-        const rec = { id: name, bucket, at: new Date(now).toISOString() };
+        await client.putObject(cfg, bucket === "private" ? cfg.privateBucket : cfg.publicBucket, name, fs.readFileSync(path.join(dir, name)), contentTypeOf(name), bucket === "public" ? PHOTO_CACHE : undefined);
+        const rec = { id: name, bucket, at: new Date(now).toISOString(), ...(bucket === "public" ? { cached: true } : {}) };
         jsonStore.insert(CLOUD, rec);
         done.set(name, rec);
         status.copied += 1;
@@ -154,9 +157,25 @@ async function syncUploads({ cfg = objectStorage.config(), client = objectStorag
         status.lastError = String(e.message || e).slice(0, 200);
       }
     }
+    // Public photos copied before PHOTO_CACHE existed: copy them again with it, a batch per run.
+    let recopy = PER_RUN - ready.slice(0, PER_RUN).length;
+    let recopyFailed = 0;
+    for (const rec of done.values()) {
+      if (recopy <= 0) break;
+      if (rec.bucket !== "public" || rec.cached || !fs.existsSync(path.join(dir, rec.id))) continue;
+      recopy -= 1;
+      try {
+        await client.putObject(cfg, cfg.publicBucket, rec.id, fs.readFileSync(path.join(dir, rec.id)), contentTypeOf(rec.id), PHOTO_CACHE);
+        Object.assign(rec, jsonStore.update(CLOUD, rec.id, { cached: true }) || { cached: true });
+      } catch (e) {
+        recopyFailed += 1;
+        status.lastError = String(e.message || e).slice(0, 200);
+        break; // try the rest next run
+      }
+    }
     status.pending = names.length - (ready.slice(0, PER_RUN).length - failed);
-    status.failed = failed;
-    if (!failed) status.lastError = null; // an old error isn't shown once a run goes through
+    status.failed = failed + recopyFailed;
+    if (!failed && !recopyFailed) status.lastError = null; // an old error isn't shown once a run goes through
     status.lastRunAt = new Date(now).toISOString();
     return status;
   } finally {

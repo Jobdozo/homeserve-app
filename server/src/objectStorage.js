@@ -58,13 +58,13 @@ function objectUrl(c, bucket, key) {
   return `${c.endpoint}/${encodePath(bucket)}/${encodePath(key)}`;
 }
 
-async function send(c, method, bucket, key, { body, contentType } = {}) {
+async function send(c, method, bucket, key, { body, contentType, cacheControl } = {}) {
   const url = objectUrl(c, bucket, key);
   const payload = body || Buffer.alloc(0);
   const { headers } = signRequest({
     method,
     url,
-    headers: contentType ? { "content-type": contentType } : {},
+    headers: { ...(contentType ? { "content-type": contentType } : {}), ...(cacheControl ? { "cache-control": cacheControl } : {}) },
     payloadHash: sha256(payload),
     region: c.region,
     accessKeyId: c.accessKeyId,
@@ -83,8 +83,9 @@ async function errorText(res) {
   return `${res.status}${code ? ` ${code}` : ""}: ${message || body.replace(/<[^>]+>/g, " ").trim().slice(0, 160)}`;
 }
 
-async function putObject(c, bucket, key, body, contentType) {
-  const res = await send(c, "PUT", bucket, key, { body, contentType });
+// cacheControl: how long phones and the CDN may keep the file (e.g. a photo whose name never changes).
+async function putObject(c, bucket, key, body, contentType, cacheControl) {
+  const res = await send(c, "PUT", bucket, key, { body, contentType, cacheControl });
   if (!res.ok) throw new Error(`upload failed (${await errorText(res)})`);
 }
 

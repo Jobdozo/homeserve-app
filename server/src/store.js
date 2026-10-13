@@ -32,10 +32,37 @@ function cacheSet(key, data) {
   return data;
 }
 
+let clearSeq = 0; // bumped on every write that clears cache entries
 function cacheClear(prefix) {
+  clearSeq += 1;
   for (const key of cache.keys()) {
     if (key.startsWith(prefix)) cache.delete(key);
   }
+}
+
+// Catalog reads every app open needs (categories, providers, services, booking
+// counts): past the TTL the last copy is still answered at once while one
+// background query refreshes it, so no visitor waits on the trip to Data Connect.
+// A write clears the entry as before, so whoever changed something sees it next
+// read; a refresh that started before such a write is thrown away.
+const refreshing = new Set();
+async function cachedCatalog(key, load) {
+  const entry = cache.get(key);
+  if (entry && entry.expiresAt > Date.now()) return entry.data;
+  if (entry) {
+    if (!refreshing.has(key)) {
+      refreshing.add(key);
+      const seq = clearSeq;
+      load()
+        .then((data) => {
+          if (seq === clearSeq) cacheSet(key, data);
+        })
+        .catch((e) => console.error(`[cache] refreshing ${key} failed:`, e.message))
+        .finally(() => refreshing.delete(key));
+    }
+    return entry.data;
+  }
+  return dedupe(`catalog:${key}`, async () => cacheSet(key, await load()));
 }
 
 // Collapses genuinely concurrent identical calls into one shared query —
@@ -554,10 +581,10 @@ async function getCategoryUuidBySlug(slug) {
 }
 
 async function listCategories() {
-  const cached = cacheGet("categories");
-  if (cached) return cached;
-  const { categories } = await query(`query { categories { slug name icon } }`, {});
-  return cacheSet("categories", categories.map(mapCategory));
+  return cachedCatalog("categories", async () => {
+    const { categories } = await query(`query { categories { slug name icon } }`, {});
+    return categories.map(mapCategory);
+  });
 }
 
 // Banner upload replaces any previous one; a null url goes back to the default
@@ -888,10 +915,10 @@ async function createProviderSignup({ phone, name }) {
 }
 
 async function listProviders() {
-  const cached = cacheGet("providers");
-  if (cached) return cached;
-  const { providers } = await query(`query { providers { ${PROVIDER_FIELDS} } }`, {});
-  return cacheSet("providers", providers.map(mapProvider));
+  return cachedCatalog("providers", async () => {
+    const { providers } = await query(`query { providers { ${PROVIDER_FIELDS} } }`, {});
+    return providers.map(mapProvider);
+  });
 }
 
 async function getProvider(id) {
@@ -1142,14 +1169,13 @@ async function reviewProviderChange(requestId, decision, { note } = {}, actor) {
 
 async function listServices({ activeOnly = false, pincode } = {}) {
   const cacheKey = `services:${activeOnly ? "active" : "all"}`;
-  let all = cacheGet(cacheKey);
-  if (!all) {
+  const all = await cachedCatalog(cacheKey, async () => {
     const gql = activeOnly
       ? `query { services(where: { status: { eq: "active" } }) { ${SERVICE_FIELDS} } }`
       : `query { services { ${SERVICE_FIELDS} } }`;
     const { services } = await query(gql, {});
-    all = cacheSet(cacheKey, services.map(mapService));
-  }
+    return services.map(mapService);
+  });
   // Suspended providers' services stay off the public/bookable catalog, but
   // remain visible to admin (activeOnly: false) so they aren't hidden there.
   if (!activeOnly) return all;
@@ -3519,25 +3545,33 @@ function reorderHomeSections(ids) {
 // Booked-service counts for "Most Booked". Lean query (ids only) and cached —
 // the home screen hits this on every load.
 async function getServiceBookingCounts() {
-  const cached = cacheGet("bookingCounts");
-  if (cached) return cached;
-  const { bookings } = await query(`query { bookings { status service { id } } }`);
-  const counts = {};
-  for (const b of bookings) {
-    if (!b.service?.id || b.status === "Cancelled" || b.status === "Rejected") continue;
-    counts[b.service.id] = (counts[b.service.id] || 0) + 1;
-  }
-  return cacheSet("bookingCounts", counts);
+  return cachedCatalog("bookingCounts", async () => {
+    const { bookings } = await query(`query { bookings { status service { id } } }`);
+    const counts = {};
+    for (const b of bookings) {
+      if (!b.service?.id || b.status === "Cancelled" || b.status === "Rejected") continue;
+      counts[b.service.id] = (counts[b.service.id] || 0) + 1;
+    }
+    return counts;
+  });
 }
 
 // Completed jobs per provider (cached like the booking counts).
 async function getProviderJobCounts() {
-  const cached = cacheGet("providerJobCounts");
-  if (cached) return cached;
-  const { bookings } = await query(`query { bookings(where: { status: { eq: "Completed" } }) { provider { id } } }`);
-  const counts = {};
-  for (const b of bookings) if (b.provider?.id) counts[b.provider.id] = (counts[b.provider.id] || 0) + 1;
-  return cacheSet("providerJobCounts", counts);
+  return cachedCatalog("providerJobCounts", async () => {
+    const { bookings } = await query(`query { bookings(where: { status: { eq: "Completed" } }) { provider { id } } }`);
+    const counts = {};
+    for (const b of bookings) if (b.provider?.id) counts[b.provider.id] = (counts[b.provider.id] || 0) + 1;
+    return counts;
+  });
+}
+
+// Fill the catalog cache when the server starts, so the first app opens after a
+// deploy don't wait on Data Connect either.
+function warmCatalog() {
+  return Promise.all([listCategories(), listProviders(), listServices({ activeOnly: true }), getServiceBookingCounts(), getProviderJobCounts()]).catch((e) =>
+    console.error("[cache] warm-up failed:", e.message)
+  );
 }
 
 // Adds what customers see on provider cards: jobs done and when they take requests.
@@ -4937,6 +4971,7 @@ async function listCustomersPage({ q, offset = 0, limit = 50 } = {}) {
 }
 
 module.exports = {
+  warmCatalog,
   listBookingsPage,
   listCustomersPage,
   getCustomerById,

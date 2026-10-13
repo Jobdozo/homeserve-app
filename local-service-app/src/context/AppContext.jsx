@@ -4,6 +4,7 @@ import { socket, setSocketToken } from "../socket";
 import { timeSlots } from "../data/mockData";
 import { detectCurrentLocation, APPROXIMATE_OVER_METERS } from "../utils/geolocation";
 import { ensurePushSubscribed, onNativeNotificationTap } from "../utils/pushNotifications";
+import { readSnap, writeSnap, clearSnaps, newest } from "../utils/snapshot";
 
 const AppContext = createContext(null);
 const CART_KEY = "homeserve-cart-v1";
@@ -57,20 +58,24 @@ function upsertById(list, item) {
 export function AppProvider({ children }) {
   const initialAuth = loadAuth();
   const [customer, setCustomer] = useState(initialAuth?.user || null);
-  const [authLoading, setAuthLoading] = useState(true);
+  // A signed-in customer sees the app at once from the saved session; the token is
+  // checked in the background (a rejected one still signs out).
+  const [authLoading, setAuthLoading] = useState(!initialAuth?.user);
+  // What this customer last saw (bookings, notifications), drawn before fresh data arrives.
+  const [saved] = useState(() => (initialAuth?.user?.id ? readSnap(`c:${initialAuth.user.id}`) : null));
   const [providers, setProviders] = useState({});
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [services, setServices] = useState([]);
   const [banners, setBanners] = useState([]);
   const [homeLayout, setHomeLayout] = useState({ sections: [], bookingCounts: {} });
-  const [bookings, setBookings] = useState([]);
+  const [bookings, setBookings] = useState(saved?.bookings || []);
   const [messages, setMessages] = useState({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!saved);
   const [connected, setConnected] = useState(socket.connected);
   const [toast, setToast] = useState(null);
   const [cart, setCart] = useState(loadCart);
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState(saved?.notifications || []);
   const [location, setLocation] = useState(loadLocation);
   const [locationStatus, setLocationStatus] = useState("idle"); // idle | detecting | ready | denied | error
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -228,6 +233,7 @@ export function AppProvider({ children }) {
     setAuthToken(null);
     setSocketToken(null);
     localStorage.removeItem(AUTH_KEY);
+    clearSnaps("c:");
     setCustomer(null);
     setBookings([]);
     setMessages({});
@@ -284,37 +290,71 @@ export function AppProvider({ children }) {
   // PIN (catalogCounts = how many there really are). When some were left out, a
   // screen asks for the rest of its category, provider or search, page by page.
   const [catalogCounts, setCatalogCounts] = useState({});
-  const catalogScope = useRef({ pin: undefined, partial: false, loaded: new Set(), typePicture: new Map() });
+  const catalogScope = useRef({ pin: undefined, partial: false, loaded: new Set(), fetched: new Set(), typePicture: new Map() });
   // A service with no picture of its own shows its type's picture (the one drawn or uploaded for the type).
   const withTypePicture = (x) => {
     const pic = catalogScope.current.typePicture.get(x.subcategoryId);
     return x.imageUrl || !pic ? x : { ...x, imageUrl: pic };
   };
-  const loadCatalog = useCallback(async (pincode) => {
-    const reqId = ++catalogReq.current;
-    try {
-      const [boot, layout] = await Promise.all([api.bootstrap(pincode), api.getHomeLayout().catch(() => null)]);
-      if (reqId !== catalogReq.current) return; // a newer PIN's request superseded this one
-      catalogScope.current = {
-        pin: pincode,
-        partial: !!boot.partial,
-        loaded: new Set(),
-        typePicture: new Map((boot.subcategories || []).filter((x) => x.imageUrl).map((x) => [x.id, x.imageUrl])),
-      };
-      setCatalogCounts(boot.counts || {});
-      setProviders(Object.fromEntries(boot.providers.map((p) => [p.id, p])));
-      setCategories(boot.categories);
-      setSubcategories(boot.subcategories || []);
-      setServices(boot.services.map(withTypePicture));
-      setCatalogPin(pincode || "");
-      if (layout) {
-        setBanners(layout.banners || []);
-        setHomeLayout({ sections: layout.sections || [], bookingCounts: layout.bookingCounts || {} });
-      }
-    } catch (e) {
-      console.error("Failed to load catalog", e);
+  // The PIN whose catalog is on screen (saved or fresh), so a saved copy is drawn only once.
+  const shownPin = useRef(null);
+  const applyCatalog = useCallback((boot, layout, pincode) => {
+    const typePicture = new Map((boot.subcategories || []).filter((x) => x.imageUrl).map((x) => [x.id, x.imageUrl]));
+    // Same PIN as on screen (fresh data replacing the saved copy, or a reload): keep what
+    // screens fetched since (a category's other services, a details page's full copy) so
+    // a page opened in the first second doesn't lose them. A new PIN starts clean.
+    const samePin = shownPin.current === (pincode || "");
+    if (samePin) Object.assign(catalogScope.current, { partial: !!boot.partial, typePicture });
+    else catalogScope.current = { pin: pincode, partial: !!boot.partial, loaded: new Set(), fetched: new Set(), typePicture };
+    const fresh = boot.services.map(withTypePicture);
+    const freshProviders = Object.fromEntries(boot.providers.map((p) => [p.id, p]));
+    setCatalogCounts(boot.counts || {});
+    setCategories(boot.categories);
+    setSubcategories(boot.subcategories || []);
+    if (samePin) {
+      const fetched = catalogScope.current.fetched;
+      setProviders((prev) => ({ ...prev, ...freshProviders }));
+      setServices((prev) => {
+        const byId = new Map(fresh.map((x) => [x.id, x]));
+        for (const had of prev) {
+          if (!fetched.has(had.id)) continue;
+          const now = byId.get(had.id);
+          byId.set(had.id, now && !had.lite && now.lite ? { ...had, ...now, lite: false, includes: had.includes, highlights: had.highlights } : now || had);
+        }
+        return [...byId.values()];
+      });
+    } else {
+      setProviders(freshProviders);
+      setServices(fresh);
     }
+    setCatalogPin(pincode || "");
+    if (layout) {
+      setBanners(layout.banners || []);
+      setHomeLayout({ sections: layout.sections || [], bookingCounts: layout.bookingCounts || {} });
+    }
+    shownPin.current = pincode || "";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The catalog last seen at this PIN shows at once; the fresh one replaces it when it lands.
+  const loadCatalog = useCallback(
+    async (pincode) => {
+      const reqId = ++catalogReq.current;
+      const savedCatalog = readSnap("catalog");
+      if (savedCatalog?.boot && savedCatalog.pin === (pincode || "") && shownPin.current !== (pincode || "")) {
+        applyCatalog(savedCatalog.boot, savedCatalog.layout, pincode);
+      }
+      try {
+        const [boot, layout] = await Promise.all([api.bootstrap(pincode), api.getHomeLayout().catch(() => null)]);
+        if (reqId !== catalogReq.current) return; // a newer PIN's request superseded this one
+        applyCatalog(boot, layout, pincode);
+        writeSnap("catalog", { pin: pincode || "", boot, layout });
+      } catch (e) {
+        console.error("Failed to load catalog", e);
+      }
+    },
+    [applyCatalog]
+  );
 
   // Filter the catalog to wherever the customer actually is. The live
   // (or last-known) GPS PIN wins; the saved profile address is only the
@@ -334,6 +374,7 @@ export function AppProvider({ children }) {
   // Merge services fetched later into the list. A list-card copy (lite) never
   // replaces the fuller copy a details page already loaded.
   const mergeCatalog = useCallback((list = [], provs = []) => {
+    for (const x of list) catalogScope.current.fetched?.add(x.id);
     if (provs.length) setProviders((prev) => ({ ...prev, ...Object.fromEntries(provs.map((p) => [p.id, { ...prev[p.id], ...p }])) }));
     if (!list.length) return;
     setServices((prev) => {
@@ -444,7 +485,8 @@ export function AppProvider({ children }) {
     }
     let cancelled = false;
     async function loadCustomerData() {
-      setLoading(true);
+      // With a saved copy on screen, refresh quietly instead of showing the spinner.
+      if (!readSnap(`c:${customer.id}`)) setLoading(true);
       try {
         // Chat threads load lazily per-booking (see loadMessages, used by
         // ChatScreen) — prefetching all of them here used to mean one extra
@@ -470,6 +512,13 @@ export function AppProvider({ children }) {
     // loadCustomerData() twice on every single app open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer?.id]);
+
+  // Save what's on screen (shortly after it settles) for the next open.
+  useEffect(() => {
+    if (!customer?.id || loading) return undefined;
+    const t = setTimeout(() => writeSnap(`c:${customer.id}`, { bookings: newest(bookings), notifications: newest(notifications, 100) }), 800);
+    return () => clearTimeout(t);
+  }, [customer?.id, loading, bookings, notifications]);
 
   // Background safety net: the live socket is what's supposed to keep
   // bookings/notifications current, but mobile browsers frequently

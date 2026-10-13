@@ -3,6 +3,10 @@ import { api, setAuthToken } from "../api";
 import { socket, setSocketToken } from "../socket";
 import { loadNotificationPrefs, saveNotificationPrefs } from "../utils/notificationPrefs";
 import { ensurePushSubscribed, onNativeRing } from "../utils/pushNotifications";
+import { readSnap, writeSnap, clearSnaps, newest } from "../utils/snapshot";
+
+// Saved-copy key: per account and per staff member (staff may see fewer orders).
+const snapKey = (user, staff) => (user?.id ? `p:${user.id}:${staff?.id || staff?.name || "owner"}` : null);
 
 const AppContext = createContext(null);
 const AUTH_KEY = "tikdum-provider-auth-v1";
@@ -34,16 +38,18 @@ export function AppProvider({ children }) {
   const staffLimitedRef = useRef(false);
   staffLimitedRef.current = Boolean(staffSession) && !staffSession.permissions?.includes("orders.view_all");
   const [authLoading, setAuthLoading] = useState(true);
-  const [requests, setRequests] = useState([]);
-  const [services, setServices] = useState([]);
+  // What this account last saw, drawn at once on open while fresh data loads behind it.
+  const [saved] = useState(() => readSnap(snapKey(initialAuth?.user, initialAuth?.staff)));
+  const [requests, setRequests] = useState(saved?.requests || []);
+  const [services, setServices] = useState(saved?.services || []);
   const [profileChangeTick, setProfileChangeTick] = useState(0);
-  const [categories, setCategories] = useState([]);
-  const [subcategories, setSubcategories] = useState([]);
+  const [categories, setCategories] = useState(saved?.categories || []);
+  const [subcategories, setSubcategories] = useState(saved?.subcategories || []);
   const [messages, setMessages] = useState({});
   // A real zero-state default, not null — the dashboard/earnings screens
   // read straight through this (earnings.thisMonth etc.) with no loading
   // guard, so a failed fetch must never leave it null.
-  const [earnings, setEarnings] = useState({
+  const [earnings, setEarnings] = useState(() => saved?.earnings || {
     allTime: 0,
     thisMonth: 0,
     changePct: 0,
@@ -56,11 +62,11 @@ export function AppProvider({ children }) {
     },
     transactions: [],
   });
-  const [wallet, setWallet] = useState({ balance: 0, suspended: false });
-  const [loading, setLoading] = useState(true);
+  const [wallet, setWallet] = useState(saved?.wallet || { balance: 0, suspended: false });
+  const [loading, setLoading] = useState(!saved);
   const [connected, setConnected] = useState(socket.connected);
   const [toast, setToast] = useState(null);
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState(saved?.notifications || []);
   const [notificationPrefs, setNotificationPrefs] = useState(loadNotificationPrefs);
   const [ringingRequest, setRingingRequest] = useState(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -106,6 +112,7 @@ export function AppProvider({ children }) {
     setAuthToken(null);
     setSocketToken(null);
     localStorage.removeItem(AUTH_KEY);
+    clearSnaps("p:");
     setProvider(null);
     setStaffSession(null);
     setRequests([]);
@@ -181,7 +188,8 @@ export function AppProvider({ children }) {
     }
     let cancelled = false;
     async function load() {
-      setLoading(true);
+      // With a saved copy on screen, refresh quietly instead of showing the spinner.
+      if (!readSnap(snapKey(provider, staffSession))) setLoading(true);
       // The bookings are what the new-request popup needs, so they must not
       // wait for the other five calls (earnings, wallet, …): the popup used to
       // appear only once the slowest of all six had answered. Each piece now
@@ -223,6 +231,14 @@ export function AppProvider({ children }) {
     // load() twice on every single app open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider?.id]);
+
+  // Save what's on screen (shortly after it settles) for the next open.
+  useEffect(() => {
+    const key = snapKey(provider, staffSession);
+    if (!key || loading) return undefined;
+    const t = setTimeout(() => writeSnap(key, { requests: newest(requests), services, earnings, wallet, notifications: newest(notifications, 100), categories, subcategories }), 800);
+    return () => clearTimeout(t);
+  }, [provider, staffSession, loading, requests, services, earnings, wallet, notifications, categories, subcategories]);
 
   // Register for push once logged in, so new booking requests can wake this
   // device even while the app is backgrounded or fully closed.
