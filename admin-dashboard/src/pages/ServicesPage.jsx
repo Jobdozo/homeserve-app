@@ -29,6 +29,8 @@ const statusStyles = {
 
 const statusLabels = { pending_approval: "pending approval" };
 
+const selectCls = "rounded-xl border border-gray-200 bg-white px-3 py-2 text-[12.5px] text-gray-700 outline-none focus:border-brand";
+
 // One module for both: the tiles at the top are the six headline numbers and
 // jump straight to the matching list below.
 export default function ServicesPage() {
@@ -239,8 +241,19 @@ function ServicesModule() {
   );
 }
 
+const SORTS = [
+  { id: "default", label: "Newest first" },
+  { id: "name", label: "Name A–Z" },
+  { id: "price-asc", label: "Price: low to high" },
+  { id: "price-desc", label: "Price: high to low" },
+];
+const NO_FILTERS = { q: "", category: "", subcategory: "", provider: "", sort: "default" };
+
 function ServicesPanel({ tab, setTab }) {
-  const { services, providers, toggleServiceStatus, reviewService, deleteService, showToast } = useApp();
+  const { services, providers, categories, toggleServiceStatus, reviewService, deleteService, showToast } = useApp();
+  const [filters, setFilters] = useState(NO_FILTERS);
+  const setFilter = (key, value) => setFilters((f) => ({ ...f, [key]: value, ...(key === "category" ? { subcategory: "" } : {}) }));
+  const filtering = filters.q.trim() || filters.category || filters.subcategory || filters.provider || filters.sort !== "default";
   const [editing, setEditing] = useState(null);
   const [rejecting, setRejecting] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
@@ -253,10 +266,26 @@ function ServicesPanel({ tab, setTab }) {
   const activeTab = TABS.find((t) => t.label === tab);
   const pendingCount = services.filter((s) => s.status === "pending_approval").length;
 
+  // Status tab, then the filters: words match the service, its type or its provider.
   const filtered = useMemo(() => {
-    if (!activeTab.status) return services;
-    return services.filter((s) => s.status === activeTab.status);
-  }, [services, activeTab]);
+    const words = filters.q.trim().toLowerCase().split(/s+/).filter(Boolean);
+    const list = services.filter((s) => {
+      if (activeTab.status && s.status !== activeTab.status) return false;
+      if (filters.category && s.categoryId !== filters.category) return false;
+      if (filters.subcategory && s.subcategoryId !== filters.subcategory) return false;
+      if (filters.provider && s.providerId !== filters.provider) return false;
+      if (!words.length) return true;
+      const text = `${s.name} ${providerName(s.providerId)} ${subName(s.subcategoryId)} ${s.categoryId}`.toLowerCase();
+      return words.every((w) => text.includes(w));
+    });
+    if (filters.sort === "name") return [...list].sort((a, b) => a.name.localeCompare(b.name));
+    if (filters.sort === "price-asc") return [...list].sort((a, b) => a.price - b.price);
+    if (filters.sort === "price-desc") return [...list].sort((a, b) => b.price - a.price);
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [services, activeTab, filters, providers, allSubs]);
+  const subOptions = filters.category ? allSubs.filter((x) => x.categoryId === filters.category) : [];
+  const providerOptions = useMemo(() => [...providers].sort((a, b) => (a.name || "").localeCompare(b.name || "")), [providers]);
 
   const run = async (id, fn) => {
     setBusyId(id);
@@ -295,6 +324,61 @@ function ServicesPanel({ tab, setTab }) {
             )}
           </button>
         ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-white p-3 shadow-card">
+        <input
+          type="search"
+          value={filters.q}
+          onChange={(e) => setFilter("q", e.target.value)}
+          placeholder="Search service, type or provider"
+          aria-label="Search services"
+          className="min-w-[220px] flex-1 rounded-xl border border-gray-200 px-3.5 py-2 text-[13px] text-gray-800 outline-none focus:border-brand"
+        />
+        <select value={filters.category} onChange={(e) => setFilter("category", e.target.value)} aria-label="Category" className={selectCls}>
+          <option value="">All categories</option>
+          {[...categories]
+            .sort((a, b) => (a.active === false) - (b.active === false) || a.name.localeCompare(b.name))
+            .map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+                {c.active === false ? " (inactive)" : ""}
+              </option>
+            ))}
+        </select>
+        {subOptions.length > 0 && (
+          <select value={filters.subcategory} onChange={(e) => setFilter("subcategory", e.target.value)} aria-label="Sub-category" className={selectCls}>
+            <option value="">All types</option>
+            {subOptions.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <select value={filters.provider} onChange={(e) => setFilter("provider", e.target.value)} aria-label="Provider" className={selectCls}>
+          <option value="">All providers</option>
+          {providerOptions.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+        <select value={filters.sort} onChange={(e) => setFilter("sort", e.target.value)} aria-label="Sort" className={selectCls}>
+          {SORTS.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.label}
+            </option>
+          ))}
+        </select>
+        <span className="ml-auto text-[12px] text-gray-400">
+          {filtered.length} of {services.length} services
+        </span>
+        {filtering && (
+          <button onClick={() => setFilters(NO_FILTERS)} className="text-[12px] font-semibold text-brand hover:underline">
+            Clear filters
+          </button>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-2xl bg-white shadow-card">
@@ -437,7 +521,7 @@ function ServicesPanel({ tab, setTab }) {
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-10 text-center text-gray-400">
-                    No {tab.toLowerCase()} services.
+                    {filtering ? "No services match these filters." : `No ${tab.toLowerCase()} services.`}
                   </td>
                 </tr>
               )}
