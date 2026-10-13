@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import ScreenHeader from "../components/ScreenHeader";
 import { StarIcon } from "../components/icons";
@@ -8,6 +8,7 @@ import CategoryPhoto from "../components/CategoryPhoto";
 import CartBar from "../components/CartBar";
 import Seo from "../components/Seo";
 import ComingSoon from "../components/ComingSoon";
+import { sectionItems } from "../components/HomeSections";
 
 const SORTS = [
   { id: "popular", label: "Popular" },
@@ -20,6 +21,8 @@ const SORTS = [
 function sortServices(services, sort) {
   const list = [...services];
   switch (sort) {
+    case "section":
+      return list; // the home section's own order
     case "rating":
       return list.sort((a, b) => b.rating - a.rating || b.reviewCount - a.reviewCount);
     case "discount":
@@ -35,27 +38,37 @@ function sortServices(services, sort) {
 
 export default function AllServicesScreen() {
   const navigate = useNavigate();
-  const { services, noCoverage, catalogReady, loadCatalogScope } = useApp();
+  const { services, categories, homeLayout, noCoverage, catalogReady, loadCatalogScope } = useApp();
+  // ?section=<id>: "See all" from a home section — exactly that section's services.
+  const [params] = useSearchParams();
+  const section = homeLayout.sections.find((x) => x.id === params.get("section")) || null;
   useEffect(() => {
     if (catalogReady) loadCatalogScope({});
   }, [catalogReady, loadCatalogScope]);
-  const [sort, setSort] = useState("popular");
+  const [sort, setSort] = useState(section ? "section" : "popular");
+  useEffect(() => setSort(section ? "section" : "popular"), [section?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sorts = section ? [{ id: "section", label: "Recommended" }, ...SORTS] : SORTS;
 
-  const sorted = useMemo(() => dedupeByName(sortServices(services, sort)), [services, sort]);
+  const base = useMemo(
+    () => (section ? sectionItems(section, { services, categories, bookingCounts: homeLayout.bookingCounts }) : services),
+    [section, services, categories, homeLayout.bookingCounts]
+  );
+  const sorted = useMemo(() => dedupeByName(sortServices(base, sort)), [base, sort]);
+  const title = section?.title || "All Services";
 
   return (
     <div className="flex flex-1 flex-col">
       <Seo
-        title="All Services"
+        title={title}
         description={`Browse all ${services.length} home services available on Tikdum, from top-rated local providers near you.`}
         path="/services"
       />
-      <ScreenHeader title="All Services" subtitle={`${services.length} services available`} maxWidth="lg:max-w-4xl" />
+      <ScreenHeader title={title} subtitle={`${sorted.length} services available`} maxWidth="lg:max-w-4xl" />
 
       {noCoverage && <ComingSoon />}
       <div className={`flex-1 px-4 pb-6 lg:mx-auto lg:w-full lg:max-w-4xl lg:px-8 lg:pb-16 ${noCoverage ? "hidden" : ""}`}>
         <div className="flex gap-2 overflow-x-auto pb-1">
-          {SORTS.map((s) => (
+          {sorts.map((s) => (
             <button
               key={s.id}
               onClick={() => setSort(s.id)}

@@ -245,7 +245,7 @@ function LowestPerCategory({ section, categories, services }) {
   if (items.length === 0) return null;
   return (
     <>
-      <SectionHeader title={section.title} onSeeAll={() => navigate("/categories")} />
+      <SectionHeader title={section.title} onSeeAll={() => navigate(seeAllPath(section))} />
       <Carousel>
         {items.map((it) => (
           <LowestCard key={it.category.id} {...it} />
@@ -279,7 +279,7 @@ function ServiceCardList({ section, items, counts, inlineBanners }) {
   const bounds = [0, ...cuts, items.length];
   return (
     <>
-      <SectionHeader title={section.title} onSeeAll={() => navigate("/services")} />
+      <SectionHeader title={section.title} onSeeAll={() => navigate(seeAllPath(section))} />
       {bounds.slice(0, -1).map((start, i) => {
         const end = bounds[i + 1];
         const banners = inlineBanners.filter((b) => (b.afterItems || 3) === end && end < items.length);
@@ -317,13 +317,27 @@ function matchServices(section, services, categories) {
   });
 }
 
+// Every service a section stands for, in its order (the home row shows the first
+// `limit`). "See all" opens exactly this list (AllServicesScreen ?section=).
+export function sectionItems(section, { services, categories, bookingCounts = {} }) {
+  if (section.type === "most_booked") {
+    return dedupeByName([...services].sort((a, b) => (bookingCounts[b.id] || 0) - (bookingCounts[a.id] || 0) || b.reviewCount - a.reviewCount));
+  }
+  if (section.type === "category") return dedupeByName(matchServices(section, services, categories));
+  if (section.type === "lowest_per_category") return lowestPerCategory(categories, services, Infinity).map((x) => x.service);
+  return dedupeByName([...services].sort((a, b) => b.reviewCount - a.reviewCount));
+}
+
+// A section tied to one category opens that category's page; any other opens its own list.
+const seeAllPath = (section) => (section.type === "category" && section.categoryId ? `/category/${section.categoryId}` : `/services?section=${encodeURIComponent(section.id)}`);
+
 // skipCategories: the phone home already shows every category as a photo grid.
 export default function HomeSections({ sections, services, categories, banners, bookingCounts, skipCategories = false }) {
   const navigate = useNavigate();
   const { subcategories } = useApp();
   const list = sections.length > 0 ? sections : FALLBACK_SECTIONS;
   const inlineBanners = banners.filter((b) => b.placement === "inline").sort((a, b) => (a.afterItems || 3) - (b.afterItems || 3));
-  const byPopularity = dedupeByName([...services].sort((a, b) => b.reviewCount - a.reviewCount));
+  const data = { services, categories, bookingCounts };
 
   return (
     <>
@@ -337,10 +351,8 @@ export default function HomeSections({ sections, services, categories, banners, 
           return <LowestPerCategory key={section.id} section={section} categories={categories} services={services} />;
         }
         if (section.type === "most_booked") {
-          const items = dedupeByName(
-            [...services].sort((a, b) => (bookingCounts[b.id] || 0) - (bookingCounts[a.id] || 0) || b.reviewCount - a.reviewCount)
-          ).slice(0, limit);
-          return <ServiceCarousel key={section.id} section={section} items={items} counts={bookingCounts} seeAll={() => navigate("/services")} />;
+          const items = sectionItems(section, data).slice(0, limit);
+          return <ServiceCarousel key={section.id} section={section} items={items} counts={bookingCounts} seeAll={() => navigate(seeAllPath(section))} />;
         }
         if (section.type === "category") {
           if (section.categoryId) {
@@ -348,15 +360,14 @@ export default function HomeSections({ sections, services, categories, banners, 
             const chips = category ? chipsFor(subcategories, section.categoryId, services.filter((s) => s.categoryId === section.categoryId)) : [];
             if (chips.length > 0) return <TypeCarousel key={section.id} section={section} category={category} chips={chips} />;
           }
-          const items = dedupeByName(matchServices(section, services, categories)).slice(0, limit);
-          const seeAll = section.categoryId ? () => navigate(`/category/${section.categoryId}`) : () => navigate("/services");
-          return <ServiceCarousel key={section.id} section={section} items={items} counts={bookingCounts} seeAll={seeAll} />;
+          const items = sectionItems(section, data).slice(0, limit);
+          return <ServiceCarousel key={section.id} section={section} items={items} counts={bookingCounts} seeAll={() => navigate(seeAllPath(section))} />;
         }
         return (
           <ServiceCardList
             key={section.id}
             section={section}
-            items={byPopularity.slice(0, limit)}
+            items={sectionItems(section, data).slice(0, limit)}
             counts={bookingCounts}
             inlineBanners={inlineBanners}
           />
