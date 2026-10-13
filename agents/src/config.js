@@ -109,5 +109,9 @@ module.exports = {
     longJobMin: num(process.env.OPS_LONG_JOB_MIN, 360),
     lookbackHours: num(process.env.OPS_LOOKBACK_HOURS, 48),
     nudgeProviders: bool(process.env.OPS_NUDGE_PROVIDERS, true),
+    // Server watch (serverWatch.js): WhatsApp the owner about /api/health problems.
+    watchServer: bool(process.env.OPS_WATCH_SERVER, true),
+    healthRemindHours: num(process.env.OPS_HEALTH_REMIND_HOURS, 6),
+    refusedAlert: num(process.env.OPS_REFUSED_ALERT, 300),
   },
 };

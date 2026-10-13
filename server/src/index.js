@@ -2756,10 +2756,15 @@ app.post("/api/agents/notify-owner", agentOnly, crm(async (req, res) => {
   const n = ownerPings.get(k) || 0;
   if (n >= 10) return res.status(429).json({ error: "Daily owner message limit reached" });
   ownerPings.set(k, n + 1);
-  const { sendWhatsAppMessage } = require("./whatsapp");
+  const whatsapp = require("./whatsapp");
+  const message = `[${req.admin.name}] ${text}`;
   const results = [];
   for (const phone of auth.adminPhones()) {
-    results.push(await sendWhatsAppMessage(phone, `[${req.admin.name}] ${text}`).catch(() => false));
+    // Free text only arrives within 24h of the owner writing to the business number;
+    // outside that, the approved notice template (when set up) still gets through.
+    let ok = await whatsapp.sendWhatsAppMessage(phone, message).catch(() => false);
+    if (!ok && whatsapp.noticeTemplate()) ok = (await whatsapp.sendNoticeTemplate(phone, { message, name: "Owner" }).catch(() => ({}))).ok === true;
+    results.push(ok);
   }
   res.json({ delivered: results.filter(Boolean).length, attempted: results.length });
 }));

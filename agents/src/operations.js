@@ -9,6 +9,7 @@
 const config = require("./config");
 const state = require("./state");
 const { slotStartMs } = require("./time");
+const serverWatch = require("./serverWatch");
 
 const MIN = 60000;
 
@@ -52,6 +53,14 @@ function detect(bookings, now, cfg = config.operations) {
 }
 
 async function tick(client, log) {
+  // Server health first: it still works (and remembers) when the API is down.
+  let server = "";
+  if (config.operations.watchServer) {
+    server = await serverWatch.check(client, log).catch((e) => {
+      log.warn("operations", "server watch failed", { error: e.message });
+      return "server watch failed";
+    });
+  }
   const bookings = await client.get("/bookings");
   const findings = detect(bookings, Date.now());
   const st = state.load("operations");
@@ -90,7 +99,7 @@ async function tick(client, log) {
   // Forget nudges older than a week so state stays small.
   for (const [id, at] of Object.entries(st.nudged)) if (Date.now() - at > 7 * 86400000) delete st.nudged[id];
   state.save("operations", st);
-  return `${bookings.length} bookings checked, ${findings.length} issues, ${posted} new alerts, ${nudged} nudges`;
+  return `${bookings.length} bookings checked, ${findings.length} issues, ${posted} new alerts, ${nudged} nudges${server ? `; ${server}` : ""}`;
 }
 
 module.exports = { detect, tick };

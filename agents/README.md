@@ -6,7 +6,7 @@ over HTTP only (never to the data files). Safety model: `server/src/agents.js`.
 
 | Agent | Role to give it | Uses AI? | What it does |
 |---|---|---|---|
-| Operations | Operations Team | No (rules) | Every 5 min: alerts on requests stuck without a provider, providers late for accepted bookings (and nudges them once in-app), very long jobs |
+| Operations | Operations Team | No (rules) | Every 5 min: alerts on requests stuck without a provider, providers late for accepted bookings (and nudges them once in-app), very long jobs. **Server watch:** reads `/api/health` and WhatsApps the owner (`ADMIN_PHONES`) when the API or database is down, a backup failed, the server is busy (scaling step 4), photos stop copying to cloud storage, or many requests are refused; reminds every 6 h while it lasts and says when it's fixed (`OPS_WATCH_SERVER`, `OPS_HEALTH_REMIND_HOURS`, `OPS_REFUSED_ALERT`) |
 | Reporting | Reporting / Management Team | Yes (Claude Haiku) | Daily at 09:00 IST: founder brief for yesterday, posted to Admin → AI Agents and (best effort) WhatsApp |
 | Complaint Triage | Complaint Handling Team | Yes | Every 3 min: new complaints get category, priority, an internal "[AI triage]" note and escalation for safety issues; a first customer reply and refund-claim decisions are **proposed** for approval |
 | Customer Support | Customer Support | Yes | Every 20 s: drafts (review mode, default) or sends (auto-send) replies to WhatsApp chats in AI mode from the customer's own bookings + your Support knowledge; logs complaints; hands refunds, safety, legal, abuse and anything unsure to a person |
@@ -72,8 +72,11 @@ message (~2–4k tokens with knowledge ≈ $0.003–0.006); a busy day of 300 me
 Each agent has a daily USD budget in Admin; when reached it stops calling the AI and posts plain numbers instead.
 
 ## Known limits (Phase 1)
-- WhatsApp copies of the brief only arrive if you messaged the business number in the
-  last 24h (Meta rule). Reliable delivery needs an approved WhatsApp template.
+- Owner WhatsApp messages (daily brief, server alerts) go as free text, which only arrives if you
+  messaged the business number in the last 24h (Meta rule). When `MSG91_NOTICE_TEMPLATE` is set
+  (an approved utility template), the server falls back to it, so they arrive any time.
+- Server alerts come from this worker, on the same VPS: if the whole VPS is down, only the
+  GitHub `uptime` check (email) notices.
 - Proposal approvals run synchronously; if the server restarts mid-approval the item can
   stay in "executing" — reject/re-propose it.
 
