@@ -8,7 +8,8 @@ process.env.AGENT_STATE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "tikdum-watc
 const serverWatch = require("../src/serverWatch");
 
 // Each test starts with nothing remembered.
-const reset = () => fs.rmSync(path.join(process.env.AGENT_STATE_DIR, "server-watch.json"), { force: true });
+const stateFile = () => path.join(process.env.AGENT_STATE_DIR, "server-watch.json");
+const reset = () => fs.writeFileSync(stateFile(), JSON.stringify({ hello: "2026-10-13T00:00:00Z" }));
 const silent = { info() {}, warn() {}, error() {} };
 const cfg = { healthRemindHours: 6, refusedAlert: 300 };
 const good = { ok: true, database: "ok", backup: { state: "ok", ageHours: 3 }, load: { busy: false, cpuPct: 2, loopP99Ms: 20, requestsPerMin: 40 }, uploads: { enabled: true, failed: 0, lastError: null }, limits: { refused: 0 } };
@@ -34,6 +35,17 @@ function fakeClient() {
 
 test("server watch: healthy server raises nothing", () => {
   assert.deepEqual(serverWatch.problems(good, {}, cfg), {});
+});
+
+test("server watch: says hello once, the first time it reaches the API", async () => {
+  fs.rmSync(stateFile(), { force: true });
+  const c = fakeClient();
+  await serverWatch.check(c, silent, { now: Date.now(), health: null, cfg });
+  assert.equal(c.texts.length, 0);
+  await serverWatch.check(c, silent, { now: Date.now(), health: good, cfg });
+  await serverWatch.check(c, silent, { now: Date.now(), health: good, cfg });
+  assert.equal(c.texts.length, 1);
+  assert.match(c.texts[0], /^✅ Server watch is on/);
 });
 
 test("server watch: finds database, backup, load, upload and refused-request problems", () => {

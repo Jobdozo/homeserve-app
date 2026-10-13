@@ -81,6 +81,15 @@ async function check(client, log, { now = Date.now(), health, cfg = config.opera
   const found = problems(h, { missed: st.missed, refusedDelta }, cfg);
   const sent = [];
 
+  // Once, the first time it runs: proof that these messages reach the owner.
+  if (!st.hello && h) {
+    const r = await tellOwner(client, "✅ Server watch is on. I check the Tikdum server every 5 minutes and will message you here if the API or database goes down, a backup fails, the server gets busy, or photos stop copying to cloud storage — and again when it's fixed.");
+    if (r.reached) {
+      st.hello = new Date(now).toISOString();
+      sent.push(r.delivered ? "hello" : "hello (not delivered)");
+    }
+  }
+
   for (const [key, p] of Object.entries(found)) {
     const open = st.open[key];
     if (!open) {
