@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import BottomNav from "./BottomNav";
 import DesktopHeader from "./DesktopHeader";
@@ -15,14 +16,33 @@ function LoadingState() {
   );
 }
 
+// True once the live link has been down for `ms`: opening the app and short
+// network blips reconnect on their own and never show anything.
+function useDownFor(connected, ms) {
+  const [down, setDown] = useState(false);
+  useEffect(() => {
+    if (connected) {
+      setDown(false);
+      return undefined;
+    }
+    const t = setTimeout(() => setDown(true), ms);
+    return () => clearTimeout(t);
+  }, [connected, ms]);
+  return down;
+}
+
+// A small pill above the bottom bar (under any toast) while the live link (booking status,
+// provider location, chat) is down. The offline banner already covers "no network".
 function ConnectionBanner() {
   const { connected, isOffline } = useApp();
-  // The offline banner already covers "no network" more precisely — don't
-  // also show "reconnecting" underneath it.
-  if (connected || isOffline) return null;
+  const down = useDownFor(connected, 8000);
+  if (!down || isOffline) return null;
   return (
-    <div className="flex-shrink-0 bg-amber-100 px-4 py-1.5 text-center text-[10.5px] font-medium text-amber-700">
-      Reconnecting to server…
+    <div className="pointer-events-none absolute inset-x-0 bottom-28 z-40 flex justify-center" role="status">
+      <span className="flex items-center gap-1.5 rounded-full bg-gray-900/85 px-3 py-1 text-[11px] font-medium text-white shadow-lg backdrop-blur">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+        Live updates paused · reconnecting
+      </span>
     </div>
   );
 }
