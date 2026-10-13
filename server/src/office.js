@@ -193,7 +193,7 @@ function addOwnerWhatsApp(phone, text, waId) {
 // When the owner last wrote to the business number on WhatsApp (ISO time), or null.
 // WhatsApp only delivers free text within 24 hours of that.
 function ownerLastWhatsAppAt(phone) {
-  const last10 = (x) => String(x || "").replace(/D/g, "").slice(-10);
+  const last10 = (x) => String(x || "").replace(/\D/g, "").slice(-10);
   const p = last10(phone);
   let at = null;
   for (const m of jsonStore.readAll(MESSAGES)) {

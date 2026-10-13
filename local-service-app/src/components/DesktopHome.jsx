@@ -307,7 +307,7 @@ function CategoryGrid({ categories }) {
             className="group overflow-hidden rounded-2xl bg-white text-left shadow-card transition-shadow hover:shadow-lg"
           >
             <div className="h-36 overflow-hidden">
-              <CategoryPhoto categoryId={c.id} size={110} className="transition-transform duration-500 group-hover:scale-105" />
+              <CategoryPhoto categoryId={c.id} imageUrl={c.imageUrl} size={110} className="transition-transform duration-500 group-hover:scale-105" />
             </div>
             <p className="px-4 py-3.5 text-[15px] font-bold text-gray-900">{c.name}</p>
           </button>

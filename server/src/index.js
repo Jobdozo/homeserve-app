@@ -1154,6 +1154,24 @@ app.delete("/api/admin/categories/:id/banner", auth.requireAuth("admin"), ah(asy
   res.json(category);
 }));
 
+// Category tile photo (home screen): upload replaces any previous one; DELETE goes back
+// to the picture built into the apps.
+app.post("/api/admin/categories/:id/photo", auth.requireAuth("admin"), upload.single("file"), ah(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Choose a photo to upload" });
+  const category = await store.setCategoryPhoto(req.params.id, `/uploads/${req.file.filename}`, actorOf(req));
+  if (!category) {
+    require("./uploads").removeFile(req.file.filename);
+    return res.status(404).json({ error: "Category not found" });
+  }
+  res.json(category);
+}));
+
+app.delete("/api/admin/categories/:id/photo", auth.requireAuth("admin"), ah(async (req, res) => {
+  const category = await store.setCategoryPhoto(req.params.id, null, actorOf(req));
+  if (!category) return res.status(404).json({ error: "Category not found" });
+  res.json(category);
+}));
+
 app.delete("/api/admin/categories/:id", auth.requireAuth("admin"), ah(async (req, res) => {
   const deleted = await store.deleteCategory(req.params.id, actorOf(req));
   if (deleted) store.dropFeeOverride("category", req.params.id);

@@ -26,7 +26,7 @@ const storage = diskStorage("");
 // KYC documents, job photos, complaint evidence: named "p-…" and kept out of the public bucket.
 const privateStorage = diskStorage(PRIVATE_PREFIX);
 
-const upload = multer({
+const uploadRaw = multer({
   storage,
   limits: { fileSize: 15 * 1024 * 1024 }, // 15MB — the client compresses first, but some formats (e.g. HEIC) fall through uncompressed
   fileFilter: (req, file, cb) => {
@@ -50,9 +50,9 @@ const imageFilter = (req, file, cb) => {
   if (!ALLOWED_TYPES.has(file.mimetype)) return cb(new Error("Only image uploads (JPEG, PNG, WebP, HEIC) are allowed"));
   cb(null, true);
 };
-const uploadPrivate = multer({ storage: privateStorage, limits: { fileSize: 15 * 1024 * 1024 }, fileFilter: imageFilter });
+const uploadPrivateRaw = multer({ storage: privateStorage, limits: { fileSize: 15 * 1024 * 1024 }, fileFilter: imageFilter });
 
-const uploadEvidence = multer({
+const uploadEvidenceRaw = multer({
   storage: privateStorage,
   limits: { fileSize: 15 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
@@ -61,6 +61,97 @@ const uploadEvidence = multer({
   },
 });
 
+
+// ---------------------------------------------------------------- smaller photos
+// Every uploaded photo is re-saved as WebP (about a third smaller than JPEG at the
+// same quality), at most PHOTO.max pixels on its longest side. Public photos also
+// get a small "<name>-t.webp" copy for list cards (thumbUrl in the apps), which
+// is what makes lists load fast on mobile data. Documents (KYC, job photos,
+// evidence) keep more detail and get no thumbnail; PDFs and other files, HEIC
+// photos and anything sharp can't read are kept exactly as sent.
+let sharp = null;
+try {
+  sharp = require("sharp");
+  sharp.cache(false); // each photo is read once; don't hold files or memory for it
+} catch {
+  sharp = null; // not installed: uploads are kept as sent
+}
+const PHOTO = { max: 1600, quality: 78 };
+const DOCUMENT = { max: 2000, quality: 85 };
+const THUMB = { max: 600, quality: 70 };
+const OPTIMISABLE = new Set(["image/jpeg", "image/png", "image/webp"]);
+const isThumb = (name) => /-t\.webp$/.test(name);
+const thumbName = (name) => `${name.replace(/\.[a-z0-9]+$/i, "")}-t.webp`;
+
+const toWebp = (input, { max, quality }) =>
+  sharp(input, { failOn: "none" })
+    .rotate() // apply the phone's orientation before the EXIF data is dropped
+    .resize({ width: max, height: max, fit: "inside", withoutEnlargement: true })
+    .webp({ quality })
+    .toBuffer();
+
+// Re-save one uploaded file (multer's req.file) in place; updates its name and path.
+async function optimiseFile(file, { thumb }) {
+  if (!sharp || !OPTIMISABLE.has(file.mimetype)) return file;
+  const original = fs.readFileSync(file.path);
+  const webp = await toWebp(original, thumb ? PHOTO : DOCUMENT);
+  if (webp.length < original.length) {
+    const name = file.filename.replace(/\.[a-z0-9]+$/i, "") + ".webp";
+    const dest = path.join(UPLOADS_DIR, name);
+    fs.writeFileSync(dest, webp);
+    if (dest !== file.path) fs.rmSync(file.path, { force: true });
+    Object.assign(file, { filename: name, path: dest, mimetype: "image/webp", size: webp.length });
+  }
+  if (thumb) fs.writeFileSync(path.join(UPLOADS_DIR, thumbName(file.filename)), await toWebp(file.path, THUMB));
+  return file;
+}
+
+// multer, then the re-save. A failure keeps the upload as sent rather than losing it.
+const optimised = (instance, opts) => ({
+  single: (field) => [
+    instance.single(field),
+    (req, res, next) => {
+      if (!req.file) return next();
+      optimiseFile(req.file, opts).then(
+        () => next(),
+        (e) => {
+          console.error("[uploads] couldn't optimise", req.file.filename, e.message);
+          next();
+        }
+      );
+    },
+  ],
+});
+const upload = optimised(uploadRaw, { thumb: true });
+const uploadPrivate = optimised(uploadPrivateRaw, { thumb: false });
+const uploadEvidence = optimised(uploadEvidenceRaw, { thumb: false });
+
+// Thumbnails for public photos uploaded before they existed (or written by other
+// features, e.g. Image Studio): a batch per run, from the copy on this server.
+async function makeMissingThumbs({ dir = UPLOADS_DIR, limit = 50 } = {}) {
+  if (!sharp) return 0;
+  const priv = privateNames();
+  let names = [];
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return 0;
+  }
+  const have = new Set(names);
+  let made = 0;
+  for (const name of names) {
+    if (made >= limit) break;
+    if (!/\.(jpe?g|png|webp)$/i.test(name) || isThumb(name) || name.startsWith(PRIVATE_PREFIX) || priv.has(name) || have.has(thumbName(name))) continue;
+    try {
+      fs.writeFileSync(path.join(dir, thumbName(name)), await toWebp(path.join(dir, name), THUMB));
+      made += 1;
+    } catch (e) {
+      console.error("[uploads] thumbnail failed for", name, e.message);
+      have.add(thumbName(name)); // don't retry a broken file every run
+    }
+  }
+  return made;
+}
 
 // ---------------------------------------------------------------- cloud copies (scaling step 3)
 // Files are still written to this folder first (every feature that saves, copies or
@@ -212,6 +303,7 @@ function serveUpload(req, res, next) {
 function removeFile(urlOrName) {
   const name = nameOf(urlOrName);
   if (!name) return;
+  if (!isThumb(name) && fs.existsSync(path.join(UPLOADS_DIR, thumbName(name)))) removeFile(thumbName(name));
   fs.rmSync(path.join(UPLOADS_DIR, name), { force: true });
   const rec = cloudRecords().get(name);
   if (rec) {
@@ -227,9 +319,13 @@ function removeFile(urlOrName) {
 const cloudStatus = () => ({ ...status, enabled: objectStorage.config().enabled });
 
 function startCloudSync() {
-  const run = () => syncUploads().catch((e) => (status.lastError = String(e.message || e).slice(0, 200)));
+  const run = () =>
+    makeMissingThumbs()
+      .catch((e) => console.error("[uploads] thumbnails:", e.message))
+      .then(() => syncUploads())
+      .catch((e) => (status.lastError = String(e.message || e).slice(0, 200)));
   setTimeout(run, 15 * 1000).unref();
   setInterval(run, 60 * 1000).unref();
 }
 
-module.exports = { upload, uploadPrivate, uploadEvidence, UPLOADS_DIR, PRIVATE_PREFIX, markPrivate, privateNames, syncUploads, serveUpload, removeFile, cloudStatus, startCloudSync, nameOf };
+module.exports = { upload, uploadPrivate, uploadEvidence, optimiseFile, makeMissingThumbs, thumbName, UPLOADS_DIR, PRIVATE_PREFIX, markPrivate, privateNames, syncUploads, serveUpload, removeFile, cloudStatus, startCloudSync, nameOf };

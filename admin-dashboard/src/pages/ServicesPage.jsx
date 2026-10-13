@@ -268,7 +268,7 @@ function ServicesPanel({ tab, setTab }) {
 
   // Status tab, then the filters: words match the service, its type or its provider.
   const filtered = useMemo(() => {
-    const words = filters.q.trim().toLowerCase().split(/s+/).filter(Boolean);
+    const words = filters.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const list = services.filter((s) => {
       if (activeTab.status && s.status !== activeTab.status) return false;
       if (filters.category && s.categoryId !== filters.category) return false;
@@ -649,9 +649,35 @@ function ServicePhotoField({ service }) {
 }
 
 // The wide picture at the top of this category's page in the customer app.
-function CategoryBannerField({ category }) {
-  const { setCategoryBanner, showToast } = useApp();
-  const [bannerUrl, setBannerUrl] = useState(category.bannerUrl || null);
+// The two pictures a category can have: the banner on its page, and the tile on
+// the apps' home screens (the apps' built-in picture is used until one is uploaded).
+const CATEGORY_PICTURES = {
+  banner: {
+    label: "Category banner",
+    field: "bannerUrl",
+    setter: "setCategoryBanner",
+    maxSide: 1800,
+    box: "h-16 w-28",
+    noun: "banner",
+    help: "Wide picture at the top of this category's page on the website. Use a landscape photo (about 1800 × 600). Without one, the default category picture is used.",
+  },
+  photo: {
+    label: "Tile photo (home screen)",
+    field: "imageUrl",
+    setter: "setCategoryPhoto",
+    maxSide: 1000,
+    box: "h-16 w-16",
+    noun: "tile photo",
+    help: "The square picture for this category on the home screen of the website and the apps. Use a square photo (about 800 × 800). Without one, the picture built into the apps is used.",
+  },
+};
+
+function CategoryBannerField({ category, kind = "banner" }) {
+  const cfg = CATEGORY_PICTURES[kind];
+  const app = useApp();
+  const { showToast } = app;
+  const setCategoryBanner = app[cfg.setter];
+  const [bannerUrl, setBannerUrl] = useState(category[cfg.field] || null);
   const [busy, setBusy] = useState(false);
 
   const change = async (file) => {
@@ -662,10 +688,10 @@ function CategoryBannerField({ category }) {
     }
     setBusy(true);
     try {
-      const updated = await setCategoryBanner(category.id, await shrinkImage(file, 1800));
-      setBannerUrl(updated.bannerUrl);
+      const updated = await setCategoryBanner(category.id, await shrinkImage(file, cfg.maxSide));
+      setBannerUrl(updated[cfg.field]);
     } catch (err) {
-      showToast(err.message || "Could not upload the banner");
+      showToast(err.message || `Could not upload the ${cfg.noun}`);
     }
     setBusy(false);
   };
@@ -674,18 +700,18 @@ function CategoryBannerField({ category }) {
     setBusy(true);
     try {
       const updated = await setCategoryBanner(category.id, null);
-      setBannerUrl(updated.bannerUrl);
+      setBannerUrl(updated[cfg.field]);
     } catch (err) {
-      showToast(err.message || "Could not remove the banner");
+      showToast(err.message || `Could not remove the ${cfg.noun}`);
     }
     setBusy(false);
   };
 
   return (
     <div>
-      <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">Category banner</label>
+      <label className="mb-1 block text-[11.5px] font-semibold text-gray-600">{cfg.label}</label>
       <div className="flex items-center gap-3">
-        <div className="flex h-16 w-28 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+        <div className={`flex ${cfg.box} flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50`}>
           {bannerUrl ? (
             <img src={`${SERVER_URL}${bannerUrl}`} alt="" className="h-full w-full object-cover" />
           ) : (
@@ -694,7 +720,7 @@ function CategoryBannerField({ category }) {
         </div>
         <div className="flex flex-col items-start gap-1.5">
           <label className={`cursor-pointer rounded-lg border border-gray-200 px-2.5 py-1 text-[11.5px] font-semibold text-gray-600 ${busy ? "pointer-events-none opacity-50" : ""}`}>
-            {busy ? "Working…" : bannerUrl ? "Replace banner" : "Upload banner"}
+            {busy ? "Working…" : bannerUrl ? `Replace ${cfg.noun}` : `Upload ${cfg.noun}`}
             <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={busy} onChange={(e) => { change(e.target.files?.[0]); e.target.value = ""; }} />
           </label>
           {bannerUrl && (
@@ -704,9 +730,7 @@ function CategoryBannerField({ category }) {
           )}
         </div>
       </div>
-      <p className="mt-1 text-[10.5px] text-gray-400">
-        Wide picture at the top of this category's page on the website. Use a landscape photo (about 1800 × 600). Without one, the default category picture is used.
-      </p>
+      <p className="mt-1 text-[10.5px] text-gray-400">{cfg.help}</p>
     </div>
   );
 }
@@ -1255,6 +1279,7 @@ function CategoriesPanel({ filter, setFilter }) {
                 className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] outline-none focus:border-brand"
               />
             </div>
+            <CategoryBannerField key={`photo-${editingCat.id}`} kind="photo" category={categories.find((c) => c.id === editingCat.id) || editingCat} />
             <CategoryBannerField key={editingCat.id} category={categories.find((c) => c.id === editingCat.id) || editingCat} />
             <button
               onClick={() => {

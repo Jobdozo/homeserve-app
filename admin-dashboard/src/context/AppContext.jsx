@@ -345,6 +345,16 @@ export function AppProvider({ children }) {
     [showToast]
   );
 
+  const setCategoryPhoto = useCallback(
+    async (id, file) => {
+      const category = file ? await api.uploadCategoryPhoto(id, file) : await api.removeCategoryPhoto(id);
+      setCategories((prev) => prev.map((x) => (x.id === id ? category : x)));
+      showToast(file ? "Tile photo saved" : "Tile photo removed");
+      return category;
+    },
+    [showToast]
+  );
+
   const deleteCategory = useCallback(
     async (id) => {
       await api.deleteCategory(id);
@@ -426,6 +436,8 @@ export function AppProvider({ children }) {
       addCategory,
       updateCategory,
       setCategoryBanner,
+      setCategoryPhoto,
+      setCategoryPhoto,
       deleteCategory,
       addProvider,
       addService,

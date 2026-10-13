@@ -52,11 +52,11 @@ async function uploadComplaintEvidence(id, file, note) {
   return data;
 }
 
-// Category banners go up as multipart too.
-async function uploadCategoryBanner(id, file) {
+// Category banners and tile photos go up as multipart too.
+async function uploadCategoryBanner(id, file, kind = "banner") {
   const body = new FormData();
   body.append("file", file);
-  const res = await fetch(`${API_BASE}/admin/categories/${id}/banner`, {
+  const res = await fetch(`${API_BASE}/admin/categories/${id}/${kind}`, {
     method: "POST",
     headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
     body,
@@ -138,6 +138,8 @@ export const api = {
   removeServiceCatalogImage: (id) => request(`/admin/service-catalog/${id}/image`, { method: "DELETE" }),
   removeServiceImage: (id) => request(`/admin/services/${id}/image`, { method: "DELETE" }),
   removeCategoryBanner: (id) => request(`/admin/categories/${id}/banner`, { method: "DELETE" }),
+  uploadCategoryPhoto: (id, file) => uploadCategoryBanner(id, file, "photo"),
+  removeCategoryPhoto: (id) => request(`/admin/categories/${id}/photo`, { method: "DELETE" }),
   uploadComplaintEvidence,
   requestOtp: (phone, role) => request("/auth/otp/request", { method: "POST", body: JSON.stringify({ phone, role }) }),
   verifyOtp: (phone, code, role) =>

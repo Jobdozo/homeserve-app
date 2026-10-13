@@ -139,8 +139,14 @@ function categoryBannerUrl(slug) {
   return jsonStore.readAll("categoryBanners").find((r) => r.id === slug)?.url || null;
 }
 
+// The category's tile picture on the apps' home screens (Admin → Categories → Tile
+// photo); without one the apps use the picture built into them.
+function categoryPhotoUrl(slug) {
+  return jsonStore.readAll("categoryPhotos").find((r) => r.id === slug)?.url || null;
+}
+
 function mapCategory(c) {
-  return { id: c.slug, name: c.name, icon: c.icon, active: isCategoryActive(c.slug), bannerUrl: categoryBannerUrl(c.slug) };
+  return { id: c.slug, name: c.name, icon: c.icon, active: isCategoryActive(c.slug), bannerUrl: categoryBannerUrl(c.slug), imageUrl: categoryPhotoUrl(c.slug) };
 }
 
 // Bump this string whenever the Service Provider Agreement's terms actually
@@ -587,17 +593,22 @@ async function listCategories() {
   });
 }
 
-// Banner upload replaces any previous one; a null url goes back to the default
-// category picture.
-async function setCategoryBanner(slug, url, actor) {
+// Banner (category page) or tile photo (home screen) upload: replaces any previous
+// one; a null url goes back to the default picture.
+const CATEGORY_PICTURES = {
+  banner: { table: "categoryBanners", current: categoryBannerUrl },
+  photo: { table: "categoryPhotos", current: categoryPhotoUrl },
+};
+async function setCategoryPicture(kind, slug, url, actor) {
+  const { table, current } = CATEGORY_PICTURES[kind];
   const before = (await listCategories()).find((c) => c.id === slug);
   if (!before) return undefined;
-  const previous = categoryBannerUrl(slug);
+  const previous = current(slug);
   if (url) {
-    if (previous) jsonStore.update("categoryBanners", slug, { url, updatedAt: new Date().toISOString() });
-    else jsonStore.insert("categoryBanners", { id: slug, url, updatedAt: new Date().toISOString() });
+    if (previous) jsonStore.update(table, slug, { url, updatedAt: new Date().toISOString() });
+    else jsonStore.insert(table, { id: slug, url, updatedAt: new Date().toISOString() });
   } else if (previous) {
-    jsonStore.remove("categoryBanners", slug);
+    jsonStore.remove(table, slug);
   }
   if (previous && previous !== url) deleteUploadedFile(previous);
   cacheClear("categories");
@@ -607,10 +618,12 @@ async function setCategoryBanner(slug, url, actor) {
     entityType: "category",
     entityId: slug,
     entityName: before.name,
-    changes: [{ field: "banner", from: previous ? "uploaded" : "none", to: url ? "uploaded" : "removed" }],
+    changes: [{ field: kind === "photo" ? "tile photo" : "banner", from: previous ? "uploaded" : "none", to: url ? "uploaded" : "removed" }],
   });
   return (await listCategories()).find((c) => c.id === slug);
 }
+const setCategoryBanner = (slug, url, actor) => setCategoryPicture("banner", slug, url, actor);
+const setCategoryPhoto = (slug, url, actor) => setCategoryPicture("photo", slug, url, actor);
 
 // Admin edit: rename / re-icon (the slug, which other records reference, never
 // changes) and switch active on or off. An inactive category and all of its
@@ -682,10 +695,12 @@ async function deleteCategory(slug, actor) {
   const name = (await listCategories()).find((c) => c.id === slug)?.name || slug;
   await mutate(`mutation($id: UUID!) { category_delete(id: $id) }`, { id: categoryId });
   jsonStore.remove("categoryStatus", slug);
-  const oldBanner = categoryBannerUrl(slug);
-  if (oldBanner) {
-    jsonStore.remove("categoryBanners", slug);
-    deleteUploadedFile(oldBanner);
+  for (const { table, current } of Object.values(CATEGORY_PICTURES)) {
+    const old = current(slug);
+    if (old) {
+      jsonStore.remove(table, slug);
+      deleteUploadedFile(old);
+    }
   }
   cacheClear("categories");
   await logActivity("category", `Category "${name}" deleted by admin`);
@@ -4988,6 +5003,7 @@ module.exports = {
   createCategory,
   updateCategory,
   setCategoryBanner,
+  setCategoryPhoto,
   updateCustomerProfile,
   deleteCategory,
   listServices,

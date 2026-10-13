@@ -80,7 +80,7 @@ export default function DesktopCategories() {
                   className="group overflow-hidden rounded-2xl bg-white text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lg"
                 >
                   <div className="h-40 overflow-hidden">
-                    <CategoryPhoto categoryId={c.id} size={150} className="transition-transform duration-500 group-hover:scale-105" />
+                    <CategoryPhoto categoryId={c.id} imageUrl={c.imageUrl} size={150} className="transition-transform duration-500 group-hover:scale-105" />
                   </div>
                   <div className="px-4 py-3.5">
                     <p className="truncate text-[15.5px] font-bold text-gray-900">{c.name}</p>
