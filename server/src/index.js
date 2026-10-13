@@ -188,24 +188,87 @@ async function takeOfflineIfMissing(providerId) {
   io.emit("provider:updated", publicProvider(await store.getProvider(providerId)));
 }
 
+// ---- needs assignment (see assignments.js) ----
+// A booking nobody took is shown with no provider: it leaves the list of the
+// provider who passed on it, and Admin's assignment desk rings.
+const assignmentsQueue = require("./assignments");
+const unassignedView = (b) => (b ? { ...b, providerId: null, needsAssignment: true } : b);
+const withAssignmentFlag = (list) => {
+  const ids = assignmentsQueue.queuedIds();
+  return ids.size ? list.map((b) => (ids.has(b.id) ? unassignedView(b) : b)) : list;
+};
+function announceNeedsAssignment(booking, previous = []) {
+  rt.booking("booking:updated", unassignedView(booking), { previous: [...new Set([booking.providerId, ...previous])] });
+  io.to("admin:bookings").emit("assignment:needed", { bookingId: booking.id });
+}
+
+// WhatsApp to the owner numbers (ADMIN_PHONES): free text inside the 24-hour window,
+// otherwise the approved notice template (MSG91 accepts free text either way and
+// WhatsApp drops it later, so a "sent" result can't be trusted outside the window).
+async function sendOwnerWhatsApp(message) {
+  const whatsapp = require("./whatsapp");
+  const results = [];
+  for (const phone of auth.adminPhones()) {
+    const lastAt = office.ownerLastWhatsAppAt(phone);
+    const open = Boolean(lastAt && Date.now() - Date.parse(lastAt) < 23 * 3600 * 1000);
+    const template = !open && whatsapp.noticeTemplate();
+    const ok = template
+      ? (await whatsapp.sendNoticeTemplate(phone, { message, name: "Owner" }).catch(() => ({}))).ok === true
+      : await whatsapp.sendWhatsAppMessage(phone, message).catch(() => false);
+    results.push(ok);
+  }
+  return { delivered: results.filter(Boolean).length, attempted: results.length };
+}
+
+// Every minute: WhatsApp the owner about a booking nobody in Admin has assigned for
+// 10 minutes, and give up (apology to the customer) once its deadline passes.
+async function checkAssignmentQueue(now = Date.now()) {
+  for (const q of assignmentsQueue.listQueue()) {
+    const booking = await store.getBooking(q.id);
+    if (!booking || booking.status !== "Pending") {
+      assignmentsQueue.removeFromQueue(q.id);
+      continue;
+    }
+    if (now >= assignmentsQueue.deadlineFor(booking, q.since)) {
+      const updated = await store.giveUpBooking(q.id);
+      rt.booking("booking:updated", unassignedView(updated));
+      io.to("admin:bookings").emit("assignment:needed", { bookingId: q.id });
+      rt.activity((await store.listActivities(1))[0]);
+      continue;
+    }
+    if (!q.alertedAt && now - Date.parse(q.since) >= assignmentsQueue.OWNER_ALERT_AFTER_MS) {
+      assignmentsQueue.markAlerted(q.id);
+      const mins = Math.round((now - Date.parse(q.since)) / 60000);
+      const where = (String(booking.address?.line || "").match(/\b\d{6}\b/) || [""])[0];
+      await sendOwnerWhatsApp(
+        `🟠 Booking #${booking.ref || booking.id} (${booking.service?.name || "service"}${where ? `, PIN ${where}` : ""}, ${booking.date} ${booking.time || ""}) has waited ${mins} min — no provider accepted it. Assign it in Admin (it pops up on any open Admin screen).`
+      ).catch((e) => console.error("assignment owner alert failed:", e.message));
+    }
+  }
+}
+setInterval(() => checkAssignmentQueue().catch((e) => console.error("assignment queue check failed:", e)), 60 * 1000).unref();
+
 // Hand pending bookings to other providers and ring each new provider once for the bookings they received.
 async function reassignGroup(pending, triedProviderIds) {
   const moved = [];
-  const unplaced = [];
+  const waiting = [];
   for (const b of pending) {
     // Keep the order together: try the provider who just took one of its services first.
     const result = await store.reassignBooking(b.id, triedProviderIds, { preferProviderId: moved[0]?.providerId, quiet: true });
+    if (result.needsAssignment) {
+      announceNeedsAssignment(result.booking, triedProviderIds);
+      waiting.push(result.booking);
+      continue;
+    }
     rt.booking("booking:updated", result.booking, { previous: triedProviderIds });
     if (result.reassigned) {
       rt.booking("booking:created", result.booking);
       moved.push(result.booking);
-    } else if (result.booking?.status === "Rejected") {
-      unplaced.push(result.booking);
     }
   }
   rt.activity((await store.listActivities(1))[0]);
-  // One notice per new provider and one to the customer for anything nobody could take.
-  await store.notifyCustomerNoProviders(unplaced);
+  // One notice per new provider, and one to the customer for anything the Tikdum team now assigns.
+  await store.notifyCustomerFindingProvider(waiting);
   for (const group of groupByProvider(moved)) {
     await store.notifyProviderOfGroup(group[0].providerId, group);
     await dispatchBooking(group[0], [...triedProviderIds, group[0].providerId], group);
@@ -414,7 +477,7 @@ app.post("/api/admin/remove-seed-data", auth.requireAuth("admin"), ah(async (req
 }));
 
 app.post("/api/provider/agreement/accept", auth.requireAuth("provider"), ah(async (req, res) => {
-  store.acceptProviderAgreement(req.user.id, { ip: req.ip, userAgent: req.headers["user-agent"] });
+  store.acceptProviderAgreement(req.user.id, { ip: req.ip, userAgent: req.headers["user-agent"], version: req.body?.version });
   const provider = await store.getProvider(req.user.id);
   io.emit("provider:updated", publicProvider(provider));
   res.status(201).json(provider);
@@ -905,7 +968,7 @@ app.get("/api/provider/money", auth.requireAuth("provider"), ah(async (req, res)
   const wallet = store.getWallet(id);
   const recent = bookings.map((b) => fees.get(b.id)).filter((f) => f > 0).slice(0, 20);
   const avgFee = recent.length ? Math.round(recent.reduce((a, b) => a + b, 0) / recent.length) : null;
-  const lastRecharge = [...(wallet.recharges || [])].pop();
+  const lastRecharge = [...(wallet.recharges || [])].filter((r) => r.kind !== "credit").pop();
   const acct = accounting.getSettings();
   res.json({
     cycles: partnerHub.weeklyCycles({ bookings, fees, payments: partnerHub.paymentMap() }),
@@ -1771,13 +1834,14 @@ app.delete("/api/admin/services/:id", auth.requireAuth("admin"), ah(async (req, 
 const staffList = (providerId) => require("./jsonStore").readAll("providerStaff").filter((s) => s.providerId === providerId);
 
 app.get("/api/bookings", auth.requireAuth(), ah(async (req, res) => {
-  if (req.user.role === "admin") return res.json(await store.listBookings({}));
+  if (req.user.role === "admin") return res.json(withAssignmentFlag(await store.listBookings({})));
   if (req.user.role === "customer") {
     const cutoffs = store.swapCutoffs();
-    return res.json((await store.listBookings({ customerId: req.user.id })).map((b) => dropStaleLastMessage(hideCompletedChat(b), cutoffs)));
+    return res.json(withAssignmentFlag((await store.listBookings({ customerId: req.user.id })).map((b) => dropStaleLastMessage(hideCompletedChat(b), cutoffs))));
   }
   const cutoffs = store.swapCutoffs();
-  let own = (await store.listBookings({ providerId: req.user.id })).map((b) => dropStaleLastMessage(maskCompleted(b), cutoffs));
+  const waiting = assignmentsQueue.queuedIds();
+  let own = (await store.listBookings({ providerId: req.user.id })).filter((b) => !waiting.has(b.id)).map((b) => dropStaleLastMessage(maskCompleted(b), cutoffs));
   const asg = staff.assignments();
   // Staff only see what their permissions allow: everything, just the orders
   // assigned to them, or nothing.
@@ -1866,7 +1930,8 @@ app.post("/api/orders", auth.requireAuth("customer"), ah(async (req, res) => {
 app.post("/api/orders/:orderId/respond", auth.requireAuth("provider"), ah(async (req, res) => {
   const action = req.body?.action;
   if (!["accept", "reject"].includes(action)) return res.status(400).json({ error: "action must be accept or reject" });
-  const mine = (await store.listBookings({ providerId: req.user.id })).filter((b) => b.orderId === req.params.orderId && b.status === "Pending");
+  const waiting = assignmentsQueue.queuedIds();
+  const mine = (await store.listBookings({ providerId: req.user.id })).filter((b) => b.orderId === req.params.orderId && b.status === "Pending" && !waiting.has(b.id));
   if (mine.length === 0) return res.status(404).json({ error: "No pending requests for this order" });
   partnerHub.noteResponse(req.user.id);
   if (action === "reject") {
@@ -1907,12 +1972,20 @@ app.patch("/api/bookings/:id", auth.requireAuth(), ah(async (req, res) => {
   if (req.user.role === "provider" && ["In Progress", "Completed"].includes(status)) {
     return res.status(400).json({ error: "Starting and completing a job requires the customer's OTP" });
   }
+  if (req.user.role === "provider" && assignmentsQueue.queued(existing.id)) {
+    return res.status(409).json({ error: "This booking was passed on — the Tikdum team is assigning it" });
+  }
   // A provider declining doesn't fail the booking outright — try handing it
   // to another provider in the same category first, same as a ring timeout.
   if (req.user.role === "provider" && status === "Rejected" && existing.status === "Pending") {
     providerAdmin.recordDecline(req.user.id, existing.id, "declined");
     partnerHub.noteResponse(req.user.id);
     const result = await store.reassignBooking(req.params.id, [req.user.id]);
+    if (result.needsAssignment) {
+      announceNeedsAssignment(result.booking, [req.user.id]);
+      rt.activity((await store.listActivities(1))[0]);
+      return res.json(unassignedView(result.booking));
+    }
     rt.booking("booking:updated", result.booking, { previous: [req.user.id] });
     rt.activity((await store.listActivities(1))[0]);
     if (result.reassigned) {
@@ -2417,8 +2490,7 @@ app.get("/api/admin/customers", auth.requireAuth("admin"), ah(async (req, res) =
 const isoDay = (v) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) ? v : undefined);
 app.get("/api/admin/bookings", auth.requireAuth("admin"), ah(async (req, res) => {
   const to = isoDay(req.query.to);
-  res.json(
-    await store.listBookingsPage({
+  const page = await store.listBookingsPage({
       statuses: queryText(req.query.status)?.split(",").map((x) => x.trim()).filter(Boolean),
       providerId: queryText(req.query.provider),
       customerId: queryText(req.query.customer),
@@ -2427,8 +2499,42 @@ app.get("/api/admin/bookings", auth.requireAuth("admin"), ah(async (req, res) =>
       q: queryText(req.query.q),
       offset: req.query.offset,
       limit: req.query.limit,
-    })
-  );
+  });
+  res.json({ ...page, items: withAssignmentFlag(page.items) });
+}));
+
+// ---- assignment desk: bookings no provider took, for a person to assign ----
+app.get("/api/admin/assignments", auth.requireAuth("admin"), ah(async (req, res) => {
+  res.json({ items: await store.listNeedsAssignment() });
+}));
+
+app.post("/api/admin/bookings/:id/assign", auth.requireAuth("admin"), ah(async (req, res) => {
+  const providerId = typeof req.body?.providerId === "string" ? req.body.providerId : "";
+  if (!providerId) return res.status(400).json({ error: "Choose a provider" });
+  let result;
+  try {
+    result = await store.assignBookingTo(req.params.id, providerId, actorOf(req));
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ error: e.message });
+    throw e;
+  }
+  const { booking, tried } = result;
+  rt.booking("booking:updated", booking, { previous: tried });
+  rt.booking("booking:created", booking);
+  io.to("admin:bookings").emit("assignment:needed", { bookingId: booking.id });
+  rt.activity((await store.listActivities(1))[0]);
+  // Rings them like any new request; if it rings out it comes back to the desk.
+  dispatchBooking(booking, [...new Set([...tried, booking.providerId])]).catch((e) => console.error("dispatchBooking failed", e));
+  res.json(booking);
+}));
+
+app.post("/api/admin/bookings/:id/give-up", auth.requireAuth("admin"), ah(async (req, res) => {
+  const booking = await store.giveUpBooking(req.params.id, { byAdmin: true });
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  rt.booking("booking:updated", unassignedView(booking));
+  io.to("admin:bookings").emit("assignment:needed", { bookingId: booking.id });
+  rt.activity((await store.listActivities(1))[0]);
+  res.json(booking);
 }));
 
 app.get("/api/admin/settings", auth.requireAuth("admin"), ah(async (req, res) => {
@@ -2774,22 +2880,7 @@ app.post("/api/agents/notify-owner", agentOnly, crm(async (req, res) => {
   const n = ownerPings.get(k) || 0;
   if (n >= 10) return res.status(429).json({ error: "Daily owner message limit reached" });
   ownerPings.set(k, n + 1);
-  const whatsapp = require("./whatsapp");
-  const message = `[${req.admin.name}] ${text}`;
-  const results = [];
-  for (const phone of auth.adminPhones()) {
-    // Free text only arrives within 24h of the owner writing to the business number.
-    // MSG91 accepts it either way and WhatsApp drops it later, so a failed send can't
-    // be relied on to tell us: outside the window, use the approved notice template.
-    const lastAt = office.ownerLastWhatsAppAt(phone);
-    const open = Boolean(lastAt && Date.now() - Date.parse(lastAt) < 23 * 3600 * 1000);
-    const template = !open && whatsapp.noticeTemplate();
-    const ok = template
-      ? (await whatsapp.sendNoticeTemplate(phone, { message, name: "Owner" }).catch(() => ({}))).ok === true
-      : await whatsapp.sendWhatsAppMessage(phone, message).catch(() => false);
-    results.push(ok);
-  }
-  res.json({ delivered: results.filter(Boolean).length, attempted: results.length });
+  res.json(await sendOwnerWhatsApp(`[${req.admin.name}] ${text}`));
 }));
 
 // -- human side --

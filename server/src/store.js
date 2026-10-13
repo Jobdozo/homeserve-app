@@ -149,15 +149,30 @@ function mapCategory(c) {
   return { id: c.slug, name: c.name, icon: c.icon, active: isCategoryActive(c.slug), bannerUrl: categoryBannerUrl(c.slug), imageUrl: categoryPhotoUrl(c.slug) };
 }
 
-// Bump this string whenever the Service Provider Agreement's terms actually
-// change — a provider who accepted an older version is treated as not
-// having accepted, so they're asked again on next login.
-const AGREEMENT_VERSION = "2026-01";
+// The Service Provider Agreement's latest wording (kept in step with the Business
+// app's data/providerAgreement.js). Any known version lets a provider work, so an
+// older app is never locked out; the newest app asks owners on an older version to
+// accept again. Terms added later apply only to those who accepted them:
+// 2026-10 added the price difference for passed bookings (assignments.js).
+const AGREEMENT_VERSION = "2026-10";
+const AGREEMENT_VERSIONS = ["2026-01", "2026-10"];
+const PRICE_DIFFERENCE_SINCE = "2026-10";
+
+// The newest version this provider accepted, or null.
+function acceptedAgreementVersion(providerId) {
+  let latest = null;
+  for (const a of jsonStore.readAll("providerAgreements")) {
+    if (a.providerId === providerId && AGREEMENT_VERSIONS.includes(a.version) && (!latest || a.version > latest)) latest = a.version;
+  }
+  return latest;
+}
 
 function hasAcceptedAgreement(providerId) {
-  return jsonStore
-    .readAll("providerAgreements")
-    .some((a) => a.providerId === providerId && a.version === AGREEMENT_VERSION);
+  return acceptedAgreementVersion(providerId) !== null;
+}
+
+function hasAcceptedPriceDifference(providerId) {
+  return (acceptedAgreementVersion(providerId) || "") >= PRICE_DIFFERENCE_SINCE;
 }
 
 // A provider's own profile photo or logo. Like service photos it is kept in a small
@@ -199,6 +214,7 @@ function mapProvider(p) {
     ...p,
     responseRate: p.responseRate ?? 100,
     agreementAccepted: hasAcceptedAgreement(p.id),
+    agreementVersion: acceptedAgreementVersion(p.id),
     coverage: getProviderCoverage(p.id),
     photoUrl: providerPhotoUrl(p.id),
     udyamNumber: providerExtras(p.id).udyamNumber || null,
@@ -507,6 +523,7 @@ function bookingRef(bookingId) {
 const { normalizeQuantity } = require("./quantity");
 const dup = require("./duplicates");
 const { describeGroup, sameServiceName, pincodeFromLine } = require("./orderGroups");
+const assignments = require("./assignments");
 
 // Quantity of a booking line (bookingQuantities: id -> { id, quantity }); 1 when none was stored.
 // Read once and kept in memory: a booking list maps hundreds of bookings, and reading the file for each one
@@ -2354,6 +2371,11 @@ async function updateBookingStatus(id, status, opts = {}) {
       console.error(`Wallet commission deduction failed for booking ${id}:`, e);
     }
     try {
+      await settlePriceCover(existing);
+    } catch (e) {
+      console.error(`Price difference for booking ${id} failed:`, e);
+    }
+    try {
       const redemption = jsonStore
         .readAll("referralRedemptions")
         .find((r) => r.bookingId === id && r.status === "pending");
@@ -2568,8 +2590,8 @@ async function findAlternativeProviderService(categorySlug, excludeProviderIds, 
 }
 
 // Tries to move a still-pending booking to another provider in the same
-// category. If none are left, the booking is marked Rejected for real and
-// the customer is told. Returns { reassigned, booking }.
+// category, at the price promise's price (assignments.js). If none are left it
+// waits for a person in Admin to assign it. Returns { reassigned, needsAssignment, booking }.
 // opts.preferProviderId: try this provider first. opts.quiet: send no notices — the caller sends one for the whole order.
 async function reassignBooking(bookingId, excludeProviderIds, opts = {}) {
   const booking = await fetchBookingWithRelations(bookingId);
@@ -2595,7 +2617,7 @@ async function reassignBooking(bookingId, excludeProviderIds, opts = {}) {
       `mutation($id: UUID!, $serviceId: UUID!, $providerId: UUID!, $amount: Int!) {
         booking_update(id: $id, data: { serviceId: $serviceId, providerId: $providerId, amount: $amount })
       }`,
-      { id: bookingId, serviceId: candidate.serviceId, providerId: candidate.providerId, amount: candidate.amount * qty }
+      { id: bookingId, serviceId: candidate.serviceId, providerId: candidate.providerId, amount: assignments.priceForMove(booking, candidate.amount * qty, candidate.providerId).amount }
     );
     cacheClear("openBookings");
     await logActivity("booking", `Booking #${bookingRef(bookingId)} reassigned to another provider after no response`);
@@ -2618,11 +2640,159 @@ async function reassignBooking(bookingId, excludeProviderIds, opts = {}) {
     return { reassigned: true, booking: updated };
   }
 
-  const now = new Date().toISOString();
-  await mutate(`mutation($id: UUID!, $status: String!) { booking_update(id: $id, data: { status: $status }) }`, {
-    id: bookingId,
-    status: "Rejected",
+  // Nobody left to try: it waits (still Pending, hidden from the providers who passed)
+  // for a person in Admin to assign it, instead of the customer being turned away.
+  assignments.addToQueue(bookingId, excludeIds);
+  cacheClear("openBookings");
+  await logActivity("booking", `Booking #${bookingRef(bookingId)} needs a provider — nobody accepted it; waiting for Admin to assign`);
+  const updated = await fetchBookingWithRelations(bookingId);
+  if (!opts.quiet) await notifyCustomerFindingProvider([updated]);
+  return { reassigned: false, needsAssignment: true, booking: updated };
+}
+
+// The customer hears we're still on it (not "rejected") while Admin assigns the booking.
+async function notifyCustomerFindingProvider(list) {
+  if (!list.length) return;
+  await addNotification({
+    recipientType: "customer",
+    recipientId: list[0].customerId,
+    type: "booking",
+    title: "Finding a professional for you",
+    message: `The first professionals we asked weren't available, so the Tikdum team is finding someone for your ${describeGroup(list)} booking. We'll update you shortly.`,
+    bookingId: list[0].id,
   });
+}
+
+// ---- needs assignment (Admin) ----
+
+// Who could take a waiting booking: every provider with an active service in its
+// category, their best-matching service and price, what the customer would pay and
+// the difference the responsible provider would cover, and why they might not be
+// a good pick (offline, outside the area, already passed on it).
+async function assignmentOptions(booking) {
+  const categoryUuid = booking.service?.categoryId ? await getCategoryUuidBySlug(booking.service.categoryId) : null;
+  if (!categoryUuid) return [];
+  const { services } = await query(
+    `query($categoryId: UUID!) {
+      services(where: { category: { id: { eq: $categoryId } }, status: { eq: "active" } }) { id name price provider { id } }
+    }`,
+    { categoryId: categoryUuid }
+  );
+  const vctx = await buildVisibilityContext();
+  const providers = new Map((await listProviders()).map((p) => [p.id, p]));
+  const jobs = await getProviderJobCounts().catch(() => ({}));
+  const qty = bookingQuantity(booking.id);
+  const pincode = pincodeFromLine(booking.address?.line);
+  const wanted = booking.service?.name || "";
+  const tried = new Set(assignments.queued(booking.id)?.tried || []);
+  const quoted = assignments.coverFor(booking.id)?.quoted ?? booking.amount;
+  const charged = assignments.coverFor(booking.id)?.chargedProviderId || booking.providerId;
+  const best = new Map(); // providerId -> their best service for this booking
+  for (const sv of services) {
+    if (!sv.provider) continue;
+    const had = best.get(sv.provider.id);
+    const same = sameServiceName(sv.name, wanted);
+    if (!had || (same && !had.same) || (same === had.same && sv.price < had.price)) best.set(sv.provider.id, { serviceId: sv.id, serviceName: sv.name, price: sv.price, same });
+  }
+  const out = [];
+  for (const [providerId, sv] of best) {
+    const p = providers.get(providerId);
+    if (!p) continue;
+    const issues = providerVisibilityIssues(providerId, vctx, pincode ? { pincode } : {});
+    const price = sv.price * qty;
+    const cover = providerId === charged ? 0 : Math.max(0, price - quoted);
+    out.push({
+      providerId,
+      name: p.name,
+      phone: p.phone || "",
+      rating: p.rating || 0,
+      jobsDone: jobs[providerId] || 0,
+      serviceId: sv.serviceId,
+      serviceName: sv.serviceName,
+      sameService: sv.same,
+      price,
+      customerPays: Math.min(quoted, price),
+      cover,
+      passed: tried.has(providerId),
+      issues: issues.map((i) => i.label),
+      available: issues.length === 0,
+    });
+  }
+  return out.sort(
+    (a, b) =>
+      Number(b.sameService) - Number(a.sameService) ||
+      Number(b.available) - Number(a.available) ||
+      Number(a.passed) - Number(b.passed) ||
+      a.price - b.price ||
+      b.rating - a.rating
+  );
+}
+
+// Bookings waiting for Admin, oldest first, each with who could take it.
+async function listNeedsAssignment() {
+  const out = [];
+  for (const q of assignments.listQueue()) {
+    const booking = await fetchBookingWithRelations(q.id);
+    if (!booking || booking.status !== "Pending") {
+      assignments.removeFromQueue(q.id); // cancelled, or settled some other way
+      continue;
+    }
+    const cover = assignments.coverFor(q.id);
+    const responsibleId = cover?.chargedProviderId || booking.providerId;
+    const responsible = await getProvider(responsibleId).catch(() => null);
+    out.push({
+      booking: { ...booking, providerId: null, needsAssignment: true },
+      since: q.since,
+      deadline: new Date(assignments.deadlineFor(booking, q.since)).toISOString(),
+      quoted: cover?.quoted ?? booking.amount,
+      // who pays a higher price's difference (the provider the customer booked, or who handed it back)
+      responsible: { id: responsibleId, name: responsible?.name || "the booked provider", acceptedRule: hasAcceptedPriceDifference(responsibleId) },
+      options: await assignmentOptions(booking),
+    });
+  }
+  return out;
+}
+
+// Admin gives a waiting booking to one provider (at the price promise's price).
+// It rings them as a new request; if they don't take it, it comes back to the queue.
+async function assignBookingTo(bookingId, providerId, actor) {
+  const fail = (status, message) => Object.assign(new Error(message), { status });
+  const booking = await fetchBookingWithRelations(bookingId);
+  if (!booking) throw fail(404, "Booking not found");
+  if (booking.status !== "Pending") throw fail(409, `This booking is already ${String(booking.status).toLowerCase()}`);
+  const option = (await assignmentOptions(booking)).find((o) => o.providerId === providerId);
+  if (!option) throw fail(404, "That provider doesn't offer a service in this category");
+  const { amount } = assignments.priceForMove(booking, option.price, providerId);
+  await mutate(
+    `mutation($id: UUID!, $serviceId: UUID!, $providerId: UUID!, $amount: Int!) {
+      booking_update(id: $id, data: { serviceId: $serviceId, providerId: $providerId, amount: $amount })
+    }`,
+    { id: bookingId, serviceId: option.serviceId, providerId, amount }
+  );
+  assignments.removeFromQueue(bookingId);
+  cacheClear("openBookings");
+  await logActivity("booking", `Booking #${bookingRef(bookingId)} assigned to ${option.name} by ${actor || "Admin"}`);
+  const updated = await fetchBookingWithRelations(bookingId);
+  await addNotification({
+    recipientType: "provider",
+    recipientId: providerId,
+    type: "booking",
+    title: "Tikdum assigned you a booking",
+    message: `${updated.service?.name || "A service"} for ${updated.customer?.name || "a customer"} on ${updated.date} ${updated.time || ""}. Open the Business app to accept.`,
+    bookingId,
+    skipPush: true, // index.js rings them through dispatchBooking
+  });
+  return { booking: updated, tried: assignments.queued(bookingId)?.tried || [] };
+}
+
+// Nobody could be found (Admin gave up, or the deadline passed): the booking is
+// rejected and the customer gets an apology.
+async function giveUpBooking(bookingId, { byAdmin = false } = {}) {
+  const booking = await fetchBookingWithRelations(bookingId);
+  assignments.removeFromQueue(bookingId);
+  if (!booking || booking.status !== "Pending") return booking;
+  const now = new Date().toISOString();
+  await mutate(`mutation($id: UUID!, $status: String!) { booking_update(id: $id, data: { status: $status }) }`, { id: bookingId, status: "Rejected" });
   await mutate(
     `mutation($bookingId: UUID!, $status: String!, $at: Timestamp!) {
       bookingStatusEvent_insert(data: { bookingId: $bookingId, status: $status, at: $at })
@@ -2630,18 +2800,17 @@ async function reassignBooking(bookingId, excludeProviderIds, opts = {}) {
     { bookingId, status: "Rejected", at: now }
   );
   cacheClear("openBookings");
-  await logActivity("booking", `Booking #${bookingRef(bookingId)} rejected — no providers available`);
+  await logActivity("booking", `Booking #${bookingRef(bookingId)} rejected — no provider could be found${byAdmin ? " (Admin)" : ""}`);
   const updated = await fetchBookingWithRelations(bookingId);
-  if (opts.quiet) return { reassigned: false, booking: updated };
   await addNotification({
     recipientType: "customer",
     recipientId: updated.customerId,
     type: "booking",
-    title: "Booking Rejected",
-    message: `No providers were available for your ${updated.service?.name || "booking"} request. Please try again later.`,
+    title: "Sorry, we couldn't find a professional",
+    message: `We're sorry — no professional was available for your ${updated.service?.name || "booking"} on ${updated.date}. Nothing has been charged. Please try another time slot.`,
     bookingId,
   });
-  return { reassigned: false, booking: updated };
+  return updated;
 }
 
 // ---- order swap: a provider who accepted an order but can't do it hands it
@@ -2743,13 +2912,16 @@ async function swapBooking(bookingId, providerId, { reason, note } = {}) {
 
   const fromProvider = await getProvider(providerId);
   const now = new Date().toISOString();
-  // Amount stays as the customer agreed it; only the provider/service change,
-  // and the order goes back to Pending for the new provider to accept.
+  // The price promise (assignments.js): the customer never pays more than they agreed
+  // and pays less with a cheaper provider; if the new provider charges more, the
+  // provider handing it back covers the difference. The order goes back to Pending.
+  const newService = await getService(candidate.serviceId);
+  const { amount } = assignments.priceForMove(booking, (newService?.price ?? booking.amount) * bookingQuantity(bookingId), candidate.providerId, { chargedProviderId: providerId });
   await mutate(
-    `mutation($id: UUID!, $serviceId: UUID!, $providerId: UUID!, $status: String!) {
-      booking_update(id: $id, data: { serviceId: $serviceId, providerId: $providerId, status: $status })
+    `mutation($id: UUID!, $serviceId: UUID!, $providerId: UUID!, $status: String!, $amount: Int!) {
+      booking_update(id: $id, data: { serviceId: $serviceId, providerId: $providerId, status: $status, amount: $amount })
     }`,
-    { id: bookingId, serviceId: candidate.serviceId, providerId: candidate.providerId, status: "Pending" }
+    { id: bookingId, serviceId: candidate.serviceId, providerId: candidate.providerId, status: "Pending", amount }
   );
   await mutate(
     `mutation($bookingId: UUID!, $status: String!, $at: Timestamp!) {
@@ -4195,7 +4367,7 @@ async function rechargeProviderWallet(providerId, amount, note) {
 // provider isn't messaged on every single charge once they're already below
 // the threshold). Every alert goes out both in-app (bell icon + push) and
 // via WhatsApp, since a provider may not have WhatsApp connected or may miss it.
-async function applyWalletDeduction(providerId, amount, { bookingId, reason } = {}) {
+async function applyWalletDeduction(providerId, amount, { bookingId, reason, note } = {}) {
   if (amount <= 0) return getWallet(providerId);
 
   const wallet = getWallet(providerId);
@@ -4203,7 +4375,7 @@ async function applyWalletDeduction(providerId, amount, { bookingId, reason } = 
   wallet.balance = before - amount;
   wallet.deductions = [
     ...(wallet.deductions || []),
-    { amount, at: new Date().toISOString(), reason: reason || "commission" },
+    { amount, at: new Date().toISOString(), reason: reason || "commission", ...(note ? { note } : {}) },
   ];
 
   const justSuspended = before > 0 && wallet.balance <= 0 && !wallet.suspendedAlertSentAt;
@@ -4212,7 +4384,7 @@ async function applyWalletDeduction(providerId, amount, { bookingId, reason } = 
     wallet.balance > 0 &&
     !wallet.lowBalanceAlertSentAt &&
     (() => {
-      const lastRecharge = [...(wallet.recharges || [])].pop();
+      const lastRecharge = [...(wallet.recharges || [])].filter((r) => r.kind !== "credit").pop();
       const warnThreshold = lastRecharge ? lastRecharge.amount * LOW_BALANCE_WARN_FRACTION : 0;
       return wallet.balance <= warnThreshold;
     })();
@@ -4256,6 +4428,56 @@ async function applyWalletDeduction(providerId, amount, { bookingId, reason } = 
   }
 
   return wallet;
+}
+
+// Money added to a provider's wallet by Tikdum itself (not a recharge they paid for).
+function creditProviderWallet(providerId, amount, note) {
+  if (!(amount > 0)) return getWallet(providerId);
+  const wallet = getWallet(providerId);
+  wallet.balance += amount;
+  wallet.recharges = [...(wallet.recharges || []), { amount, at: new Date().toISOString(), note, kind: "credit" }];
+  saveWallet(wallet);
+  return wallet;
+}
+
+// The price promise, paid when the job is completed: the provider who let the
+// booking go pays the difference into the wallet of the provider who did it.
+async function settlePriceCover(booking) {
+  const rec = assignments.coverDue(booking.id, booking.providerId);
+  if (!rec) return null;
+  assignments.markSettled(booking.id); // claim first: a retry never pays twice
+  const ref = bookingRef(refBookingId(booking));
+  const [from, to] = await Promise.all([getProvider(rec.chargedProviderId), getProvider(booking.providerId)]);
+  const what = booking.service?.name || "a booking";
+  creditProviderWallet(booking.providerId, rec.cover, `Price difference for booking #${ref}`);
+  // Only a provider who accepted the agreement with this rule pays it; otherwise Tikdum does.
+  if (!hasAcceptedPriceDifference(rec.chargedProviderId)) {
+    await logActivity("provider", `Price difference ₹${rec.cover} for booking #${ref} paid by Tikdum (${from?.name || rec.chargedProviderId} hasn't accepted the 2026-10 agreement)`);
+    return { ...rec, paidBy: "tikdum" };
+  }
+  await applyWalletDeduction(rec.chargedProviderId, rec.cover, {
+    bookingId: booking.id,
+    reason: "price_cover",
+    note: `Price difference: booking #${ref} you didn't take`,
+  });
+  await addNotification({
+    recipientType: "provider",
+    recipientId: rec.chargedProviderId,
+    type: "wallet",
+    title: `₹${rec.cover} price difference charged`,
+    message: `You didn't take booking #${ref} (${what}), booked at your price of ₹${rec.quoted}. ${to?.name || "Another provider"} did it for ₹${rec.quoted + rec.cover}, so the ₹${rec.cover} difference was taken from your wallet, as in the provider agreement.`,
+    bookingId: booking.id,
+  }).catch(() => {});
+  await addNotification({
+    recipientType: "provider",
+    recipientId: booking.providerId,
+    type: "wallet",
+    title: `₹${rec.cover} added to your wallet`,
+    message: `For booking #${ref} (${what}) the customer paid the booked price of ₹${rec.quoted}; the ₹${rec.cover} up to your price was added to your wallet.`,
+    bookingId: booking.id,
+  }).catch(() => {});
+  await logActivity("provider", `Price difference ₹${rec.cover} for booking #${ref}: ${from?.name || rec.chargedProviderId} → ${to?.name || booking.providerId}`);
+  return rec;
 }
 
 async function deductWalletCommission(providerId, booking, bookingId) {
@@ -4717,19 +4939,18 @@ async function verifyBookingOtp(bookingId, type, code) {
 // ---- Service Provider Agreement acceptance (jsonStore-backed — a signed
 // timestamp/IP record per provider per version, not a Postgres entity) ----
 function getProviderAgreement(providerId) {
-  return (
-    jsonStore
-      .readAll("providerAgreements")
-      .find((a) => a.providerId === providerId && a.version === AGREEMENT_VERSION) || null
-  );
+  const version = acceptedAgreementVersion(providerId);
+  return version ? jsonStore.readAll("providerAgreements").find((a) => a.providerId === providerId && a.version === version) || null : null;
 }
 
-function acceptProviderAgreement(providerId, { ip, userAgent } = {}) {
-  const existing = getProviderAgreement(providerId);
+// `version`: the wording the app showed (apps before 2026-10 don't send one).
+function acceptProviderAgreement(providerId, { ip, userAgent, version } = {}) {
+  const shown = AGREEMENT_VERSIONS.includes(version) ? version : AGREEMENT_VERSIONS[0];
+  const existing = jsonStore.readAll("providerAgreements").find((a) => a.providerId === providerId && a.version === shown);
   if (existing) return existing;
   return jsonStore.insert("providerAgreements", {
     providerId,
-    version: AGREEMENT_VERSION,
+    version: shown,
     acceptedAt: new Date().toISOString(),
     ip: ip || null,
     userAgent: userAgent || null,
@@ -4986,6 +5207,12 @@ async function listCustomersPage({ q, offset = 0, limit = 50 } = {}) {
 }
 
 module.exports = {
+  listNeedsAssignment,
+  assignmentOptions,
+  assignBookingTo,
+  giveUpBooking,
+  notifyCustomerFindingProvider,
+  settlePriceCover,
   warmCatalog,
   listBookingsPage,
   listCustomersPage,
@@ -5145,6 +5372,7 @@ module.exports = {
   listRefundClaims,
   resolveRefundClaim,
   AGREEMENT_VERSION,
+  hasAcceptedPriceDifference,
   getProviderAgreement,
   acceptProviderAgreement,
   removeSeedData,

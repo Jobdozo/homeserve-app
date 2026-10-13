@@ -4,6 +4,7 @@ import { socket, setSocketToken } from "../socket";
 import { loadNotificationPrefs, saveNotificationPrefs } from "../utils/notificationPrefs";
 import { ensurePushSubscribed, onNativeRing } from "../utils/pushNotifications";
 import { readSnap, writeSnap, clearSnaps, newest } from "../utils/snapshot";
+import { AGREEMENT_VERSION } from "../data/providerAgreement";
 
 // Saved-copy key: per account and per staff member (staff may see fewer orders).
 const snapKey = (user, staff) => (user?.id ? `p:${user.id}:${staff?.id || staff?.name || "owner"}` : null);
@@ -682,7 +683,7 @@ export function AppProvider({ children }) {
   );
 
   const acceptAgreement = useCallback(async () => {
-    const updated = await api.acceptAgreement();
+    const updated = await api.acceptAgreement(AGREEMENT_VERSION);
     setProvider(updated);
     return updated;
   }, []);

@@ -195,6 +195,10 @@ export const api = {
   listCategories: () => request("/categories"),
   listServices: () => request("/services"),
   listBookings: () => request("/bookings"),
+  // Assignment desk: bookings no provider accepted.
+  listAssignments: () => request("/admin/assignments"),
+  assignBooking: (id, providerId) => request(`/admin/bookings/${id}/assign`, { method: "POST", body: JSON.stringify({ providerId }) }),
+  giveUpBooking: (id) => request(`/admin/bookings/${id}/give-up`, { method: "POST" }),
   // One page of bookings, newest first, filtered on the server: { items, total }.
   listBookingsPage: ({ status, provider, customer, from, to, q, offset = 0, limit = 50 } = {}) =>
     request(`/admin/bookings?${pageQuery({ status, provider, customer, from, to, q, offset, limit })}`),

@@ -34,6 +34,11 @@ export default function AgreementScreen() {
               <p className="text-[11.5px] text-gray-400">
                 Version {AGREEMENT_VERSION} — please read fully before continuing, {provider?.name || "there"}.
               </p>
+              {provider?.agreementAccepted && (
+                <p className="mt-1 rounded-xl bg-marigold/15 px-3 py-2 text-[12px] font-semibold text-gray-800">
+                  We've updated the agreement: section 7, "Price Difference on Passed Bookings", is new. Please read it and accept to continue.
+                </p>
+              )}
             </div>
 
             <div className="rounded-2xl border border-gray-100 p-4">

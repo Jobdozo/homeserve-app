@@ -407,12 +407,12 @@ function weeklyCycles({ bookings = [], fees = new Map(), payments = new Map(), n
 
 function walletHistory(wallet, { feeLabels = new Map(), limit = 30 } = {}) {
   const rows = [
-    ...(wallet.recharges || []).map((r) => ({ kind: "recharge", amount: r.amount, at: r.at, label: r.note || "Money added" })),
+    ...(wallet.recharges || []).map((r) => ({ kind: r.kind === "credit" ? "credit" : "recharge", amount: r.amount, at: r.at, label: r.note || "Money added" })),
     ...(wallet.deductions || []).map((d) => ({
       kind: d.reason === "commission" ? "fee" : d.reason || "charge",
       amount: -d.amount,
       at: d.at,
-      label: d.reason === "commission" ? "Tikdum fee" : d.reason === "ad_click" ? "Ad click" : "Charge",
+      label: d.note || (d.reason === "commission" ? "Tikdum fee" : d.reason === "ad_click" ? "Ad click" : "Charge"),
     })),
   ];
   return rows.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);

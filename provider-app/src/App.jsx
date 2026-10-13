@@ -7,6 +7,7 @@ import LoginScreen from "./screens/LoginScreen";
 import LogoMark from "./components/LogoMark";
 import { useAndroidBackButton } from "./utils/useAndroidBackButton";
 import AgreementScreen from "./screens/AgreementScreen";
+import { AGREEMENT_VERSION } from "./data/providerAgreement";
 import RingingOverlay from "./components/RingingOverlay";
 
 // Route-level code splitting: only Login (needed before anything else can
@@ -71,7 +72,10 @@ function AppRoutes() {
 
   if (!provider) return <LoginScreen />;
 
-  if (!provider.agreementAccepted) {
+  // The owner accepts again when the agreement's wording changed (staff keep working
+  // under the version the owner accepted before).
+  const agreementOutdated = provider.agreementAccepted && !staff && (provider.agreementVersion || "") < AGREEMENT_VERSION;
+  if (!provider.agreementAccepted || agreementOutdated) {
     // Only the account owner can accept the provider agreement.
     if (staff) {
       return (

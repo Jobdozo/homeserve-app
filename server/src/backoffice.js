@@ -134,7 +134,7 @@ function reconcileData({ wallets = [], fees = [], bookings = [], providers = [],
   const totals = {
     wallets: wallets.length,
     totalBalanceInr: r2(wallets.reduce((t, w) => t + (Number(w.balance) || 0), 0)),
-    totalRechargedInr: r2(wallets.reduce((t, w) => t + (w.recharges || []).reduce((s, x) => s + (Number(x.amount) || 0), 0), 0)),
+    totalRechargedInr: r2(wallets.reduce((t, w) => t + (w.recharges || []).filter((x) => x.kind !== "credit").reduce((s, x) => s + (Number(x.amount) || 0), 0), 0)),
     totalCommissionInr: r2(fees.reduce((t, f) => t + (Number(f.fee) || 0), 0)),
     completedJobs: bookings.filter((b) => b.status === "Completed").length,
     negativeWallets: wallets.filter((w) => w.balance < 0).length,

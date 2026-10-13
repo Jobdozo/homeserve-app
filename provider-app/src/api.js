@@ -155,7 +155,8 @@ export const api = {
   verifyBookingOtp: (bookingId, type, code, paidBy) =>
     request(`/bookings/${bookingId}/otp/verify`, { method: "POST", body: JSON.stringify({ type, code, ...(paidBy ? { paidBy } : {}) }) }),
   saveFcmToken: (token) => request("/provider/fcm-token", { method: "POST", body: JSON.stringify({ token }) }),
-  acceptAgreement: () => request("/provider/agreement/accept", { method: "POST" }),
+  // version: the wording shown (data/providerAgreement.js), recorded with the acceptance.
+  acceptAgreement: (version) => request("/provider/agreement/accept", { method: "POST", body: JSON.stringify({ version }) }),
   getWallet: () => request("/provider/wallet"),
   listServiceChanges: () => request("/provider/service-changes"),
   getCapacity: () => request("/provider/capacity"),

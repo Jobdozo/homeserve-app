@@ -184,7 +184,7 @@ const LOW_BALANCE_FRACTION = 0.2;
 function walletLow(wallet) {
   if (!wallet) return false;
   if (wallet.balance <= 0) return true;
-  const last = [...(wallet.recharges || [])].pop();
+  const last = [...(wallet.recharges || [])].filter((r) => r.kind !== "credit").pop();
   return Boolean(last && wallet.balance <= last.amount * LOW_BALANCE_FRACTION);
 }
 
@@ -198,15 +198,15 @@ async function money(providerId) {
     .map((f) => ({ bookingId: f.id, ref: refs.get(f.id).ref, service: refs.get(f.id).service?.name, fee: f.fee, at: f.at }))
     .sort((a, b) => String(b.at).localeCompare(String(a.at)));
   const ledger = [
-    ...(wallet.recharges || []).map((r) => ({ type: "recharge", amount: r.amount, at: r.at, note: r.note || null })),
-    ...(wallet.deductions || []).map((r) => ({ type: r.reason === "commission" ? "fee" : r.reason || "deduction", amount: -r.amount, at: r.at, note: null })),
+    ...(wallet.recharges || []).map((r) => ({ type: r.kind === "credit" ? "credit" : "recharge", amount: r.amount, at: r.at, note: r.note || null })),
+    ...(wallet.deductions || []).map((r) => ({ type: r.reason === "commission" ? "fee" : r.reason || "deduction", amount: -r.amount, at: r.at, note: r.note || null })),
   ].sort((a, b) => String(b.at).localeCompare(String(a.at)));
   const invoices = accounting.listInvoices({ providerId, limit: 200 });
   return {
     balance: wallet.balance,
     low: walletLow(wallet),
     totals: {
-      recharged: (wallet.recharges || []).reduce((t, r) => t + (Number(r.amount) || 0), 0),
+      recharged: (wallet.recharges || []).filter((r) => r.kind !== "credit").reduce((t, r) => t + (Number(r.amount) || 0), 0),
       fees: (wallet.deductions || []).reduce((t, r) => t + (Number(r.amount) || 0), 0),
     },
     ledger,

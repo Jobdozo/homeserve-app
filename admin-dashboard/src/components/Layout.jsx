@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import Toast from "./Toast";
+import AssignmentDesk from "./AssignmentDesk";
 import { useApp } from "../context/AppContext";
 
 const TITLES = {
@@ -64,6 +65,7 @@ export default function Layout() {
         </main>
       </div>
       <Toast />
+      <AssignmentDesk />
     </div>
   );
 }

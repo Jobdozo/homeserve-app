@@ -350,6 +350,9 @@ const RULES = [
   [/^\/admin\/import\//, () => "data.import"],
   // A page of bookings (scaling step 5): the same people who can load the booking list.
   [/^\/admin\/bookings$/, () => ["bookings.view", "reviews.view", "payments.view", "monitoring.view", "complaints.view", "customers.view", "dashboard.view", "reports.view"]],
+  // Assignment desk: anyone who sees bookings sees the waiting ones; assigning (or giving up) changes them.
+  [/^\/admin\/assignments$/, () => "bookings.view"],
+  [/^\/admin\/bookings\/[^/]+\/(assign|give-up)$/, () => "bookings.edit"],
   [/^\/admin\/bookings\//, () => "bookings.view"],
   [/^\/bookings$/, () => ["bookings.view", "reviews.view", "payments.view", "monitoring.view", "complaints.view", "customers.view", "dashboard.view", "reports.view"]],
   [/^\/bookings(\/|$)/, (m) => (m === "GET" ? "bookings.view" : "bookings.edit")],
