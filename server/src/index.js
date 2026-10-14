@@ -200,6 +200,27 @@ const withAssignmentFlag = (list) => {
 function announceNeedsAssignment(booking, previous = []) {
   rt.booking("booking:updated", unassignedView(booking), { previous: [...new Set([booking.providerId, ...previous])] });
   io.to("admin:bookings").emit("assignment:needed", { bookingId: booking.id });
+  ringAdmins(booking).catch((e) => console.error("admin ring failed:", e.message));
+}
+
+// Rings the Admin app on every phone signed in by someone who can assign bookings
+// (bookings.edit), even with the app closed: a full-screen, ringtone-loud
+// notification like the Business app's new-request ring (admin-dashboard/android,
+// TikdumMessagingService). Staff who lost access or the permission aren't rung.
+async function ringAdmins(booking, { again = false } = {}) {
+  const ids = new Set(jsonStore.readAll("fcmTokens").filter((t) => t.key.startsWith("admin:")).map((t) => t.key.slice("admin:".length)));
+  const where = (String(booking.address?.line || "").match(/\b\d{6}\b/) || [""])[0];
+  const data = {
+    type: "assignment:needed",
+    bookingId: booking.id,
+    title: again ? "Still waiting for a provider" : "Booking needs a provider",
+    body: `#${booking.ref || booking.id} · ${booking.service?.name || "Service"}${where ? ` · PIN ${where}` : ""} · ${booking.date} ${booking.time || ""}`.trim(),
+  };
+  for (const id of ids) {
+    const admin = access.resolveByPhone(id.replace(/^admin:/, ""));
+    if (!admin || !access.adminCan(admin, "bookings.edit")) continue;
+    await fcm.sendToDevices("admin", id, data);
+  }
 }
 
 // WhatsApp to the owner numbers (ADMIN_PHONES): free text inside the 24-hour window,
@@ -240,6 +261,7 @@ async function checkAssignmentQueue(now = Date.now()) {
       assignmentsQueue.markAlerted(q.id);
       const mins = Math.round((now - Date.parse(q.since)) / 60000);
       const where = (String(booking.address?.line || "").match(/\b\d{6}\b/) || [""])[0];
+      ringAdmins(booking, { again: true }).catch((e) => console.error("admin ring failed:", e.message));
       await sendOwnerWhatsApp(
         `🟠 Booking #${booking.ref || booking.id} (${booking.service?.name || "service"}${where ? `, PIN ${where}` : ""}, ${booking.date} ${booking.time || ""}) has waited ${mins} min — no provider accepted it. Assign it in Admin (it pops up on any open Admin screen).`
       ).catch((e) => console.error("assignment owner alert failed:", e.message));
@@ -2101,6 +2123,22 @@ app.post("/api/customer/fcm-token", auth.requireAuth("customer"), ah(async (req,
 }));
 
 app.post("/api/customer/fcm-token/remove", auth.requireAuth("customer"), ah(async (req, res) => {
+  const { token } = req.body || {};
+  if (!token) return res.status(400).json({ error: "token is required" });
+  fcm.removeToken(token);
+  res.json({ ok: true });
+}));
+
+// The Admin app's phone, so bookings nobody accepted can ring it (ringAdmins).
+app.post("/api/admin/fcm-token", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { token } = req.body || {};
+  if (!token || typeof token !== "string") return res.status(400).json({ error: "token is required" });
+  if (req.admin?.agent) return res.status(403).json({ error: "Not for AI agents" });
+  fcm.saveToken("admin", req.user.id, token);
+  res.json({ ok: true });
+}));
+
+app.post("/api/admin/fcm-token/remove", auth.requireAuth("admin"), ah(async (req, res) => {
   const { token } = req.body || {};
   if (!token) return res.status(400).json({ error: "token is required" });
   fcm.removeToken(token);

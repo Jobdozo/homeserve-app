@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { socket } from "../socket";
 import { useApp } from "../context/AppContext";
+import { onNativeRing } from "../utils/adminRinging";
 
 // Bookings no provider accepted (they rejected it, missed the ring, or handed it
 // back, and nobody else was left). Instead of the customer being turned away, the
@@ -209,7 +210,14 @@ export default function AssignmentDesk() {
     socket.on("assignment:needed", onEvent);
     socket.on("connect", onEvent);
     const poll = setInterval(load, 60000); // waiting times and the deadline stay current
+    // Opened from the phone's ringing notification: show the desk straight away.
+    const stopRing = onNativeRing(() => {
+      setOpen(true);
+      setMuted(false);
+      load();
+    });
     return () => {
+      stopRing();
       socket.off("assignment:needed", onEvent);
       socket.off("connect", onEvent);
       clearInterval(poll);

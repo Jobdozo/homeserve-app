@@ -1,0 +1,104 @@
+package com.tikdum.admin;
+
+import android.os.Build;
+import android.util.Log;
+import com.getcapacitor.JSObject;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.CapacitorPlugin;
+import com.google.firebase.messaging.FirebaseMessaging;
+
+// A minimal custom bridge instead of @capacitor/push-notifications' own
+// token API — that plugin also wires up its own default notification
+// display, which would compete with TikdumMessagingService's full-screen
+// ringing notification. This just exposes the FCM registration token to JS.
+@CapacitorPlugin(name = "FcmToken")
+public class FcmTokenPlugin extends Plugin {
+
+  private static FcmTokenPlugin activeInstance;
+  // Covers the cold-start race: MainActivity.onCreate can run and forward a
+  // ring intent before the WebView has finished loading the app's JS and
+  // attached its listener. JS reads this once on startup as a fallback for
+  // whatever the live "ring" event missed.
+  private static String pendingRingBookingId;
+
+  @Override
+  public void load() {
+    super.load();
+    activeInstance = this;
+    Log.e("TikdumFcm", "FcmTokenPlugin loaded");
+  }
+
+  // Android 13+ (API 33/Tiramisu) is the first version where notifications
+  // are a runtime permission at all — older versions have nothing to ask for.
+  // Goes through MainActivity's own AndroidX Activity Result launcher rather
+  // than Capacitor's @Permission/requestPermissionForAlias — confirmed live
+  // on-device that path (and @capacitor/push-notifications' equivalent)
+  // never settles at all when called from a manually-registered plugin like
+  // this one: no dialog, no resolve, no reject, permanently.
+  @PluginMethod
+  public void requestNotificationPermission(PluginCall call) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+      call.resolve();
+      return;
+    }
+    ((MainActivity) getActivity()).requestNotificationPermission(granted -> {
+      JSObject result = new JSObject();
+      result.put("granted", granted);
+      call.resolve(result);
+    });
+  }
+
+  @PluginMethod
+  public void getToken(PluginCall call) {
+    Log.e("TikdumFcm", "getToken() called from JS");
+    FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
+      // addOnCompleteListener with no Executor specified can run on a
+      // background thread (Firebase's own, not Capacitor's) — confirmed
+      // live on-device that resolving a PluginCall from there can silently
+      // fail to reach JS at all: native logs "success" right here, but the
+      // JS-side await never settles, hangs forever, no error either side.
+      // Hopping back to the main thread before resolve()/reject() is what
+      // fixed it.
+      getActivity().runOnUiThread(() -> {
+        if (!task.isSuccessful() || task.getResult() == null) {
+          Log.e("TikdumFcm", "getToken failed", task.getException());
+          call.reject("Could not get FCM token", task.getException());
+          return;
+        }
+        Log.e("TikdumFcm", "getToken success: " + task.getResult());
+        JSObject result = new JSObject();
+        result.put("token", task.getResult());
+        call.resolve(result);
+      });
+    });
+  }
+
+  @PluginMethod
+  public void consumePendingRing(PluginCall call) {
+    JSObject result = new JSObject();
+    result.put("bookingId", pendingRingBookingId);
+    call.resolve(result);
+    pendingRingBookingId = null;
+  }
+
+  // Called from TikdumMessagingService.onNewToken — relays a refreshed
+  // token to JS the same way a foreground app would want to re-save it.
+  static void notifyTokenListener(String token) {
+    if (activeInstance == null) return;
+    JSObject data = new JSObject();
+    data.put("token", token);
+    activeInstance.notifyListeners("tokenRefresh", data);
+  }
+
+  // Called from MainActivity when launched/resumed via the ringing
+  // notification's full-screen intent.
+  static void notifyRingListener(String bookingId) {
+    pendingRingBookingId = bookingId;
+    if (activeInstance == null) return;
+    JSObject data = new JSObject();
+    data.put("bookingId", bookingId);
+    activeInstance.notifyListeners("ring", data);
+  }
+}

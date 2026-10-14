@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { api, setAuthToken } from "../api";
 import { socket, setSocketToken } from "../socket";
+import { registerAdminPhone, unregisterAdminPhone } from "../utils/adminRinging";
 
 const AppContext = createContext(null);
 const AUTH_KEY = "tikdum-admin-auth-v1";
@@ -48,6 +49,7 @@ export function AppProvider({ children }) {
   }, []);
 
   const logout = useCallback(() => {
+    unregisterAdminPhone();
     setAuthToken(null);
     setSocketToken(null);
     localStorage.removeItem(AUTH_KEY);
@@ -128,6 +130,11 @@ export function AppProvider({ children }) {
       cancelled = true;
     };
   }, [admin, loadAll]);
+
+  // The Admin app on a phone: register it to ring for bookings that need a provider.
+  useEffect(() => {
+    if (admin) registerAdminPhone();
+  }, [admin?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const scheduleRefresh = useCallback(() => {
     if (refreshTimer.current) clearTimeout(refreshTimer.current);

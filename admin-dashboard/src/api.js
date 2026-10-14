@@ -197,6 +197,9 @@ export const api = {
   listBookings: () => request("/bookings"),
   // Assignment desk: bookings no provider accepted.
   listAssignments: () => request("/admin/assignments"),
+  // The Admin app's phone, so it rings for bookings that need a provider.
+  saveAdminFcmToken: (token) => request("/admin/fcm-token", { method: "POST", body: JSON.stringify({ token }) }),
+  removeAdminFcmToken: (token) => request("/admin/fcm-token/remove", { method: "POST", body: JSON.stringify({ token }) }),
   assignBooking: (id, providerId) => request(`/admin/bookings/${id}/assign`, { method: "POST", body: JSON.stringify({ providerId }) }),
   giveUpBooking: (id) => request(`/admin/bookings/${id}/give-up`, { method: "POST" }),
   // One page of bookings, newest first, filtered on the server: { items, total }.
