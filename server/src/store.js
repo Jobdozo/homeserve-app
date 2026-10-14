@@ -95,6 +95,24 @@ function normalizePhone(phone) {
   return (phone || "").replace(/\D/g, "");
 }
 
+// The key two phone numbers are the same person by: the last 10 digits (an Indian
+// mobile number), so "9797327707", "+91 9797327707" and "09797327707" all match.
+// Comparing all digits treated a number saved without +91 (e.g. typed in Admin) as
+// a different person, and their first app sign-in created a second account.
+function phoneKey(phone) {
+  const digits = normalizePhone(phone);
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+}
+
+// How a phone is stored: "+91" and the 10 digits when it's an Indian mobile number
+// typed without the country code, otherwise as given.
+function canonicalPhone(phone) {
+  const digits = normalizePhone(phone);
+  if (digits.length === 10) return `+91${digits}`;
+  if (digits.length === 12 && digits.startsWith("91")) return `+${digits}`;
+  return String(phone || "").trim();
+}
+
 // ---- shared field selections (kept as plain strings, not GraphQL fragments,
 // to avoid any uncertainty about fragment support in ad-hoc executeGraphql calls) ----
 
@@ -857,10 +875,10 @@ function deleteCustomerOffice(customerId) {
 }
 
 async function getCustomerByPhone(phone) {
-  const target = normalizePhone(phone);
+  const target = phoneKey(phone);
   if (!target) return undefined;
   const { customers } = await query(`query { customers { id name avatar phone email } }`, {});
-  const match = customers.find((c) => normalizePhone(c.phone) === target);
+  const match = customers.find((c) => phoneKey(c.phone) === target);
   return match ? getCustomerById(match.id) : undefined;
 }
 
@@ -906,10 +924,10 @@ async function listCustomers() {
 // ---- providers ----
 
 async function getProviderByPhone(phone) {
-  const target = normalizePhone(phone);
+  const target = phoneKey(phone);
   if (!target) return undefined;
   const { providers } = await query(`query { providers { ${PROVIDER_FIELDS} } }`, {});
-  return mapProvider(providers.find((p) => normalizePhone(p.phone) === target));
+  return mapProvider(providers.find((p) => phoneKey(p.phone) === target));
 }
 
 // Admin manually onboards a provider (no WhatsApp signup yet) — pre-verified
@@ -924,7 +942,7 @@ async function adminCreateProvider({ name, phone, category }) {
         live: false, verified: true, verificationStatus: "approved"
       })
     }`,
-    { name, phone, category: category || "Not set" }
+    { name, phone: canonicalPhone(phone), category: category || "Not set" }
   );
   cacheClear("providers");
   await logActivity("provider", `Admin added a new provider: ${name}`);
@@ -5207,6 +5225,8 @@ async function listCustomersPage({ q, offset = 0, limit = 50 } = {}) {
 }
 
 module.exports = {
+  phoneKey,
+  canonicalPhone,
   listNeedsAssignment,
   assignmentOptions,
   assignBookingTo,
