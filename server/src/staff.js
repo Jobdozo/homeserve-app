@@ -239,10 +239,13 @@ async function assignOrder(providerId, booking, staffId, actor) {
   // "assigned" means nothing until they happen to open the app and notice.
   fcm
     .sendToDevices("provider", `${providerId}:staff:${staffId}`, {
-      title: "You've been assigned a job",
-      body: `${booking.service?.name || "A service"} request`,
+      title: "New job assigned to you",
+      body: [booking.service?.name || "A service", [booking.date, booking.time].filter(Boolean).join(" "), booking.customer?.name].filter(Boolean).join(" · "),
       bookingId: booking.id,
+      // "booking:created" makes every app version ring full-screen; the app then shows
+      // the "assigned to you" popup because the job is already accepted.
       type: "booking:created",
+      assigned: "1",
     })
     .catch((e) => console.error("fcm send failed (assignment)", e));
   try {

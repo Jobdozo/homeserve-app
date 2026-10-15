@@ -9,6 +9,7 @@ import { useAndroidBackButton } from "./utils/useAndroidBackButton";
 import AgreementScreen from "./screens/AgreementScreen";
 import { AGREEMENT_VERSION } from "./data/providerAgreement";
 import RingingOverlay from "./components/RingingOverlay";
+import AssignedJobOverlay from "./components/AssignedJobOverlay";
 
 // Route-level code splitting: only Login (needed before anything else can
 // render) and the RingingOverlay (must be ready to fire the moment a
@@ -98,6 +99,7 @@ function AppRoutes() {
   return (
     <>
       <RingingOverlay />
+      <AssignedJobOverlay />
       <Suspense fallback={<ScreenFallback />}>
         <Routes>
           <Route element={<MainLayout />}>

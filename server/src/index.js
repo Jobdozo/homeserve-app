@@ -2756,7 +2756,10 @@ app.post("/api/provider/orders/:id/assign", providerOnly, staffRoute(async (req,
   // session only ever joins the booking's room once it's assigned to them
   // (see realtime.js), so this is the only way their open app finds out —
   // without it they'd only learn of it via a push or the next manual refresh.
-  if (assignedStaff) rt.booking("booking:created", booking);
+  if (assignedStaff) {
+    rt.booking("booking:created", booking);
+    rt.jobAssigned({ ...booking, assignedStaff, assignedBy: staffActor(req).name }, assignedStaff.id);
+  }
   res.json({ assignedStaff });
 }));
 

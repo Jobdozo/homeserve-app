@@ -75,6 +75,13 @@ function booking(event, b, { previous = [] } = {}) {
   if (assigned) to(`staff-limited:${assigned.staffId}`).emit(event, providerView);
 }
 
+// A job just given to one staff member: their own phones show the "assigned to you"
+// popup (every socket of theirs is in staff:<id>, whatever orders they can see).
+function jobAssigned(b, staffId) {
+  if (!b || !staffId) return;
+  to(`staff:${staffId}`).emit("job:assigned", mask.forProvider(b));
+}
+
 function checkpoint(b, cp) {
   if (!b) return;
   to("admin:bookings").emit("booking:checkpoint", cp);
@@ -121,4 +128,4 @@ function kick(room) {
   if (io) io.in(room).disconnectSockets(true);
 }
 
-module.exports = { attach, booking, checkpoint, message, notification, activity, service, kick };
+module.exports = { attach, booking, jobAssigned, checkpoint, message, notification, activity, service, kick };

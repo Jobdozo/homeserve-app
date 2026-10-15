@@ -76,6 +76,11 @@ export function AppProvider({ children }) {
   // whatever `ringingRequest` was when they were created, not its current
   // value — this ref is how they read the live value instead.
   const ringingRequestRef = useRef(null);
+  // A job the owner just gave to this staff member (AssignedJobOverlay).
+  const [assignedJob, setAssignedJob] = useState(null);
+  const dismissAssignedJob = useCallback(() => setAssignedJob(null), []);
+  const staffIdRef = useRef(null);
+  staffIdRef.current = staffSession?.id || null;
   useEffect(() => {
     ringingRequestRef.current = ringingRequest;
   }, [ringingRequest]);
@@ -265,6 +270,11 @@ export function AppProvider({ children }) {
             if (booking?.status === "Pending") {
               setRequests((prev) => upsertById(prev, booking));
               setRingingRequest(booking);
+            } else if (booking && staffIdRef.current && ["Accepted", "In Progress"].includes(booking.status)) {
+              // A ring on a staff member's phone for a job that's already taken:
+              // it was just assigned to them.
+              setRequests((prev) => upsertById(prev, booking));
+              setAssignedJob(booking);
             }
             return booking;
           })
@@ -417,6 +427,12 @@ export function AppProvider({ children }) {
       setNotifications((prev) => [notification, ...prev].slice(0, 50));
     };
 
+    const onJobAssigned = (booking) => {
+      if (!booking?.id) return;
+      setRequests((prev) => upsertById(prev, booking));
+      setAssignedJob(booking);
+    };
+    socket.on("job:assigned", onJobAssigned);
     socket.on("booking:created", onBookingCreated);
     socket.on("booking:updated", onBookingUpdated);
     socket.on("message:created", onMessageCreated);
@@ -425,6 +441,7 @@ export function AppProvider({ children }) {
     socket.on("provider:updated", onProviderUpdated);
     socket.on("notification:created", onNotificationCreated);
     return () => {
+      socket.off("job:assigned", onJobAssigned);
       socket.off("booking:created", onBookingCreated);
       socket.off("booking:updated", onBookingUpdated);
       socket.off("message:created", onMessageCreated);
@@ -778,6 +795,10 @@ export function AppProvider({ children }) {
       can,
       setRequestAssignee,
       dismissRinging,
+      assignedJob,
+      dismissAssignedJob,
+      assignedJob,
+      dismissAssignedJob,
       markNotificationRead,
       markAllNotificationsRead,
     }),
