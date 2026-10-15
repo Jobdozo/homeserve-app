@@ -8,7 +8,7 @@ const PHONE_PER_DAY = 15;
 const IP_WINDOW_MS = 10 * 60 * 1000;
 // Mobile carriers put many people behind one address, so this is deliberately
 // generous — it only has to stop one source hammering many numbers.
-const IP_MAX_PER_WINDOW = 40;
+const IP_MAX_PER_WINDOW = 150;
 const RECENT_MAX = 500;
 
 const byPhone = new Map(); // digits -> [timestamps]
