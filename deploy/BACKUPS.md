@@ -45,6 +45,15 @@ without the key the Supabase backups cannot be opened.
 
 ## Turn on the Supabase copy
 
+**Quick way** (uses the Supabase S3 keys already in `.env` for photo storage, see STORAGE.md;
+creates the private `tikdum-backups` bucket if needed and runs a backup to test):
+
+```bash
+cd /tmp/homeserve-deploy && git pull && bash deploy/enable-offsite-backup.sh
+```
+
+**By hand:**
+
 1. In Supabase → Storage, the private bucket `tikdum-backups` exists.
 2. In Supabase → Project Settings → Storage → **S3 Connection**, create an **access key**.
    Copy the *Access key ID* and *Secret access key*.
