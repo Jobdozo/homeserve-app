@@ -89,31 +89,7 @@ store.onNotification((notification) => {
   rt.notification(notification);
 });
 
-const AUTO_ACCEPT_DELAY = 3500;
-const AUTO_REPLY_DELAY = 1600;
-const CANNED_ACCEPT = "Hi, I have accepted your request. I will reach your location on time.";
-const CANNED_REPLY = "Got it, thank you for letting me know!";
-
-function simulateProviderIfNeeded(booking) {
-  setTimeout(async () => {
-    try {
-      const provider = await store.getProvider(booking.providerId);
-      if (!provider || provider.live) return;
-
-      const updated = await store.updateBookingStatus(booking.id, "Accepted");
-      if (!updated) return;
-      rt.booking("booking:updated", updated);
-
-      const message = await store.addMessage(booking.id, "provider", CANNED_ACCEPT);
-      await rt.message(booking.id, message);
-    } catch (e) {
-      console.error("simulateProviderIfNeeded failed:", e);
-    }
-  }, AUTO_ACCEPT_DELAY);
-}
-
-// A "live" provider (a real Provider App instance, not a simulated demo one)
-// gets 90 seconds to accept a booking before it's automatically handed to
+// A provider gets 90 seconds to accept a booking before it's automatically handed to
 // another active provider in the same category — same idea as ride-hailing
 // dispatch, so a customer never gets stuck waiting on one unresponsive provider.
 // How long a provider has to accept is a Business Rule (Settings → Requests).
@@ -122,10 +98,7 @@ const ringTimeoutMs = () => store.getSettings().ringTimeoutSeconds * 1000;
 // `group` = every booking of one order that goes to this provider; they ring together as one request.
 async function dispatchBooking(booking, triedProviderIds = [booking.providerId], group = [booking]) {
   const provider = await store.getProvider(booking.providerId);
-  if (!provider || !provider.live) {
-    group.forEach((b) => simulateProviderIfNeeded(b));
-    return;
-  }
+  if (!provider) return;
   const what = group.length > 1 ? `${group.length} services (${describeGroup(group, 2)})` : booking.service?.name || "A service";
   // The socket event only reaches a provider whose app is open right now —
   // the push notification is what actually wakes a backgrounded/closed app,
@@ -297,22 +270,6 @@ async function reassignGroup(pending, triedProviderIds) {
   }
 }
 
-function simulateReplyIfNeeded(bookingId, from) {
-  if (from !== "user") return;
-  setTimeout(async () => {
-    try {
-      const booking = await store.getBooking(bookingId);
-      if (!booking) return;
-      const provider = await store.getProvider(booking.providerId);
-      if (!provider || provider.live) return;
-
-      const message = await store.addMessage(bookingId, "provider", CANNED_REPLY);
-      await rt.message(bookingId, message);
-    } catch (e) {
-      console.error("simulateReplyIfNeeded failed:", e);
-    }
-  }, AUTO_REPLY_DELAY);
-}
 
 // Wraps a route handler so thrown errors and rejected promises reach the
 // global error handler instead of crashing the process or hanging the request.
@@ -487,6 +444,8 @@ app.post("/api/auth/otp/verify", ah(async (req, res) => {
     const token = auth.signToken({ id: provider.id, role: "provider", phone, staffId: staffMember.id });
     return res.json({ token, user: provider, staff: staff.loginProfile(staffMember) });
   }
+  // Signing in marks an Admin-added provider as using the app (Admin stops showing "Never opened the app").
+  if (!provider.live) provider = (await store.markProviderLive(provider.id)) || provider;
   const token = auth.signToken({ id: provider.id, role: "provider", phone });
   res.json({ token, user: provider });
 }));
@@ -516,8 +475,10 @@ app.get("/api/auth/me", auth.requireAuth(), ah(async (req, res) => {
     return res.json({ role: "customer", user: customer });
   }
   if (req.user.role === "provider") {
-    const provider = await store.getProvider(req.user.id);
+    let provider = await store.getProvider(req.user.id);
     if (!provider) return res.status(404).json({ error: "Not found" });
+    // Opening the Business app marks an Admin-added provider as using it.
+    if (!provider.live && !req.staff) provider = (await store.markProviderLive(provider.id)) || provider;
     return res.json({ role: "provider", user: provider, ...(req.staff ? { staff: staff.loginProfile(req.staff) } : {}) });
   }
   res.json({ role: "admin", user: adminProfile(req.admin) });
@@ -2386,7 +2347,6 @@ app.post("/api/messages/:bookingId", auth.requireAuth("customer", "provider"), a
   }
   const message = await store.addMessage(req.params.bookingId, from, text.trim());
   await rt.message(req.params.bookingId, message);
-  simulateReplyIfNeeded(req.params.bookingId, from);
   res.status(201).json(message);
 }));
 

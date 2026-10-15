@@ -949,6 +949,14 @@ async function adminCreateProvider({ name, phone, category }) {
   return getProvider(provider_insert.id);
 }
 
+// The provider opened the Business app (signed in): an Admin-added provider starts
+// with live false, which Admin shows as "Never opened the app".
+async function markProviderLive(providerId) {
+  await mutate(`mutation($id: UUID!) { provider_update(id: $id, data: { live: true }) }`, { id: providerId });
+  cacheClear("providers");
+  return getProvider(providerId);
+}
+
 async function createProviderSignup({ phone, name }) {
   const { provider_insert } = await mutate(
     `mutation($name: String!, $phone: String!) {
@@ -5225,6 +5233,7 @@ async function listCustomersPage({ q, offset = 0, limit = 50 } = {}) {
 }
 
 module.exports = {
+  markProviderLive,
   phoneKey,
   canonicalPhone,
   listNeedsAssignment,
