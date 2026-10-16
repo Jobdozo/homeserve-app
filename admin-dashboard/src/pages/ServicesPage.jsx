@@ -672,6 +672,48 @@ const CATEGORY_PICTURES = {
   },
 };
 
+// "About this service" on the website's category page and its city pages (tikdum.com/jammu/…).
+// Real words help customers and Google; nothing shows until it's written.
+function CategoryAboutField({ category }) {
+  const { showToast } = useApp();
+  const [text, setText] = useState(category.about || "");
+  const [saved, setSaved] = useState(category.about || "");
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try {
+      const { about } = await api.setCategoryAbout(category.id, text);
+      setText(about);
+      setSaved(about);
+      showToast("Saved — it's on the website now");
+    } catch (err) {
+      showToast(err.message || "Couldn't save");
+    }
+    setBusy(false);
+  };
+  return (
+    <div className="mt-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">About this service (website)</p>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={6}
+        maxLength={3000}
+        placeholder={`What ${category.name} covers, what's included, how pricing works, what customers should keep ready… A blank line starts a new paragraph.`}
+        className="mt-1 w-full resize-y rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] leading-relaxed outline-none focus:border-brand"
+      />
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <p className="text-[10.5px] text-gray-400">
+          Shown on this category's page and its city pages. {text.length}/3000
+        </p>
+        <button onClick={save} disabled={busy || text === saved} className="rounded-lg bg-brand px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-40">
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CategoryBannerField({ category, kind = "banner" }) {
   const cfg = CATEGORY_PICTURES[kind];
   const app = useApp();
@@ -1281,6 +1323,7 @@ function CategoriesPanel({ filter, setFilter }) {
             </div>
             <CategoryBannerField key={`photo-${editingCat.id}`} kind="photo" category={categories.find((c) => c.id === editingCat.id) || editingCat} />
             <CategoryBannerField key={editingCat.id} category={categories.find((c) => c.id === editingCat.id) || editingCat} />
+            <CategoryAboutField key={`about-${editingCat.id}`} category={categories.find((c) => c.id === editingCat.id) || editingCat} />
             <button
               onClick={() => {
                 const { id, name, icon } = editingCat;

@@ -24,7 +24,7 @@ const AREA = { "@type": "AdministrativeArea", name: "Jammu and Kashmir, India" }
 const ORG_ID = `${SITE}/#organization`;
 
 // Screens that only make sense signed in: served normally, kept out of search.
-const PRIVATE = [/^\/(bookings|messages|profile|cart|notifications|refer|address|login|search)(\/.*)?$/, /^\/(booking|chat|review)\/[^/]+$/];
+const PRIVATE = [/^\/(bookings|messages|profile|cart|notifications|refer|address|login|search)(\/.*)?$/, /^\/(booking|chat|review|rate)\/[^/]+$/];
 
 const abs = (u) => (!u ? DEFAULT_IMAGE : /^https?:\/\//.test(u) ? u : `${SITE}${u.startsWith("/") ? "" : "/"}${u}`);
 const titleOf = (t) => (t ? `${t} | ${SITE_NAME}` : DEFAULT_TITLE);
@@ -274,6 +274,21 @@ function pageFor(rawPath, data = {}) {
           ...(rating ? { aggregateRating: rating } : {}),
           ...(priceRange(theirs) ? { priceRange: `${inr(priceRange(theirs).lowPrice)}–${inr(priceRange(theirs).highPrice)}` } : {}),
           makesOffer: theirs.slice(0, 20).map((s) => ({ "@type": "Offer", price: Number(s.price) || undefined, priceCurrency: "INR", itemOffered: { "@type": "Service", name: s.name, url: `${SITE}/service/${encodeURIComponent(s.id)}` } })),
+          // Customers' own words (first name and initial), newest first — reviewRequests.publicReviews.
+          ...((data.reviews || []).some((r) => r.providerId === p.id)
+            ? {
+                review: data.reviews
+                  .filter((r) => r.providerId === p.id)
+                  .slice(0, 5)
+                  .map((r) => ({
+                    "@type": "Review",
+                    author: { "@type": "Person", name: r.name },
+                    reviewRating: { "@type": "Rating", ratingValue: r.rating, bestRating: 5, worstRating: 1 },
+                    reviewBody: r.text,
+                    ...(r.at ? { datePublished: String(r.at).slice(0, 10) } : {}),
+                  })),
+              }
+            : {}),
         },
       ],
     });
@@ -354,8 +369,13 @@ function cityCategoryHead(c, categories) {
 
 // Everything the pages and the sitemap read, from the same caches the apps use.
 async function loadSearchData(store) {
-  const [categories, services, providers] = await Promise.all([store.listCategories(), store.listServices({}), store.listProviders()]);
-  return { ...searchCatalog({ categories, services, providers }), tree: require("./locations").tree() };
+  const [categories, services, providers, reviews] = await Promise.all([
+    store.listCategories(),
+    store.listServices({}),
+    store.listProviders(),
+    require("./reviewRequests").recentReviews(store),
+  ]);
+  return { ...searchCatalog({ categories, services, providers }), tree: require("./locations").tree(), reviews };
 }
 
 // ---------------------------------------------------------------- HTML

@@ -33,6 +33,8 @@ const BookingProtectionScreen = lazy(() => import("./screens/BookingProtectionSc
 const SavedAddressScreen = lazy(() => import("./screens/SavedAddressScreen"));
 const HelpSupportScreen = lazy(() => import("./screens/HelpSupportScreen"));
 const CityPageScreen = lazy(() => import("./screens/CityPageScreen"));
+const RateLinkScreen = lazy(() => import("./screens/RateLinkScreen"));
+const ReviewPrompt = lazy(() => import("./components/ReviewPrompt"));
 
 function ScreenFallback() {
   return (
@@ -121,6 +123,8 @@ function AppRoutes() {
           <Route path="/provider/:providerId" element={<ProviderProfileScreen />} />
           <Route path="/services" element={<AllServicesScreen />} />
           <Route path="/booking-protection" element={<BookingProtectionScreen />} />
+          {/* The personal rating link from WhatsApp: no sign-in needed. */}
+          <Route path="/rate/:token" element={<RateLinkScreen />} />
           {/* City pages (tikdum.com/jammu, /jammu/ac-repair). Every fixed address above wins over
               these; anything that isn't a city page goes home (CityPageScreen). */}
           <Route path="/:city" element={<CityPageScreen />} />
@@ -205,6 +209,9 @@ export default function App() {
         <BrowserRouter>
           <OptionsSheetProvider>
             <AppRoutes />
+            <Suspense fallback={null}>
+              <ReviewPrompt />
+            </Suspense>
           </OptionsSheetProvider>
         </BrowserRouter>
       </ErrorBoundary>

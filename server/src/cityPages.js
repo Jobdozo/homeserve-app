@@ -12,7 +12,7 @@
 // First parts of website addresses that are already app screens; a city can't use them.
 const RESERVED = new Set([
   "home", "categories", "category", "service", "services", "find-service", "provider", "search", "cart", "bookings", "booking",
-  "booking-protection", "messages", "chat", "review", "notifications", "refer", "address", "profile", "login", "assets", "uploads",
+  "booking-protection", "messages", "chat", "review", "rate", "notifications", "refer", "address", "profile", "login", "assets", "uploads",
   "category-photos", "illustrations", "api", "sitemap.xml", "robots.txt",
 ]);
 
@@ -160,6 +160,7 @@ function cityPage(slug, data) {
     services: services.length,
     from: prices(services).length ? Math.min(...prices(services)) : null,
     rating,
+    reviews: reviewsFor(data, (r) => entry.providerIds.includes(r.providerId), providerList),
     categories: byCategory.map(({ category, services: list, providerIds }) => ({
       id: category.id, name: category.name, slug: category.id, imageUrl: category.imageUrl || null, providers: providerIds.length,
       services: list.length, from: prices(list).length ? Math.min(...prices(list)) : null, rating: ratingOf(list),
@@ -182,8 +183,9 @@ function cityCategoryPage(slug, categoryId, data) {
   return {
     kind: "city-category",
     city: { name: city.name, slug: city.slug },
-    category: { id: hit.category.id, name: hit.category.name, imageUrl: hit.category.imageUrl || null },
+    category: { id: hit.category.id, name: hit.category.name, imageUrl: hit.category.imageUrl || null, about: hit.category.about || "" },
     providers: providerList.map((x) => providerCard(x, hit.services)).sort((a, b) => (b.reviews || 0) - (a.reviews || 0) || b.services - a.services),
+    reviews: reviewsFor(data, (r) => r.categoryId === categoryId && hit.providerIds.includes(r.providerId), providerList),
     services: serviceGroups(hit.services),
     serviceCount: hit.services.length,
     from: p.length ? Math.min(...p) : null,
@@ -193,6 +195,15 @@ function cityCategoryPage(slug, categoryId, data) {
     others: entry.byCategory.filter((x) => x.category.id !== categoryId).map((x) => ({ id: x.category.id, name: x.category.name, providers: x.providerIds.length })),
     faqs: faqsFor({ city, category: hit.category, providers: providerList, services: hit.services, areas, rating }),
   };
+}
+
+// Up to 6 real customer reviews (newest first, with words), each with who did the job.
+function reviewsFor(data, keep, providerList) {
+  const names = new Map(providerList.map((p) => [p.id, p.businessName || p.name]));
+  return (data.reviews || [])
+    .filter(keep)
+    .slice(0, 6)
+    .map((r) => ({ name: r.name, rating: r.rating, text: r.text, at: r.at, service: r.service, provider: names.get(r.providerId) || null, providerId: r.providerId }));
 }
 
 // Every city page that exists, for the sitemap.

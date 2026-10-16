@@ -409,6 +409,7 @@ function CommsTab({ data, save }) {
   const form = useDraft(data.settings, keys);
   const statuses = data.options.bookingStatuses;
   return (
+    <div className="space-y-4">
     <Card
       title="Customer communication rules"
       desc="When customers and providers can chat or call. Enforced by the server. The customer and provider apps only show their chat and call buttons for Accepted and In Progress orders, so adding other statuses takes effect there after the next app update."
@@ -426,6 +427,25 @@ function CommsTab({ data, save }) {
         <Checks options={statuses} value={form.draft.commsCallStatuses} onChange={(v) => form.set("commsCallStatuses", v)} />
       </div>
       <Num label="Keep chat and calls open after completion (hours)" hint="0 = closed as soon as the order is completed (the current behaviour). Admins can always read conversations." value={form.draft.commsAfterCompletionHours} min={0} max={720} onChange={(v) => form.set("commsAfterCompletionHours", v)} />
+    </Card>
+    <ReviewRequestsCard data={data} save={save} />
+    </div>
+  );
+}
+
+// Asking customers to rate completed jobs (server: reviewRequests.js).
+function ReviewRequestsCard({ data, save }) {
+  const keys = useMemo(() => ["reviewRequestWhatsApp", "reviewRequestDelayHours"], []);
+  const form = useDraft(data.settings, keys);
+  return (
+    <Card
+      title="Review requests"
+      desc="After a job is completed, customers who haven't rated it see a “How was it?” prompt in the app. They can also get one WhatsApp message with a personal link to rate in one tap, without signing in. One message per booking, never repeated; each is a paid WhatsApp template message."
+      form={form}
+      save={save}
+    >
+      <Toggle label="Send the WhatsApp rating request" checked={form.draft.reviewRequestWhatsApp} onChange={(v) => form.set("reviewRequestWhatsApp", v)} />
+      <Num label="Send it this many hours after the job is completed" hint="Only jobs completed in the last 7 days, and only if not rated yet." value={form.draft.reviewRequestDelayHours} min={0} max={72} onChange={(v) => form.set("reviewRequestDelayHours", v)} />
     </Card>
   );
 }

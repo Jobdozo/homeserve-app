@@ -67,6 +67,9 @@ export const api = {
   sendMessage: (bookingId, text) => request(`/messages/${bookingId}`, { method: "POST", body: JSON.stringify({ text }) }),
   submitReview: (bookingId, rating, text) =>
     request(`/bookings/${bookingId}/review`, { method: "POST", body: JSON.stringify({ rating, text }) }),
+  // The personal rating link sent on WhatsApp (tikdum.com/rate/<token>) — no sign-in.
+  getReviewLink: (token) => request(`/review-links/${encodeURIComponent(token)}`),
+  submitReviewLink: (token, rating, text) => request(`/review-links/${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify({ rating, text }) }),
   getProviderReviews: (providerId) => request(`/providers/${providerId}/reviews`),
   listNotifications: () => request("/notifications"),
   markNotificationRead: (id) => request(`/notifications/${id}/read`, { method: "PATCH" }),

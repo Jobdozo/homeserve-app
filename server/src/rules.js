@@ -55,6 +55,10 @@ const DEFAULTS = {
   // complaints
   complaintCategories: DEFAULT_COMPLAINT_CATEGORIES,
   complaintOutcomes: DEFAULT_COMPLAINT_OUTCOMES,
+  // reviews: a WhatsApp with a one-tap rating link this many hours after a job is completed
+  // and not yet rated (once per booking; a paid template message) — see reviewRequests.js
+  reviewRequestWhatsApp: true,
+  reviewRequestDelayHours: 2,
 };
 
 const fail = (message) => Object.assign(new Error(message), { status: 400 });
@@ -130,6 +134,8 @@ const VALIDATORS = {
   providerStaffRoleTemplates: (v) => v, // validated against the permission catalogue in the route
   complaintCategories: (v) => textList(v, "Complaint categories", { min: 1, max: 20 }),
   complaintOutcomes: (v) => textList(v, "Resolution outcomes", { min: 1, max: 20 }),
+  reviewRequestWhatsApp: bool,
+  reviewRequestDelayHours: (v) => int(v, 0, 72, "Hours after completion before asking for a rating"),
 };
 
 // Cleans the business-rule keys present in `patch` (leaves other keys alone).

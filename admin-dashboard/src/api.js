@@ -140,6 +140,7 @@ export const api = {
   removeCategoryBanner: (id) => request(`/admin/categories/${id}/banner`, { method: "DELETE" }),
   uploadCategoryPhoto: (id, file) => uploadCategoryBanner(id, file, "photo"),
   removeCategoryPhoto: (id) => request(`/admin/categories/${id}/photo`, { method: "DELETE" }),
+  setCategoryAbout: (id, about) => request(`/admin/categories/${id}/about`, { method: "PUT", body: JSON.stringify({ about }) }),
   uploadComplaintEvidence,
   requestOtp: (phone, role) => request("/auth/otp/request", { method: "POST", body: JSON.stringify({ phone, role }) }),
   verifyOtp: (phone, code, role) =>

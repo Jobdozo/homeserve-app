@@ -163,8 +163,23 @@ function categoryPhotoUrl(slug) {
   return jsonStore.readAll("categoryPhotos").find((r) => r.id === slug)?.url || null;
 }
 
+// "About this service" for the website's category and city pages, written in Super Admin →
+// Services & Categories. Empty until someone writes it: the site never shows invented text.
+function categoryAbout(slug) {
+  return jsonStore.readAll("categoryContent").find((r) => r.id === slug)?.about || "";
+}
+function setCategoryAbout(slug, about, actor) {
+  const text = String(about || "").replace(/\r\n/g, "\n").trim().slice(0, 3000);
+  const before = categoryAbout(slug);
+  if (jsonStore.readAll("categoryContent").some((r) => r.id === slug)) jsonStore.update("categoryContent", slug, { about: text, updatedAt: new Date().toISOString() });
+  else jsonStore.insert("categoryContent", { id: slug, about: text, updatedAt: new Date().toISOString() });
+  cacheClear("categories");
+  recordAdminChange({ actor, action: "category.about", entityType: "category", entityId: slug, changes: [{ field: "about", from: before ? `${before.length} characters` : null, to: text ? `${text.length} characters` : null }] });
+  return text;
+}
+
 function mapCategory(c) {
-  return { id: c.slug, name: c.name, icon: c.icon, active: isCategoryActive(c.slug), bannerUrl: categoryBannerUrl(c.slug), imageUrl: categoryPhotoUrl(c.slug) };
+  return { id: c.slug, name: c.name, icon: c.icon, active: isCategoryActive(c.slug), bannerUrl: categoryBannerUrl(c.slug), imageUrl: categoryPhotoUrl(c.slug), about: categoryAbout(c.slug) };
 }
 
 // The Service Provider Agreement's latest wording (kept in step with the Business
@@ -5256,6 +5271,7 @@ module.exports = {
   listProviders,
   getProvider,
   listCategories,
+  setCategoryAbout,
   createCategory,
   updateCategory,
   setCategoryBanner,

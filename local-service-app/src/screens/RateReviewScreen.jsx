@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { StarIcon } from "../components/icons";
 import Avatar from "../components/Avatar";
@@ -11,7 +11,12 @@ export default function RateReviewScreen() {
   const booking = getBooking(bookingId);
   const provider = booking ? getProvider(booking.providerId) : null;
 
-  const [rating, setRating] = useState(0);
+  // Stars already tapped in the "How was it?" prompt (?rating=4) come pre-selected.
+  const [params] = useSearchParams();
+  const [rating, setRating] = useState(() => {
+    const n = Number(params.get("rating"));
+    return Number.isInteger(n) && n >= 1 && n <= 5 ? n : 0;
+  });
   const [hover, setHover] = useState(0);
   const [text, setText] = useState("");
 
@@ -22,8 +27,13 @@ export default function RateReviewScreen() {
       showToast("Please select a rating");
       return;
     }
-    await submitReview(booking.id, rating, text);
-    showToast("Thanks for your feedback!");
+    try {
+      await submitReview(booking.id, rating, text);
+      showToast("Thanks for your feedback!");
+    } catch (e) {
+      // e.g. already rated, or the job isn't completed yet
+      showToast(e.message || "Couldn't save your rating");
+    }
     navigate(`/booking/${booking.id}`, { replace: true });
   };
 

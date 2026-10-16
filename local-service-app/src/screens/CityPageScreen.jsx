@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
-import { BackIcon, SearchIcon, MapPinIcon, ChevronRightIcon, ShieldCheckIcon } from "../components/icons";
+import { BackIcon, SearchIcon, MapPinIcon, ChevronRightIcon, ShieldCheckIcon, StarIcon } from "../components/icons";
 import { RatingPill, OfferTag, ProviderMark, SectionTitle, inr } from "../components/ui";
 import { discountPct } from "../utils/format";
 import CategoryPhoto from "../components/CategoryPhoto";
+import AboutSection from "../components/AboutSection";
 import Seo from "../components/Seo";
 
 // tikdum.com/jammu (every service in the city) and tikdum.com/jammu/ac-repair (one category in
@@ -138,6 +139,8 @@ function CityCategory({ page }) {
         </div>
       </section>
 
+      <Reviews reviews={page.reviews} title={`What customers say about ${category.name}`} />
+      <AboutSection title={`About ${category.name}`} text={category.about} />
       <Areas page={page} />
       <Faqs faqs={page.faqs} />
 
@@ -191,11 +194,40 @@ function CityHub({ page }) {
           ))}
         </div>
       </section>
+      <Reviews reviews={page.reviews} title={`What customers in ${city.name} say`} />
       <Areas page={page} />
       <div className="pb-8">
         <Faqs faqs={page.faqs} />
       </div>
     </>
+  );
+}
+
+// Real customers' words, newest first (first name and initial only).
+function Reviews({ reviews, title }) {
+  if (!reviews?.length) return null;
+  return (
+    <section className="px-4 pt-7">
+      <SectionTitle>{title}</SectionTitle>
+      <div className="no-scrollbar -mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-1 lg:mx-0 lg:grid lg:grid-cols-2 lg:overflow-visible lg:px-0">
+        {reviews.map((r, i) => (
+          <figure key={i} className="flex w-[260px] flex-shrink-0 flex-col gap-2 rounded-[20px] bg-white p-4 shadow-card lg:w-auto">
+            <div className="flex gap-0.5" aria-label={`Rated ${r.rating} out of 5`}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <StarIcon key={n} filled={n <= r.rating} width={14} height={14} />
+              ))}
+            </div>
+            <blockquote className="line-clamp-5 text-[13.5px] leading-relaxed text-ink">“{r.text}”</blockquote>
+            <figcaption className="mt-auto text-[12px] text-ink-muted">
+              <span className="font-bold text-ink">{r.name}</span>
+              {r.service ? ` · ${r.service}` : ""}
+              {r.provider ? ` with ${r.provider}` : ""}
+              {r.at ? ` · ${new Date(r.at).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}` : ""}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
   );
 }
 

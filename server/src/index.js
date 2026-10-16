@@ -9,6 +9,7 @@ const store = require("./store");
 const monitoring = require("./monitoring");
 const complaints = require("./complaints");
 const seoPages = require("./seoPages");
+const reviewRequests = require("./reviewRequests");
 const cityPages = require("./cityPages");
 const providerCrm = require("./providerCrm");
 const access = require("./access");
@@ -2043,20 +2044,84 @@ app.get("/api/bookings/:id/provider-contact", auth.requireAuth("customer"), ah(a
   res.json({ phone: provider.phone });
 }));
 
-app.post("/api/bookings/:id/review", auth.requireAuth("customer"), ah(async (req, res) => {
-  const { rating, text } = req.body || {};
-  if (typeof rating !== "number" || rating < 1 || rating > 5) {
-    return res.status(400).json({ error: "rating must be a number between 1 and 5" });
+// A rating counts once, and only for a completed job (reviewRequests.canReview). The same
+// booking can't be rated twice at the same moment either (two taps, app + link).
+const reviewing = new Set();
+async function applyReview(booking, input, { viaLink = false } = {}) {
+  const { rating, text } = reviewRequests.cleanReview(input);
+  const check = reviewRequests.canReview(booking, Date.now(), { viaLink });
+  if (!check.ok) throw Object.assign(new Error(check.reason), { status: check.already ? 409 : 400 });
+  if (reviewing.has(booking.id)) throw Object.assign(new Error("This booking has already been rated — thank you!"), { status: 409 });
+  reviewing.add(booking.id);
+  try {
+    const result = await store.addReview(booking.id, rating, text);
+    rt.booking("booking:updated", result.booking);
+    if (result.provider) io.emit("provider:updated", publicProvider(result.provider));
+    if (result.service) rt.service("service:updated", result.service);
+    rt.activity((await store.listActivities(1))[0]);
+    return result.booking;
+  } finally {
+    reviewing.delete(booking.id);
   }
+}
+
+app.post("/api/bookings/:id/review", auth.requireAuth("customer"), ah(async (req, res) => {
   const existing = await store.getBooking(req.params.id);
   if (!existing) return res.status(404).json({ error: "Booking not found" });
   if (existing.customerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
-  const result = await store.addReview(req.params.id, rating, text);
-  rt.booking("booking:updated", result.booking);
-  if (result.provider) io.emit("provider:updated", publicProvider(result.provider));
-  if (result.service) rt.service("service:updated", result.service);
-  rt.activity((await store.listActivities(1))[0]);
-  res.json(result.booking);
+  try {
+    res.json(await applyReview(existing, req.body || {}));
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ error: e.message });
+    throw e;
+  }
+}));
+
+// The personal rating link from the WhatsApp request (tikdum.com/rate/<token>): no sign-in,
+// only that booking, only once (see reviewRequests.js).
+async function bookingForLink(token) {
+  const id = reviewRequests.bookingIdFromToken(token);
+  return id ? store.getBooking(id) : null;
+}
+app.get("/api/review-links/:token", ah(async (req, res) => {
+  const b = await bookingForLink(req.params.token);
+  if (!b) return res.status(404).json({ error: "This rating link isn't valid" });
+  const provider = b.providerId ? await store.getProvider(b.providerId) : null;
+  const check = reviewRequests.canReview(b, Date.now(), { viaLink: true });
+  res.set("Cache-Control", "no-store").json({
+    service: b.service?.name || "Service",
+    provider: provider ? { name: provider.businessName || provider.name, photoUrl: provider.photoUrl || null } : null,
+    customerName: reviewRequests.firstNameOf(b.customer?.name),
+    date: b.statusHistory?.Completed || b.date || null,
+    canRate: check.ok,
+    reason: check.ok ? null : check.reason,
+    rating: b.review?.rating || null,
+  });
+}));
+app.post("/api/review-links/:token", ah(async (req, res) => {
+  const b = await bookingForLink(req.params.token);
+  if (!b) return res.status(404).json({ error: "This rating link isn't valid" });
+  try {
+    const booking = await applyReview(b, req.body || {}, { viaLink: true });
+    res.json({ ok: true, rating: booking.review?.rating || null });
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ error: e.message });
+    throw e;
+  }
+}));
+
+// Every 10 minutes: completed, unrated jobs get their one WhatsApp rating request.
+setInterval(() => {
+  reviewRequests
+    .runJob({ store, jsonStore, whatsapp: (phone, data) => require("./whatsapp").sendNoticeTemplate(phone, data) })
+    .catch((e) => console.error("review requests failed:", e.message));
+}, 10 * 60 * 1000).unref();
+
+// Super Admin → Services & Categories: the "About this service" text for the website.
+app.put("/api/admin/categories/:id/about", auth.requireAuth("admin"), ah(async (req, res) => {
+  const category = (await store.listCategories()).find((c) => c.id === req.params.id);
+  if (!category) return res.status(404).json({ error: "Category not found" });
+  res.json({ about: store.setCategoryAbout(req.params.id, req.body?.about, actorOf(req)) });
 }));
 
 // ---- push notifications (wake a backgrounded/closed provider app for new

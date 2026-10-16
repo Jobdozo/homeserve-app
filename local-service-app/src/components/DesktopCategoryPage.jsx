@@ -7,6 +7,7 @@ import CategoryPhoto from "./CategoryPhoto";
 import CategoryBannerImage from "./CategoryBannerImage";
 import CategoryIcon from "./CategoryIcon";
 import ComingSoon from "./ComingSoon";
+import AboutSection from "./AboutSection";
 import TypedCategoryLayout from "./TypedCategoryLayout";
 
 const SORTS = [
@@ -146,6 +147,8 @@ export default function DesktopCategoryPage({ category, displayList, aggregate, 
             </div>
           </>
         )}
+
+        <AboutSection title={`About ${category.name}`} text={category.about} className="max-w-3xl pt-16" />
 
         {/* Other categories */}
         {others.length > 0 && (

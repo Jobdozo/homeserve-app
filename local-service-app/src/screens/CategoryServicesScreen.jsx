@@ -14,6 +14,7 @@ const FILTERS = [
   { id: "offer", label: "Offers", test: (s) => discountPct(s.price, s.originalPrice) > 0 },
 ];
 import CartBar from "../components/CartBar";
+import AboutSection from "../components/AboutSection";
 import Seo from "../components/Seo";
 import ComingSoon from "../components/ComingSoon";
 import DesktopCategoryPage from "../components/DesktopCategoryPage";
@@ -239,6 +240,7 @@ export default function CategoryServicesScreen() {
           </div>
         </>
       )}
+      <AboutSection title={`About ${category.name}`} text={category.about} className="px-4 pb-8" />
       <CartBar />
     </div>
     </>
