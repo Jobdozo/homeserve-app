@@ -109,30 +109,50 @@ log "backup ok: $name ($size); $(ls "$DEST/daily" | wc -l) daily, $(ls "$DEST/we
 # ---- 3. copy off this server, encrypted ----
 if [ -n "${BACKUP_RCLONE_REMOTE:-}" ]; then
   command -v rclone > /dev/null || offsite_fail "rclone isn't installed"
-  upload="$DEST/daily/$name"
+  source_file="$DEST/daily/$name"
+  remote_base="$name"
+  slim=""
+  upload="$source_file"
+  # Only temporary files are removed, never the local archive itself.
+  cleanup_upload() { [ "$upload" != "$DEST/daily/$name" ] && rm -f "$upload"; [ -n "$slim" ] && rm -f "$slim"; true; }
+  # Photos and documents (uploads/) are already copied to cloud storage one by one by the
+  # server (uploads.js), so with BACKUP_OFFSITE_SKIP_UPLOADS=1 the off-server copy leaves
+  # them out and stays far under the size limit. The local archive above still has them.
+  if [ "${BACKUP_OFFSITE_SKIP_UPLOADS:-}" = "1" ]; then
+    slim="$DEST/daily/.$name.slim.partial"
+    set +e
+    tar -czf "$slim" --warning=no-file-changed --exclude="$(basename "$SRC")/uploads" -C "$(dirname "$SRC")" "$(basename "$SRC")"
+    code=$?
+    set -e
+    [ "$code" -le 1 ] || { cleanup_upload; offsite_fail "tar (without uploads) exited with code $code"; }
+    source_file="$slim"
+    upload="$slim"
+    remote_base="${name%.tar.gz}-no-uploads.tar.gz"
+  fi
   if [ -n "${BACKUP_ENCRYPT_KEY_FILE:-}" ]; then
-    [ -s "$BACKUP_ENCRYPT_KEY_FILE" ] || offsite_fail "encryption key file $BACKUP_ENCRYPT_KEY_FILE is missing or empty"
+    [ -s "$BACKUP_ENCRYPT_KEY_FILE" ] || { cleanup_upload; offsite_fail "encryption key file $BACKUP_ENCRYPT_KEY_FILE is missing or empty"; }
     upload="$DEST/daily/.$name.enc.partial"
-    openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt -in "$DEST/daily/$name" -out "$upload" -pass "file:$BACKUP_ENCRYPT_KEY_FILE" \
-      || { rm -f "$upload"; offsite_fail "encryption failed"; }
-    remote_name="$name.enc"
+    openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt -in "$source_file" -out "$upload" -pass "file:$BACKUP_ENCRYPT_KEY_FILE" \
+      || { cleanup_upload; offsite_fail "encryption failed"; }
+    [ -n "$slim" ] && rm -f "$slim" && slim=""
+    remote_name="$remote_base.enc"
   else
     log "WARNING: no BACKUP_ENCRYPT_KEY_FILE set — the off-server copy is NOT encrypted"
-    remote_name="$name"
+    remote_name="$remote_base"
   fi
   up_mb=$(( ($(stat -c %s "$upload") + 1048575) / 1048576 ))
   if [ "$up_mb" -gt "$BACKUP_MAX_OFFSITE_MB" ]; then
-    rm -f "$upload"
+    cleanup_upload
     offsite_fail "backup is ${up_mb} MB, over the ${BACKUP_MAX_OFFSITE_MB} MB limit (upgrade the plan or raise BACKUP_MAX_OFFSITE_MB)"
   fi
   if rclone copyto "$upload" "$BACKUP_RCLONE_REMOTE/$remote_name" --s3-no-check-bucket; then
     log "copied off-server: $remote_name (${up_mb} MB) -> $BACKUP_RCLONE_REMOTE"
     st_offsite="copied"
   else
-    rm -f "$upload"
+    cleanup_upload
     offsite_fail "upload error"
   fi
-  [ "$upload" != "$DEST/daily/$name" ] && rm -f "$upload"
+  cleanup_upload
   rclone delete "$BACKUP_RCLONE_REMOTE" --min-age "${KEEP_OFFSITE_DAYS}d" --s3-no-check-bucket > /dev/null 2>&1 || true
 fi
 

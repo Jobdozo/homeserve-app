@@ -27,7 +27,7 @@ done
 
 # Rewrite the off-server block: drop old (commented or not) lines, append the live ones.
 tmp="$(mktemp)"
-grep -vE '^[#[:space:]]*(BACKUP_RCLONE_REMOTE|RCLONE_CONFIG_SUPABASE_[A-Z_]+)=' "$CONF" \
+grep -vE '^[#[:space:]]*(BACKUP_RCLONE_REMOTE|BACKUP_OFFSITE_SKIP_UPLOADS|RCLONE_CONFIG_SUPABASE_[A-Z_]+)=' "$CONF" \
   | grep -v '^# --- Off-server copy' | grep -v '^# Create the keys in Supabase' > "$tmp" || true
 grep -q '^BACKUP_ENCRYPT_KEY_FILE=' "$tmp" || echo 'BACKUP_ENCRYPT_KEY_FILE=/root/.tikdum-backup-key' >> "$tmp"
 {
@@ -40,6 +40,11 @@ grep -q '^BACKUP_ENCRYPT_KEY_FILE=' "$tmp" || echo 'BACKUP_ENCRYPT_KEY_FILE=/roo
   echo "RCLONE_CONFIG_SUPABASE_REGION=$REGION"
   echo "RCLONE_CONFIG_SUPABASE_ACCESS_KEY_ID=$KEY_ID"
   echo "RCLONE_CONFIG_SUPABASE_SECRET_ACCESS_KEY=$SECRET"
+  # Photos/documents already go to the storage buckets one by one (server uploads.js),
+  # so the nightly off-server file leaves them out and stays under the 45 MB limit.
+  if [ -n "$(val STORAGE_PUBLIC_BUCKET)" ] && [ -n "$(val STORAGE_PRIVATE_BUCKET)" ]; then
+    echo "BACKUP_OFFSITE_SKIP_UPLOADS=1"
+  fi
 } >> "$tmp"
 install -m 600 "$tmp" "$CONF"
 rm -f "$tmp"
@@ -56,6 +61,9 @@ else
   echo "== bucket $BUCKET not found — creating it (private)"
   rclone mkdir "supabase:$BUCKET"
 fi
+
+# Use this checkout's backup script (the nightly job runs the installed copy).
+install -m 755 deploy/backup-data.sh /usr/local/bin/tikdum-backup
 
 echo "== running a backup now (takes a minute)"
 code=0

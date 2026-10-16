@@ -114,6 +114,12 @@ openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
 tar -xzf restore.tar.gz -C /root
 ```
 
+Files named `…-no-uploads.tar.gz.enc` (when `BACKUP_OFFSITE_SKIP_UPLOADS=1`, set by
+`enable-offsite-backup.sh`) leave out `uploads/` to stay under the 45 MB limit: the photos and
+documents are already in the storage buckets (`tikdum-photos`, `tikdum-private`, see STORAGE.md).
+The server fetches a missing file back from the bucket on its own, or copy the buckets back into
+`/root/tikdum-data/uploads/` (e.g. `rclone copy supabase:tikdum-private /root/tikdum-data/uploads`).
+
 **The database itself** — the JSON files in `tikdum-data/db-export/` hold every row
 (relations appear as `{ "id": … }`). If the Data Connect database is ever lost, they can
 be re-inserted into a fresh one (a restore script is not written yet — ask before you need it).
