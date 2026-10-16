@@ -21,7 +21,8 @@ case "$KEY" in
 esac
 
 echo "== checking the key with Anthropic"
-code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://api.anthropic.com/v1/models \
+body="$(mktemp)"
+code=$(curl -s -o "$body" -w '%{http_code}' --max-time 20 https://api.anthropic.com/v1/models \
   -H "x-api-key: $KEY" -H "anthropic-version: 2023-06-01" || echo 000)
 if [ "$code" != "200" ]; then
   unset KEY
@@ -32,8 +33,14 @@ if [ "$code" != "200" ]; then
     *) why="unexpected answer" ;;
   esac
   echo "Anthropic answered $code — $why. Nothing was changed."
+  # Anthropic's own explanation (it never contains the key).
+  msg="$(grep -o '"message"[[:space:]]*:[[:space:]]*"[^"]*"' "$body" | head -1 | sed 's/.*:[[:space:]]*"//; s/"$//')"
+  type="$(grep -o '"type"[[:space:]]*:[[:space:]]*"[^"]*"' "$body" | sed -n 2p | sed 's/.*:[[:space:]]*"//; s/"$//')"
+  [ -n "$msg" ] && echo "Anthropic says: ${type:+$type — }$msg"
+  rm -f "$body"
   exit 1
 fi
+rm -f "$body"
 
 # Replace any old line, keep everything else (and the file's owner and permissions).
 tmp="$(mktemp)"
