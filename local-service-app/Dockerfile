@@ -17,4 +17,11 @@ RUN npm run build
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# A broken nginx.conf fails the build here (so the running site is left alone) instead of the
+# container failing to start. "server" (the API) only resolves at run time, so the test uses a
+# copy pointing at 127.0.0.1.
+RUN cp /etc/nginx/conf.d/default.conf /tmp/default.conf \
+ && sed -i 's#server:4000#127.0.0.1:4000#g' /etc/nginx/conf.d/default.conf \
+ && nginx -t \
+ && cp /tmp/default.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

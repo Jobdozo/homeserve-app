@@ -8,6 +8,7 @@ const { Server } = require("socket.io");
 const store = require("./store");
 const monitoring = require("./monitoring");
 const complaints = require("./complaints");
+const seoPages = require("./seoPages");
 const providerCrm = require("./providerCrm");
 const access = require("./access");
 const staff = require("./staff");
@@ -1080,24 +1081,48 @@ app.post("/api/provider/complaints/:id/reply", auth.requireAuth("provider"), ah(
 // /api/categories and /api/services({activeOnly:true}) filtering exactly.
 app.get("/sitemap.xml", ah(async (req, res) => {
   const SITE_URL = "https://tikdum.com";
-  const [categories, services] = await Promise.all([
-    store.listCategories(),
-    store.listServices({ activeOnly: true }),
-  ]);
+  // The pages that exist for search engines (seoPages.searchCatalog): lasting rules, not
+  // "bookable this minute", so the list doesn't change with working hours.
+  const { categories, services, providers } = seoPages.searchCatalog({
+    categories: await store.listCategories(),
+    services: await store.listServices({}),
+    providers: await store.listProviders(),
+  });
   const escapeXml = (s) => String(s).replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]));
+  const absolute = (u) => (/^https?:\/\//.test(u) ? u : `${SITE_URL}${u.startsWith("/") ? "" : "/"}${u}`);
+  // Same rules as the pages themselves (seoPages.js): a category with nothing bookable and a
+  // provider without an approved, bookable service aren't listed (those pages are noindex / 404).
+  const withServices = new Set(services.map((s) => s.categoryId));
+  const bookableProviders = new Set(services.map((s) => s.providerId));
   const urls = [
     { loc: `${SITE_URL}/home`, priority: "1.0" },
     { loc: `${SITE_URL}/categories`, priority: "0.8" },
     { loc: `${SITE_URL}/services`, priority: "0.8" },
     { loc: `${SITE_URL}/booking-protection`, priority: "0.3" },
-    ...categories.filter((c) => c.active).map((c) => ({ loc: `${SITE_URL}/category/${encodeURIComponent(c.id)}`, priority: "0.7" })),
-    ...services.map((s) => ({ loc: `${SITE_URL}/service/${encodeURIComponent(s.id)}`, priority: "0.6" })),
+    { loc: `${SITE_URL}/about.html`, priority: "0.4" },
+    ...categories
+      .filter((c) => c.active && withServices.has(c.id))
+      .map((c) => ({ loc: `${SITE_URL}/category/${encodeURIComponent(c.id)}`, priority: "0.8", image: c.imageUrl ? { loc: absolute(c.imageUrl), title: c.name } : null })),
+    ...services.map((s) => ({ loc: `${SITE_URL}/service/${encodeURIComponent(s.id)}`, priority: "0.6", image: s.imageUrl ? { loc: absolute(s.imageUrl), title: s.name } : null })),
+    ...providers
+      .filter((p) => (p.verificationStatus || "pending") === "approved" && bookableProviders.has(p.id))
+      .map((p) => ({ loc: `${SITE_URL}/provider/${encodeURIComponent(p.id)}`, priority: "0.5", image: p.photoUrl ? { loc: absolute(p.photoUrl), title: p.businessName || p.name } : null })),
   ];
-  const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls
-    .map((u) => `  <url>\n    <loc>${escapeXml(u.loc)}</loc>\n    <priority>${u.priority}</priority>\n  </url>`)
+  const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${urls
+    .map(
+      (u) =>
+        `  <url>\n    <loc>${escapeXml(u.loc)}</loc>\n    <priority>${u.priority}</priority>\n${
+          u.image ? `    <image:image>\n      <image:loc>${escapeXml(u.image.loc)}</image:loc>\n    </image:image>\n` : ""
+        }  </url>`
+    )
     .join("\n")}\n</urlset>\n`;
-  res.set("Content-Type", "application/xml").send(body);
+  res.set({ "Content-Type": "application/xml", "Cache-Control": "public, max-age=3600" }).send(body);
 }));
+
+// Every page of the website with its own title, description, preview tags, structured data
+// and status (see seoPages.js). Only the website's nginx calls this, for addresses that
+// aren't files; the real address comes in X-Original-URI.
+app.get("/__page", seoPages.route(store));
 
 app.get("/api/categories", ah(async (req, res) => {
   const categories = await store.listCategories();

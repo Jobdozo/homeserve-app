@@ -106,7 +106,7 @@ export default function CategoryServicesScreen() {
     <>
     <Seo
       title={category.name}
-      description={`Book ${category.name} services near you on Tikdum — compare ${displayList.length} trusted local provider${displayList.length === 1 ? "" : "s"} and book instantly over WhatsApp.`}
+      description={`Book ${/\bservices?$/i.test(category.name.trim()) ? category.name : `${category.name} services`} near you on Tikdum — ${pros ? `compare ${pros} trusted local provider${pros === 1 ? "" : "s"}${minPrice ? `, from ₹${Number(minPrice).toLocaleString("en-IN")}` : ""}, and ` : "verified local providers, "}book instantly over WhatsApp.`}
       path={`/category/${category.id}`}
     />
     {/* Desktop gets its own full-width page (components/DesktopCategoryPage). */}

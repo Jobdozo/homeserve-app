@@ -15,12 +15,19 @@ const absoluteUrl = (u) => (!u ? DEFAULT_IMAGE : /^https?:\/\//.test(u) ? u : `$
 
 export default function Seo({ title, description = DEFAULT_DESCRIPTION, path = "/", image, jsonLd, noindex = false }) {
   image = absoluteUrl(image);
+  // The page arrived with its head filled in by the server (server/src/seoPages.js): those
+  // tags go once this takes over, and its structured data stays while this is still the page
+  // it was written for (it's richer than the copy below, so that one isn't added twice).
   useEffect(() => {
     document.querySelectorAll("[data-static-seo]").forEach((el) => el.remove());
-  }, []);
+    document.querySelectorAll("script[data-seo-path]").forEach((el) => {
+      if (el.getAttribute("data-seo-path") !== path) el.remove();
+    });
+  }, [path]);
   const fullTitle = title ? `${title} | ${SITE_NAME}` : `${SITE_NAME} — Book Trusted Home Services Near You`;
   const url = `${SITE_URL}${path}`;
-  const jsonLdList = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
+  const fromServer = typeof document !== "undefined" && [...document.querySelectorAll("script[data-seo-path]")].some((el) => el.getAttribute("data-seo-path") === path);
+  const jsonLdList = jsonLd && !fromServer ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
 
   return (
     <Helmet>
