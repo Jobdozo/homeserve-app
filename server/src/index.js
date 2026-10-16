@@ -8,6 +8,7 @@ const { Server } = require("socket.io");
 const store = require("./store");
 const monitoring = require("./monitoring");
 const complaints = require("./complaints");
+const providerCrm = require("./providerCrm");
 const access = require("./access");
 const staff = require("./staff");
 const rulesConfig = require("./rules");
@@ -2694,6 +2695,41 @@ app.delete("/api/admin/complaint-stages/:key", adminOnly, crm(async (req, res) =
 }));
 
 app.get("/api/admin/staff", adminOnly, crm(async (req, res) => res.json(await complaints.listStaff())));
+
+// ---- Provider CRM: leads, pipeline, follow-ups, one timeline per provider (see providerCrm.js) ----
+app.get("/api/admin/crm/pipeline", adminOnly, crm(async (req, res) => res.json(await providerCrm.pipeline(req.query))));
+app.get("/api/admin/crm/tasks", adminOnly, crm(async (req, res) => res.json(await providerCrm.tasksView(req.query, req.admin?.id))));
+app.get("/api/admin/crm/summary", adminOnly, crm(async (req, res) => res.json(providerCrm.summary(req.admin?.id))));
+app.get("/api/admin/crm/detail", adminOnly, crm(async (req, res) => res.json(await providerCrm.detail(req.query.subject))));
+app.get("/api/admin/crm/check-phone", adminOnly, crm(async (req, res) => res.json({ existing: await providerCrm.findByPhone(req.query.phone) })));
+app.post("/api/admin/crm/leads", adminOnly, crm(async (req, res) => {
+  try {
+    res.status(201).json(await providerCrm.createLead(req.body || {}, actorOf(req)));
+  } catch (e) {
+    if (e.existing) return res.status(409).json({ error: e.message, existing: e.existing });
+    throw e;
+  }
+}));
+app.post("/api/admin/crm/leads/import", adminOnly, crm(async (req, res) => res.json(await providerCrm.importLeads(req.body?.rows, req.body || {}, actorOf(req)))));
+app.patch("/api/admin/crm/leads/:id", adminOnly, crm(async (req, res) => res.json(providerCrm.updateLead(req.params.id, req.body || {}, actorOf(req)))));
+app.delete("/api/admin/crm/leads/:id", adminOnly, crm(async (req, res) => res.json(providerCrm.deleteLead(req.params.id))));
+app.patch("/api/admin/crm/providers/:id", adminOnly, crm(async (req, res) => res.json(providerCrm.updateProvider(req.params.id, req.body || {}, actorOf(req)))));
+app.post("/api/admin/crm/tasks", adminOnly, crm(async (req, res) => res.status(201).json(providerCrm.createTask(req.body || {}, actorOf(req)))));
+app.patch("/api/admin/crm/tasks/:id", adminOnly, crm(async (req, res) => res.json(providerCrm.updateTask(req.params.id, req.body || {}, actorOf(req)))));
+app.post("/api/admin/crm/contacts", adminOnly, crm(async (req, res) => res.status(201).json(providerCrm.logContact(req.body || {}, actorOf(req)))));
+app.get("/api/admin/crm/settings", adminOnly, crm(async (req, res) => res.json(providerCrm.getSettings())));
+app.put("/api/admin/crm/settings", adminOnly, crm(async (req, res) => res.json(providerCrm.updateSettings(req.body || {}))));
+
+// Every minute: automatic follow-ups (welcome call, documents, review, setup), a push to the
+// Admin app when a follow-up falls due, and the morning WhatsApp digest per team member.
+setInterval(() => {
+  providerCrm
+    .runJobs({
+      notify: (to, data) => fcm.sendToDevices("admin", to, { type: "crm:followup", ...data }).catch(() => {}),
+      whatsapp: (phone, { name, message }) => require("./whatsapp").sendNoticeTemplate(phone, { name, message }).catch(() => ({})),
+    })
+    .catch((e) => console.error("provider CRM jobs failed:", e.message));
+}, 60 * 1000).unref();
 
 // ---- Delete my account (Play Store requirement). The person must confirm
 // by sending confirm: "DELETE"; open orders block it. ----

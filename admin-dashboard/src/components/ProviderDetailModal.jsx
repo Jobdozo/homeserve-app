@@ -26,6 +26,7 @@ import ProviderMoneyTab from "./ProviderMoneyTab";
 import ProviderKycReview from "./ProviderKycReview";
 import ProviderActivityTab from "./ProviderActivityTab";
 import { ProviderContact, ProviderPause } from "./ProviderContactPause";
+import { CrmPanel } from "./CrmKit";
 
 // The full-screen provider page is split into tabs; the old popup shows everything in one list.
 const PAGE_TABS = [
@@ -35,6 +36,7 @@ const PAGE_TABS = [
   ["money", "Money"],
   ["documents", "Documents"],
   ["activity", "Activity"],
+  ["crm", "CRM"],
 ];
 
 const verificationStyles = {
@@ -60,7 +62,7 @@ const DOC_LABELS = {
 
 // asPage: shown as its own full-screen page (Providers → a provider) with the services picker beside it.
 export default function ProviderDetailModal({ providerId, onClose, asPage = false }) {
-  const { providers, categories, approveProvider, rejectProvider, deleteProvider, updateProviderProfile, updateProviderCoverage, showToast } =
+  const { providers, categories, approveProvider, rejectProvider, deleteProvider, updateProviderProfile, updateProviderCoverage, showToast, can } =
     useApp();
   const provider = providers.find((p) => p.id === providerId);
   const [services, setServices] = useState(null);
@@ -361,7 +363,7 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
               <ProviderContact provider={provider} />
               <ProviderPause provider={provider} />
               <div className="-mx-5 flex gap-1 overflow-x-auto border-b border-gray-100 px-5">
-                {PAGE_TABS.map(([key, label]) => (
+                {PAGE_TABS.filter(([key]) => key !== "crm" || can("crm.view")).map(([key, label]) => (
                   <button
                     key={key}
                     onClick={() => setTab(key)}
@@ -860,6 +862,11 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
         {asPage && tab === "activity" && (
           <div className="px-5 pb-5">
             <ProviderActivityTab providerId={provider.id} onTagsSaved={setTags} />
+          </div>
+        )}
+        {asPage && tab === "crm" && can("crm.view") && (
+          <div className="px-5 pb-5">
+            <CrmPanel subject={`provider:${provider.id}`} showProviderLink={false} />
           </div>
         )}
         </div>

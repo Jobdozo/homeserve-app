@@ -236,6 +236,15 @@ export const BotIcon = (p) => (
   </svg>
 );
 
+// Provider CRM: a short pipeline of cards (columns of decreasing height).
+export const PipelineIcon = (p) => (
+  <svg {...base} {...p}>
+    <rect x="3.5" y="4" width="4.5" height="16" rx="1.2" />
+    <rect x="9.75" y="4" width="4.5" height="11" rx="1.2" />
+    <rect x="16" y="4" width="4.5" height="6.5" rx="1.2" />
+  </svg>
+);
+
 export const ChatIcon = (p) => (
   <svg {...base} {...p}>
     <path d="M20 11.5a7.5 7.5 0 0 1-11.2 6.5L4 19.5l1.5-4.5A7.5 7.5 0 1 1 20 11.5z" />

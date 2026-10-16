@@ -19,6 +19,7 @@ const MODULES = [
   { key: "dashboard", label: "Dashboard", actions: ["view"] },
   { key: "customers", label: "Customers", actions: ["view", "add", "edit", "delete", "export", "import", "manage"] },
   { key: "providers", label: "Service providers", actions: ["view", "add", "edit", "delete", "approve", "reject", "export", "import", "manage"] },
+  { key: "crm", label: "Provider CRM (leads, follow-ups, pipeline)", actions: ["view", "add", "edit", "delete", "manage"] },
   { key: "services", label: "Services & categories", actions: ["view", "add", "edit", "delete", "approve", "reject", "export", "import", "manage"] },
   { key: "bookings", label: "Bookings & conversations", actions: ["view", "edit", "export", "manage"] },
   { key: "payments", label: "Payments & wallets", actions: ["view", "edit", "export", "manage"] },
@@ -42,6 +43,16 @@ const MODULES = [
 // roles don't pick up new modules by themselves). Each runs once, ever.
 const ROLE_MIGRATIONS = [
   { id: "2026-10-inbox", grant: { support: ["inbox.view", "inbox.add"], admin: ["inbox.view", "inbox.add"] } },
+  {
+    id: "2026-10-crm",
+    grant: {
+      admin: ["crm.view", "crm.add", "crm.edit", "crm.delete"],
+      registration: ["crm.view", "crm.add", "crm.edit"],
+      verification: ["crm.view", "crm.add", "crm.edit"],
+      operations: ["crm.view", "crm.add", "crm.edit"],
+      management: ["crm.view"],
+    },
+  },
 ];
 function runRoleMigrations(roles) {
   const done = new Set(jsonStore.readAll("accessMigrations").map((m) => m.id));
@@ -72,11 +83,11 @@ const DEFAULT_ROLES = [
   },
   {
     key: "registration", name: "Registration Team", description: "Onboards customers and providers.",
-    permissions: [...all("customers", ["view", "add", "edit", "export", "import"]), ...all("providers", ["view", "add", "edit", "import"]), "data.import", "dashboard.view"],
+    permissions: [...all("customers", ["view", "add", "edit", "export", "import"]), ...all("providers", ["view", "add", "edit", "import"]), ...all("crm", ["view", "add", "edit"]), "data.import", "dashboard.view"],
   },
   {
     key: "verification", name: "Provider Verification Team", description: "Reviews and approves providers and their services.",
-    permissions: [...all("providers", ["view", "edit", "approve", "reject"]), ...all("services", ["view", "approve", "reject"]), "monitoring.view", "dashboard.view"],
+    permissions: [...all("providers", ["view", "edit", "approve", "reject"]), ...all("crm", ["view", "add", "edit"]), ...all("services", ["view", "approve", "reject"]), "monitoring.view", "dashboard.view"],
   },
   {
     key: "payments", name: "Payment Team", description: "Handles wallets, fees and payment reports.",
@@ -92,13 +103,13 @@ const DEFAULT_ROLES = [
   },
   {
     key: "operations", name: "Operations Team", description: "Keeps bookings, providers and live activity running smoothly.",
-    permissions: [...all("bookings", ["view", "edit", "export"]), ...all("providers", ["view", "edit"]), "monitoring.manage", ...all("services", ["view", "edit"]), ...all("notifications", ["view", "add"]), "customers.view", "dashboard.view"],
+    permissions: [...all("bookings", ["view", "edit", "export"]), ...all("providers", ["view", "edit"]), ...all("crm", ["view", "add", "edit"]), "monitoring.manage", ...all("services", ["view", "edit"]), ...all("notifications", ["view", "add"]), "customers.view", "dashboard.view"],
   },
   {
     key: "management", name: "Reporting / Management Team", description: "Read-only oversight with report exports.",
     permissions: [
       "dashboard.view", ...all("reports", ["view", "export"]), ...all("monitoring", ["view", "export"]), "payments.view", "bookings.view",
-      "audit.view", "complaints.view", "providers.view", "customers.view", "services.view",
+      "audit.view", "complaints.view", "providers.view", "customers.view", "services.view", "crm.view",
     ],
   },
 ];
@@ -291,6 +302,8 @@ const RULES = [
   [/^\/admin\/ai\//, (m) => (m === "GET" ? "ai.view" : "ai.manage")],
   [/^\/admin\/inbox(\/|$)/, (m) => (m === "GET" ? "inbox.view" : "inbox.add")],
   [/^\/admin\/verification\/precheck$/, () => "providers.view"],
+  [/^\/admin\/crm\/settings$/, (m) => (m === "GET" ? "crm.view" : "crm.manage")],
+  [/^\/admin\/crm(\/|$)/, (m) => `crm.${byMethod(m)}`],
   [/^\/admin\/payments\/reconciliation$/, () => "payments.view"],
   [/^\/admin\/(users|roles)(\/|$)/, (m) => `users.${byMethod(m)}`],
   [/^\/admin\/permissions/, () => "users.view"],

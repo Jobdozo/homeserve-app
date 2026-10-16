@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
+import { api } from "../api";
 import { useApp } from "../context/AppContext";
 import LogoMark from "./LogoMark";
 import {
@@ -21,6 +23,7 @@ import {
   RequestIcon,
   BotIcon,
   ChatIcon,
+  PipelineIcon,
 } from "./icons";
 
 const sections = [
@@ -34,6 +37,7 @@ const sections = [
   {
     items: [
       { label: "Providers Verification", icon: ShieldCheckIcon, to: "/providers", perm: "providers.view" },
+      { label: "Provider CRM", icon: PipelineIcon, to: "/crm", perm: "crm.view", badge: "crm" },
       { label: "Live Provider Monitoring", icon: RequestIcon, to: "/monitoring", perm: "monitoring.view" },
       { label: "Services & Categories", icon: GridIcon, to: "/services", perm: "services.view" },
       { label: "Locations", icon: MapPinIcon, to: "/locations", perm: "locations.view" },
@@ -62,6 +66,21 @@ const sections = [
 
 export default function Sidebar({ open, onClose }) {
   const { showToast, admin, can } = useApp();
+  // Provider CRM badge: my follow-ups due today or late, plus unassigned ones.
+  const [crmDue, setCrmDue] = useState(null);
+  const canCrm = can("crm.view");
+  useEffect(() => {
+    if (!canCrm) return undefined;
+    const load = () =>
+      api
+        .crmSummary()
+        .then((s) => setCrmDue({ count: s.mineDue + s.unassignedDue, late: s.mineOverdue > 0 }))
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, [canCrm]);
+  const badges = { crm: crmDue };
   const visibleSections = sections
     .map((s) => ({ ...s, items: s.items.filter((item) => !item.perm || can(item.perm)) }))
     .filter((s) => s.items.length > 0);
@@ -114,7 +133,12 @@ export default function Sidebar({ open, onClose }) {
                       }
                     >
                       <Icon width={16} height={16} />
-                      {item.label}
+                      <span className="flex-1">{item.label}</span>
+                      {item.badge && badges[item.badge]?.count > 0 && (
+                        <span className={`rounded-full px-1.5 text-[10.5px] font-bold tabular-nums ${badges[item.badge].late ? "bg-red-500 text-white" : "bg-white/15 text-white"}`}>
+                          {badges[item.badge].count}
+                        </span>
+                      )}
                     </NavLink>
                   );
                 }

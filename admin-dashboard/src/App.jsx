@@ -11,6 +11,7 @@ const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const CustomersPage = lazy(() => import("./pages/CustomersPage"));
 const ProvidersPage = lazy(() => import("./pages/ProvidersPage"));
 const ProviderPage = lazy(() => import("./pages/ProviderPage"));
+const ProviderCrmPage = lazy(() => import("./pages/ProviderCrmPage"));
 const ServicesPage = lazy(() => import("./pages/ServicesPage"));
 const HomeLayoutPage = lazy(() => import("./pages/HomeLayoutPage"));
 const LocationsPage = lazy(() => import("./pages/LocationsPage"));
@@ -65,6 +66,7 @@ function AppRoutes() {
     ["/customers", <CustomersPage />, "customers.view"],
     ["/providers", <ProvidersPage />, "providers.view"],
     ["/providers/:providerId", <ProviderPage />, "providers.view"],
+    ["/crm", <ProviderCrmPage />, "crm.view"],
     ["/services", <ServicesPage />, "services.view"],
     ["/home-layout", <HomeLayoutPage />, "cms.view"],
     ["/locations", <LocationsPage />, "locations.view"],
