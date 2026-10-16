@@ -66,9 +66,12 @@ npm test
 No npm dependencies (Node ≥ 20.6).
 
 ## Costs
-Operations, Registration, Verification and Payments use no AI (free to run). Reporting makes ~1 Claude Haiku call/day (well under $0.01).
-Complaint Triage: ~1 call per complaint/refund claim (~2k tokens ≈ $0.003). Support: ~1 call per customer
-message (~2–4k tokens with knowledge ≈ $0.003–0.006); a busy day of 300 messages ≈ $1–2.
+Operations, Registration, Verification and Payments use no AI (free to run). The others use Claude
+Haiku 5.5 (`claude-haiku-5-5`, $0.10 / $0.50 per million input / output tokens) at "low" effort; its short
+thinking before each answer is billed as output. Reporting makes ~1 call/day (well under $0.01).
+Complaint Triage: ~1 call per complaint/refund claim (≈ $0.001). Support: ~1 call per customer message
+(~2–4k tokens with knowledge ≈ $0.001); a busy day of 300 messages ≈ $0.30. The CEO: ~1 call per chat
+message and a daily review (≈ $0.002 each).
 Each agent has a daily USD budget in Admin; when reached it stops calling the AI and posts plain numbers instead.
 
 ## Known limits (Phase 1)

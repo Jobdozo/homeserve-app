@@ -9,13 +9,19 @@ module.exports = {
 
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY || "",
-    // Haiku 4.5 is plenty for summaries; set ANTHROPIC_MODEL to change it.
-    model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
-    // USD per million tokens, used to report spend against each agent's
-    // daily budget. Defaults are Haiku 4.5 list prices — update if you
-    // change model or Anthropic changes pricing.
-    inputPerMTok: num(process.env.ANTHROPIC_INPUT_USD_PER_MTOK, 1),
-    outputPerMTok: num(process.env.ANTHROPIC_OUTPUT_USD_PER_MTOK, 5),
+    // Claude Haiku 5.5: fast and cheap, plenty for summaries, triage and support drafts;
+    // set ANTHROPIC_MODEL to change it.
+    model: process.env.ANTHROPIC_MODEL || "claude-haiku-5-5",
+    // USD per million tokens, used to report spend against each agent's daily budget.
+    // Defaults are Claude Haiku 5.5 list prices for prompts up to 100K tokens (ours are
+    // far smaller) — update if you change the model or Anthropic changes pricing.
+    inputPerMTok: num(process.env.ANTHROPIC_INPUT_USD_PER_MTOK, 0.1),
+    outputPerMTok: num(process.env.ANTHROPIC_OUTPUT_USD_PER_MTOK, 0.5),
+    // Claude Haiku 5.5 thinks before answering by default. These are short, well-specified
+    // jobs, so "low" effort; the thinking counts toward each answer's length limit, so every
+    // call gets this much extra room on top of the answer it needs.
+    effort: process.env.ANTHROPIC_EFFORT || "low",
+    thinkingRoom: num(process.env.ANTHROPIC_THINKING_ROOM, 2000),
     timeoutMs: num(process.env.ANTHROPIC_TIMEOUT_MS, 60000),
   },
 
