@@ -29,6 +29,22 @@ const abs = (u) => (!u ? DEFAULT_IMAGE : /^https?:\/\//.test(u) ? u : `${SITE}${
 const titleOf = (t) => (t ? `${t} | ${SITE_NAME}` : DEFAULT_TITLE);
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const inr = (n) => `₹${Number(n).toLocaleString("en-IN")}`;
+// The website's own category photos (local-service-app/public/category-photos, used by
+// CategoryPhoto.jsx) for categories without an uploaded one.
+const BUILT_IN_PHOTOS = new Set(["ac-repair", "appliance-repair", "carpentry", "computer-repair", "electrician", "home-cleaning", "packers-movers", "painting", "pest-control", "plumbing", "salon-spa"]);
+const categoryImage = (c) => (!c ? null : c.imageUrl || c.bannerUrl || (BUILT_IN_PHOTOS.has(c.id) ? `/category-photos/${c.id}.jpg` : null));
+
+// A search-result description from the real details: the service, its starting price, who
+// does it, where, and the provider's own note when it says more than the name.
+function serviceDescription(s, providerName) {
+  const name = String(s.name || "").trim();
+  const note = String(s.tagline || "").trim().replace(/[.\s]+$/, "");
+  const useful = note && !name.toLowerCase().startsWith(note.toLowerCase()) && note.toLowerCase() !== name.toLowerCase();
+  const price = Number(s.price) > 0 ? ` from ${inr(s.price)}` : "";
+  const text = `${name}${price}${providerName ? ` with ${providerName}` : ""} in Jammu & Kashmir.${useful ? ` ${note}.` : ""} Verified local professionals — book instantly on Tikdum over WhatsApp.`;
+  return text.length > 300 ? `${text.slice(0, 297).trimEnd()}…` : text;
+}
+
 // "AC Repair services", but "Masonry Services" stays as it is.
 const asServices = (name) => (/\bservices?$/i.test(String(name).trim()) ? name : `${name} services`);
 
@@ -155,7 +171,7 @@ function pageFor(rawPath, data = {}) {
       title: titleOf(category.name),
       description,
       canonical: `/category/${category.id}`,
-      image: abs(category.imageUrl || category.bannerUrl),
+      image: abs(categoryImage(category)),
       // A category with nothing bookable yet stays out of search until it has services.
       noindex: !category.active || inCat.length === 0,
       jsonLd: [
@@ -192,10 +208,10 @@ function pageFor(rawPath, data = {}) {
     const provider = providers.find((p) => p.id === s.providerId);
     const category = categories.find((c) => c.id === s.categoryId);
     const providerName = provider?.businessName || provider?.name;
-    const image = abs(s.imageUrl);
+    const image = abs(s.imageUrl || categoryImage(category));
     return page({
       title: titleOf(s.name),
-      description: s.tagline || `Book ${s.name} near you on Tikdum from ${inr(s.price)}${providerName ? ` with ${providerName}` : ""}. Compare trusted local providers and book instantly over WhatsApp.`,
+      description: serviceDescription(s, providerName),
       canonical: `/service/${s.id}`,
       image,
       jsonLd: [
@@ -204,9 +220,7 @@ function pageFor(rawPath, data = {}) {
           "@context": "https://schema.org",
           "@type": "Service",
           name: s.name,
-          description: s.includes?.length
-            ? `${s.tagline || s.name}. Includes: ${s.includes.slice(0, 8).join(", ")}.`
-            : s.tagline || `${s.name} — book trusted local providers on Tikdum.`,
+          description: s.includes?.length ? `${serviceDescription(s, providerName)} Includes: ${s.includes.slice(0, 8).join(", ")}.` : serviceDescription(s, providerName),
           ...(category ? { serviceType: category.name } : {}),
           image,
           url: `${SITE}/service/${encodeURIComponent(s.id)}`,
@@ -229,7 +243,7 @@ function pageFor(rawPath, data = {}) {
       title: titleOf(`${anchor.name} Providers`),
       description: `Compare ${plural(same.length, "trusted provider")} for ${anchor.name}${category ? ` in ${category.name}` : ""} on Tikdum. Book instantly over WhatsApp.`,
       canonical: `/find-service/${anchor.id}`,
-      image: abs(anchor.imageUrl),
+      image: abs(anchor.imageUrl || categoryImage(category)),
       jsonLd: [breadcrumbs([["Home", "/home"], ...(category ? [[category.name, `/category/${category.id}`]] : []), [`${anchor.name} providers`, `/find-service/${anchor.id}`]])],
     });
   }
@@ -246,7 +260,7 @@ function pageFor(rawPath, data = {}) {
       title: titleOf(p.name),
       description: `${p.name} on Tikdum — rated ${p.reviews ? p.rating : "new"} with ${plural(theirs.length, "service")} available. Book trusted home services near you.`,
       canonical: `/provider/${p.id}`,
-      image: abs(p.photoUrl),
+      image: abs(p.photoUrl || theirs.find((s) => s.imageUrl)?.imageUrl || categoryImage(categories.find((c) => c.id === theirs[0]?.categoryId))),
       jsonLd: [
         breadcrumbs([["Home", "/home"], [name, `/provider/${p.id}`]]),
         {

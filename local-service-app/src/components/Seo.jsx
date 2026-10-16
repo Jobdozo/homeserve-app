@@ -57,4 +57,16 @@ export default function Seo({ title, description = DEFAULT_DESCRIPTION, path = "
   );
 }
 
+// A service page's search description from its real details (same wording as the server's,
+// server/src/seoPages.js serviceDescription): the service, starting price, who does it, where,
+// and the provider's own note when it says more than the name.
+export function serviceDescription(s, providerName) {
+  const name = String(s.name || "").trim();
+  const note = String(s.tagline || "").trim().replace(/[.\s]+$/, "");
+  const useful = note && !name.toLowerCase().startsWith(note.toLowerCase()) && note.toLowerCase() !== name.toLowerCase();
+  const price = Number(s.price) > 0 ? ` from ₹${Number(s.price).toLocaleString("en-IN")}` : "";
+  const text = `${name}${price}${providerName ? ` with ${providerName}` : ""} in Jammu & Kashmir.${useful ? ` ${note}.` : ""} Verified local professionals — book instantly on Tikdum over WhatsApp.`;
+  return text.length > 300 ? `${text.slice(0, 297).trimEnd()}…` : text;
+}
+
 export { SITE_NAME, SITE_URL, DEFAULT_DESCRIPTION, DEFAULT_IMAGE };

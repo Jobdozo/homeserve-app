@@ -8,7 +8,7 @@ import { api } from "../api";
 import { discountPct } from "../utils/format";
 import { RatingPill, VerifiedBadge, OfferTag, AddButton, ProviderMark, SectionTitle, inr } from "../components/ui";
 import CategoryPhoto from "../components/CategoryPhoto";
-import Seo, { SITE_URL } from "../components/Seo";
+import Seo, { SITE_URL, serviceDescription } from "../components/Seo";
 import DesktopServiceDetails from "../components/DesktopServiceDetails";
 import AddOns from "../components/AddOns";
 import { useAddService } from "../components/optionsSheetContext";
@@ -70,10 +70,7 @@ export default function ServiceDetailsScreen() {
     <>
     <Seo
       title={service.name}
-      description={
-        service.tagline ||
-        `Book ${service.name} near you on Tikdum from ₹${service.price}${provider ? ` with ${provider.name}` : ""}. Compare trusted local providers and book instantly over WhatsApp.`
-      }
+      description={serviceDescription(service, provider?.businessName || provider?.name)}
       path={`/service/${service.id}`}
       image={service.imageUrl}
       jsonLd={serviceJsonLd}
