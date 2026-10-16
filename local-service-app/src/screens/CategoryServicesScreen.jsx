@@ -19,6 +19,7 @@ import ComingSoon from "../components/ComingSoon";
 import DesktopCategoryPage from "../components/DesktopCategoryPage";
 import SubcategoryChips from "../components/SubcategoryChips";
 import { chipsFor } from "../utils/subcategories";
+import { CatalogLoading } from "../utils/useCatalogItem";
 
 export default function CategoryServicesScreen() {
   const { categoryId } = useParams();
@@ -86,6 +87,9 @@ export default function CategoryServicesScreen() {
     return { rating: Math.round(weighted * 10) / 10, reviews: totalReviews };
   }, [inCategory]);
 
+  // Until the catalog has arrived the category isn't known yet: show loading, never
+  // "not found" (with its noindex), or Google may record a real category as missing.
+  if (!category && !catalogReady) return <CatalogLoading />;
   if (!category) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
