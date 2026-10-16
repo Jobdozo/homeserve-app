@@ -9,6 +9,7 @@ const store = require("./store");
 const monitoring = require("./monitoring");
 const complaints = require("./complaints");
 const seoPages = require("./seoPages");
+const cityPages = require("./cityPages");
 const providerCrm = require("./providerCrm");
 const access = require("./access");
 const staff = require("./staff");
@@ -1083,11 +1084,8 @@ app.get("/sitemap.xml", ah(async (req, res) => {
   const SITE_URL = "https://tikdum.com";
   // The pages that exist for search engines (seoPages.searchCatalog): lasting rules, not
   // "bookable this minute", so the list doesn't change with working hours.
-  const { categories, services, providers } = seoPages.searchCatalog({
-    categories: await store.listCategories(),
-    services: await store.listServices({}),
-    providers: await store.listProviders(),
-  });
+  const data = await seoPages.loadSearchData(store);
+  const { categories, services, providers } = data;
   const escapeXml = (s) => String(s).replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]));
   const absolute = (u) => (/^https?:\/\//.test(u) ? u : `${SITE_URL}${u.startsWith("/") ? "" : "/"}${u}`);
   // Same rules as the pages themselves (seoPages.js): a category with nothing bookable and a
@@ -1100,6 +1098,8 @@ app.get("/sitemap.xml", ah(async (req, res) => {
     { loc: `${SITE_URL}/services`, priority: "0.8" },
     { loc: `${SITE_URL}/booking-protection`, priority: "0.3" },
     { loc: `${SITE_URL}/about.html`, priority: "0.4" },
+    // City pages (cityPages.js): /jammu and /jammu/<category>, only where providers serve.
+    ...cityPages.allPaths(data).map((p) => ({ loc: `${SITE_URL}${p}`, priority: "0.9" })),
     ...categories
       .filter((c) => c.active && withServices.has(c.id))
       .map((c) => ({ loc: `${SITE_URL}/category/${encodeURIComponent(c.id)}`, priority: "0.8", image: c.imageUrl ? { loc: absolute(c.imageUrl), title: c.name } : null })),
@@ -1123,6 +1123,18 @@ app.get("/sitemap.xml", ah(async (req, res) => {
 // and status (see seoPages.js). Only the website's nginx calls this, for addresses that
 // aren't files; the real address comes in X-Original-URI.
 app.get("/__page", seoPages.route(store));
+
+// What the website's city pages show (tikdum.com/jammu, /jammu/ac-repair — see cityPages.js).
+app.get("/api/city-pages/:city", ah(async (req, res) => {
+  const page = cityPages.cityPage(req.params.city, await seoPages.loadSearchData(store));
+  if (!page) return res.status(404).json({ error: "Not found" });
+  res.set("Cache-Control", "public, max-age=300").json(page);
+}));
+app.get("/api/city-pages/:city/:category", ah(async (req, res) => {
+  const page = cityPages.cityCategoryPage(req.params.city, req.params.category, await seoPages.loadSearchData(store));
+  if (!page) return res.status(404).json({ error: "Not found" });
+  res.set("Cache-Control", "public, max-age=300").json(page);
+}));
 
 app.get("/api/categories", ah(async (req, res) => {
   const categories = await store.listCategories();

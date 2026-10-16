@@ -12,6 +12,7 @@
 // back to the plain index.html, so the site never depends on this.
 //
 // pageFor and injectHead are plain functions of their inputs (tested in test/seoPages.test.js).
+const cityPages = require("./cityPages");
 
 const SITE = "https://tikdum.com";
 const SITE_NAME = "Tikdum";
@@ -279,7 +280,82 @@ function pageFor(rawPath, data = {}) {
   }
 
   if (PRIVATE.some((re) => re.test(path))) return page({ title: DEFAULT_TITLE, canonical: null, noindex: true });
+
+  // City pages: /jammu and /jammu/ac-repair (cityPages.js), only where providers really serve.
+  m = /^\/([^/]+)(?:\/([^/]+))?$/.exec(path);
+  if (m && data.tree) {
+    const c = m[2] ? cityPages.cityCategoryPage(m[1], m[2], data) : cityPages.cityPage(m[1], data);
+    if (c) return page(m[2] ? cityCategoryHead(c, categories) : cityHead(c));
+  }
   return notFound(path);
+}
+
+const cityPlace = (c) => ({ "@type": "City", name: c.city.name, containedInPlace: AREA });
+const faqLd = (faqs) => ({
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqs.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
+});
+
+function cityHead(c) {
+  const top = c.categories.slice(0, 4).map((x) => x.name);
+  const path = `/${c.city.slug}`;
+  return {
+    title: titleOf(`Home Services in ${c.city.name}`),
+    // No "from ₹…" here: the lowest price across every kind of service says nothing useful.
+    description: `Book trusted home services in ${c.city.name} on Tikdum — ${top.join(", ")}${c.categories.length > top.length ? " and more" : ""}. ${plural(c.providers, "verified provider")} serving ${plural(c.areas.length, "area")}, with prices shown before you book.`,
+    canonical: path,
+    image: abs(categoryImage(c.categories.find((x) => categoryImage(x)))),
+    jsonLd: [
+      breadcrumbs([["Home", "/home"], [c.city.name, path]]),
+      {
+        "@context": "https://schema.org", "@type": "ItemList", name: `Home services in ${c.city.name}`,
+        itemListElement: c.categories.map((x, i) => ({ "@type": "ListItem", position: i + 1, name: `${x.name} in ${c.city.name}`, url: `${SITE}${path}/${encodeURIComponent(x.id)}` })),
+      },
+      {
+        "@context": "https://schema.org", "@type": "Service", name: `Home services in ${c.city.name}`, provider: { "@id": ORG_ID }, areaServed: cityPlace(c),
+        ...(c.rating ? { aggregateRating: { "@type": "AggregateRating", ratingValue: c.rating.rating, reviewCount: c.rating.reviews, bestRating: 5, worstRating: 1 } } : {}),
+      },
+      faqLd(c.faqs),
+    ],
+  };
+}
+
+function cityCategoryHead(c, categories) {
+  const path = `/${c.city.slug}/${c.category.id}`;
+  const name = `${c.category.name} in ${c.city.name}`;
+  const areaNames = c.areas.map((a) => a.name);
+  return {
+    title: titleOf(`${name}${c.from ? ` — from ${inr(c.from)}` : ""}`),
+    description: `Book ${asServices(c.category.name)} in ${c.city.name} on Tikdum: ${plural(c.providers.length, "verified local provider")}, ${plural(c.serviceCount, "service")}${c.from ? ` from ${inr(c.from)}` : ""}${c.rating ? `, rated ${c.rating.rating}★` : ""}. Serving ${areaNames.slice(0, 3).join(", ")}${areaNames.length > 3 ? " and more" : ""}.`,
+    canonical: path,
+    image: abs(categoryImage(categories.find((x) => x.id === c.category.id)) || c.services.find((s) => s.imageUrl)?.imageUrl),
+    jsonLd: [
+      breadcrumbs([["Home", "/home"], [c.city.name, `/${c.city.slug}`], [c.category.name, path]]),
+      {
+        "@context": "https://schema.org",
+        "@type": "Service",
+        name,
+        serviceType: c.category.name,
+        url: `${SITE}${path}`,
+        provider: { "@id": ORG_ID },
+        areaServed: cityPlace(c),
+        ...(c.from ? { offers: { "@type": "AggregateOffer", priceCurrency: "INR", lowPrice: c.from, highPrice: c.to, offerCount: c.serviceCount } } : {}),
+        ...(c.rating ? { aggregateRating: { "@type": "AggregateRating", ratingValue: c.rating.rating, reviewCount: c.rating.reviews, bestRating: 5, worstRating: 1 } } : {}),
+      },
+      {
+        "@context": "https://schema.org", "@type": "ItemList", name: `${c.category.name} providers in ${c.city.name}`,
+        itemListElement: c.providers.map((p, i) => ({ "@type": "ListItem", position: i + 1, name: p.name, url: `${SITE}/provider/${encodeURIComponent(p.id)}` })),
+      },
+      faqLd(c.faqs),
+    ],
+  };
+}
+
+// Everything the pages and the sitemap read, from the same caches the apps use.
+async function loadSearchData(store) {
+  const [categories, services, providers] = await Promise.all([store.listCategories(), store.listServices({}), store.listProviders()]);
+  return { ...searchCatalog({ categories, services, providers }), tree: require("./locations").tree() };
 }
 
 // ---------------------------------------------------------------- HTML
@@ -355,7 +431,7 @@ function route(store) {
     let p;
     try {
       const data = await Promise.race([
-        Promise.all([store.listCategories(), store.listServices({}), store.listProviders()]).then(([categories, services, providers]) => searchCatalog({ categories, services, providers })),
+        loadSearchData(store),
         new Promise((_, reject) => setTimeout(() => reject(new Error("slow")), 2500)),
       ]);
       p = pageFor(original, data);
@@ -368,4 +444,4 @@ function route(store) {
   };
 }
 
-module.exports = { pageFor, injectHead, headFor, route, getShell, searchCatalog, DEFAULT_TITLE };
+module.exports = { pageFor, injectHead, headFor, route, getShell, searchCatalog, loadSearchData, DEFAULT_TITLE };

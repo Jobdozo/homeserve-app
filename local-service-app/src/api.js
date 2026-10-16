@@ -56,6 +56,8 @@ export const api = {
   catalog: (params) =>
     request(`/catalog?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")).toString()}`),
   getProvider: (id) => request(`/providers/${encodeURIComponent(id)}`),
+  // City pages (tikdum.com/jammu, /jammu/ac-repair): who serves the city and what they offer.
+  cityPage: (city, category) => request(`/city-pages/${encodeURIComponent(city)}${category ? `/${encodeURIComponent(category)}` : ""}`),
   listBookings: () => request("/bookings"),
   createBooking: (data) => request("/bookings", { method: "POST", body: JSON.stringify(data) }),
   createOrder: (data) => request("/orders", { method: "POST", body: JSON.stringify(data) }),

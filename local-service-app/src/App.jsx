@@ -32,6 +32,7 @@ const ReferFriendScreen = lazy(() => import("./screens/ReferFriendScreen"));
 const BookingProtectionScreen = lazy(() => import("./screens/BookingProtectionScreen"));
 const SavedAddressScreen = lazy(() => import("./screens/SavedAddressScreen"));
 const HelpSupportScreen = lazy(() => import("./screens/HelpSupportScreen"));
+const CityPageScreen = lazy(() => import("./screens/CityPageScreen"));
 
 function ScreenFallback() {
   return (
@@ -120,6 +121,10 @@ function AppRoutes() {
           <Route path="/provider/:providerId" element={<ProviderProfileScreen />} />
           <Route path="/services" element={<AllServicesScreen />} />
           <Route path="/booking-protection" element={<BookingProtectionScreen />} />
+          {/* City pages (tikdum.com/jammu, /jammu/ac-repair). Every fixed address above wins over
+              these; anything that isn't a city page goes home (CityPageScreen). */}
+          <Route path="/:city" element={<CityPageScreen />} />
+          <Route path="/:city/:categoryId" element={<CityPageScreen />} />
           <Route
             path="/cart"
             element={
