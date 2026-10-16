@@ -49,6 +49,17 @@ function ConnectionBanner() {
 
 // Desktop pages that are full-width marketing-style pages instead of the
 // narrow centered column.
+// The first part of every app screen's address; anything else of one or two parts is a city
+// page (tikdum.com/jammu, /jammu/ac-repair — CityPageScreen), which is wide too.
+const APP_SCREENS = new Set([
+  "home", "categories", "category", "find-service", "service", "cart", "bookings", "profile", "search", "provider", "services",
+  "booking-protection", "booking", "chat", "review", "rate", "notifications", "refer", "address", "messages", "login",
+]);
+function isCityPath(pathname) {
+  const parts = pathname.split("/").filter(Boolean);
+  return parts.length >= 1 && parts.length <= 2 && !APP_SCREENS.has(parts[0]);
+}
+
 function isWidePath(pathname) {
   return (
     pathname === "/home" ||
@@ -58,7 +69,8 @@ function isWidePath(pathname) {
     pathname.startsWith("/service/") ||
     pathname === "/cart" ||
     pathname === "/bookings" ||
-    pathname === "/profile"
+    pathname === "/profile" ||
+    isCityPath(pathname)
   );
 }
 

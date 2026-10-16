@@ -32,7 +32,7 @@ export default function CityPageScreen() {
 
   if (missing) return <Navigate to="/home" replace />;
   return (
-    <div className="flex min-h-full flex-shrink-0 flex-col bg-mist lg:mx-auto lg:w-full lg:max-w-3xl">
+    <div className="flex min-h-full flex-shrink-0 flex-col bg-mist lg:mx-auto lg:w-full lg:max-w-6xl lg:px-4 lg:pb-10">
       {!page ? <Loading /> : page.kind === "city" ? <CityHub page={page} /> : <CityCategory page={page} />}
     </div>
   );
@@ -52,7 +52,7 @@ function Header({ title, subtitle, searchLabel }) {
         </button>
       </div>
       <div className="pt-3.5">
-        <h1 className="font-display text-[28px] font-extrabold leading-[1.05] text-ink lg:text-[34px]">{title}</h1>
+        <h1 className="font-display text-[28px] font-extrabold leading-[1.05] text-ink lg:text-[40px]">{title}</h1>
         <p className="mt-1.5 text-[13px] text-ink-muted">{subtitle}</p>
       </div>
     </div>
@@ -83,7 +83,7 @@ function CityCategory({ page }) {
 
       <section className="px-4 pt-5">
         <SectionTitle>Services &amp; prices</SectionTitle>
-        <div className="mt-3 flex flex-col gap-3">
+        <div className="mt-3 flex flex-col gap-3 lg:grid lg:grid-cols-2">
           {page.services.slice(0, SHOWN).map((s) => {
             const pct = discountPct(s.price, s.originalPrice);
             return (
@@ -111,7 +111,7 @@ function CityCategory({ page }) {
             );
           })}
           {page.services.length > SHOWN && (
-            <Link to={`/category/${category.id}`} className="flex items-center justify-center gap-1 rounded-[18px] border border-line bg-white py-3 text-[14px] font-bold text-brand active:scale-[0.99]">
+            <Link to={`/category/${category.id}`} className="flex items-center justify-center gap-1 rounded-[18px] border border-line bg-white py-3 text-[14px] font-bold text-brand active:scale-[0.99] lg:col-span-2">
               See all {page.services.length} {category.name} services
               <ChevronRightIcon width={16} height={16} />
             </Link>
@@ -121,7 +121,7 @@ function CityCategory({ page }) {
 
       <section className="px-4 pt-7">
         <SectionTitle>{category.name} providers in {city.name}</SectionTitle>
-        <div className="mt-3 flex flex-col gap-2.5">
+        <div className="mt-3 flex flex-col gap-2.5 lg:grid lg:grid-cols-2 lg:gap-3">
           {page.providers.map((p) => (
             <Link key={p.id} to={`/provider/${p.id}`} className="flex items-center gap-3 rounded-[20px] bg-white p-3 shadow-card active:scale-[0.99]">
               <ProviderMark provider={p} />
@@ -177,10 +177,10 @@ function CityHub({ page }) {
       />
       <section className="px-4 pt-5">
         <SectionTitle>What you can book</SectionTitle>
-        <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
           {page.categories.map((c) => (
             <Link key={c.id} to={`/${city.slug}/${c.id}`} className="overflow-hidden rounded-[20px] bg-white shadow-card active:scale-[0.99]">
-              <span className="block h-[96px]">
+              <span className="block h-[96px] lg:h-[150px]">
                 <CategoryPhoto categoryId={c.id} imageUrl={c.imageUrl} size={200} />
               </span>
               <span className="flex flex-col gap-0.5 p-3">
@@ -209,7 +209,7 @@ function Reviews({ reviews, title }) {
   return (
     <section className="px-4 pt-7">
       <SectionTitle>{title}</SectionTitle>
-      <div className="no-scrollbar -mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-1 lg:mx-0 lg:grid lg:grid-cols-2 lg:overflow-visible lg:px-0">
+      <div className="no-scrollbar -mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-1 lg:mx-0 lg:grid lg:grid-cols-3 lg:overflow-visible lg:px-0">
         {reviews.map((r, i) => (
           <figure key={i} className="flex w-[260px] flex-shrink-0 flex-col gap-2 rounded-[20px] bg-white p-4 shadow-card lg:w-auto">
             <div className="flex gap-0.5" aria-label={`Rated ${r.rating} out of 5`}>
