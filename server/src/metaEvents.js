@@ -21,7 +21,8 @@ const SOURCES = "metaBookingSources"; // { id: bookingId, web, fbp, fbc, ip, ua,
 const cfg = () => ({ pixelId: process.env.META_PIXEL_ID || "", token: process.env.META_CAPI_TOKEN || "", testCode: process.env.META_TEST_EVENT_CODE || "" });
 const enabled = () => Boolean(cfg().pixelId && cfg().token);
 const sha = (s) => crypto.createHash("sha256").update(String(s).trim().toLowerCase()).digest("hex");
-const stats = { sent: 0, failed: 0, lastError: null, lastAt: null };
+// sent/failed: real events. skippedTest: bookings left out because their provider is tagged "test".
+const stats = { sent: 0, failed: 0, skippedTest: 0, selfTests: 0, lastError: null, lastAt: null, lastSkippedAt: null };
 
 // Indian numbers as Meta wants them: digits with the country code, no +.
 function normPhone(p) {
@@ -74,23 +75,53 @@ function buildEvent({ name, eventId, time = Date.now(), phone, customerId, pinco
   return event;
 }
 
-async function send(events) {
+// opts.testCode forces Meta's test mode for this call (the self-test): Events Manager → Test events only.
+async function send(events, opts = {}) {
   if (!enabled() || !events.length) return null;
-  const { pixelId, token, testCode } = cfg();
+  const { pixelId, token } = cfg();
+  const testCode = opts.testCode || cfg().testCode;
   const body = new URLSearchParams({ data: JSON.stringify(events), access_token: token, ...(testCode ? { test_event_code: testCode } : {}) });
   try {
     const r = await fetch(`${GRAPH}/${pixelId}/events`, { method: "POST", body, signal: AbortSignal.timeout(15000) });
     const data = await r.json().catch(() => ({}));
-    if (!r.ok || data.error) throw new Error(data.error?.message || `HTTP ${r.status}`);
-    stats.sent += events.length;
+    if (!r.ok || data.error) throw new Error([data.error?.message, data.error?.error_user_msg].filter(Boolean).join(" — ") || `HTTP ${r.status}`);
+    if (opts.testCode) stats.selfTests += events.length;
+    else stats.sent += events.length;
     stats.lastAt = new Date().toISOString();
     return data;
   } catch (e) {
+    if (opts.throwErrors) throw e;
     stats.failed += events.length;
     stats.lastError = `${new Date().toISOString()} ${e.message}`.slice(0, 300);
     console.error("[meta-capi] send failed:", e.message);
     return null;
   }
+}
+
+function noteSkipped(n) {
+  if (!n) return;
+  stats.skippedTest += n;
+  stats.lastSkippedAt = new Date().toISOString();
+}
+
+// The self-test: the exact events a real booking produces (same builder, event ids, INR values,
+// website source), with made-up customer data, sent in Meta's test mode only — they show in
+// Events Manager → Test events and never count for ads. No booking, provider or customer involved.
+async function selfTest({ kind, testCode, eventId, fbp, ip, ua }) {
+  if (!enabled()) throw Object.assign(new Error("Meta measurement isn't set up (deploy/set-meta-pixel.sh)"), { status: 400 });
+  if (!/^TEST[A-Za-z0-9]{1,20}$/.test(String(testCode || ""))) throw Object.assign(new Error("A test event code (TEST…) is required, so nothing counts for ads"), { status: 400 });
+  if (!["schedule", "purchase", "registration"].includes(kind)) throw Object.assign(new Error("kind must be schedule, purchase or registration"), { status: 400 });
+  const ref = /^[A-Za-z0-9_-]{4,40}$/.test(String(eventId || "")) ? eventId : `selftest-${Date.now().toString(36)}`;
+  const src = { web: true, url: "https://tikdum.com/cart", ip: ip || null, ua: ua || "Tikdum self-test", fbp: cookie(fbp) };
+  const base = { phone: "+910000000000", customerId: "selftest-customer", pincode: "180001", src };
+  const event =
+    kind === "schedule"
+      ? buildEvent({ ...base, name: "Schedule", eventId: `order:${ref}:schedule`, value: 499, contentName: "Tracking self-test", orderId: ref })
+      : kind === "purchase"
+        ? buildEvent({ ...base, name: "Purchase", eventId: `booking:${ref}:purchase`, value: 499, contentName: "Tracking self-test", orderId: ref })
+        : buildEvent({ ...base, name: "CompleteRegistration", eventId: `reg:${ref}` });
+  const response = await send([event], { testCode, throwErrors: true });
+  return { event, response };
 }
 
 function rememberSource(bookingIds, src) {
@@ -154,4 +185,4 @@ function purchase(booking) {
 const status = () => ({ enabled: enabled(), pixelId: cfg().pixelId || null, testMode: Boolean(cfg().testCode), ...stats });
 const pixelId = () => cfg().pixelId || null;
 
-module.exports = { buildEvent, sourceOf, normPhone, registration, schedule, purchase, status, pixelId, send };
+module.exports = { buildEvent, sourceOf, normPhone, registration, schedule, purchase, status, pixelId, send, noteSkipped, selfTest };

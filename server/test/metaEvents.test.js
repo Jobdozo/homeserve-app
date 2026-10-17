@@ -87,3 +87,30 @@ test("configured: a cart order is one Schedule event; completion sends Purchase 
   assert.equal(bodies[1].data[0].user_data.fbp, "fb.1.1.1");
   assert.equal(meta.status().sent, 2);
 });
+
+test("selfTest: needs a TEST code; sends the real event format in test mode and doesn't count it as sent", async () => {
+  process.env.META_PIXEL_ID = "1234567890";
+  process.env.META_CAPI_TOKEN = "token";
+  delete process.env.META_TEST_EVENT_CODE;
+  await assert.rejects(meta.selfTest({ kind: "schedule", testCode: "" }), /test event code/);
+  let body;
+  const real = global.fetch;
+  global.fetch = async (url, opts) => ((body = new URLSearchParams(opts.body)), { ok: true, json: async () => ({ events_received: 1 }) });
+  const before = meta.status().sent;
+  const out = await meta.selfTest({ kind: "schedule", testCode: "TEST2360", eventId: "abc123", fbp: "fb.1.1700000000.9", ua: "UA" });
+  global.fetch = real;
+  assert.equal(body.get("test_event_code"), "TEST2360");
+  assert.equal(out.event.event_id, "order:abc123:schedule");
+  assert.deepEqual(out.event.custom_data, { currency: "INR", value: 499, content_name: "Tracking self-test", order_id: "abc123" });
+  assert.equal(out.event.action_source, "website");
+  assert.equal(out.event.user_data.fbp, "fb.1.1700000000.9");
+  assert.equal(meta.status().sent, before);
+  assert.ok(meta.status().selfTests >= 1);
+});
+
+test("noteSkipped counts test-provider bookings left out", () => {
+  const before = meta.status().skippedTest;
+  meta.noteSkipped(2);
+  meta.noteSkipped(0);
+  assert.equal(meta.status().skippedTest, before + 2);
+});

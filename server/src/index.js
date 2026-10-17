@@ -94,7 +94,12 @@ rt.attach(io, { forProvider: (b) => maskCompleted(b), forCustomer: (b) => hideCo
 // Meta Conversions API (metaEvents.js): bookings placed and completed, so Meta ads can count and
 // optimise for real bookings. Jobs of providers tagged "test" (staff testing) are left out.
 const metaEvents = require("./metaEvents");
-const realBookings = (list) => list.filter((b) => b && !testProviderIds().has(b.providerId));
+const realBookings = (list) => {
+  const tests = testProviderIds();
+  const real = list.filter((b) => b && !tests.has(b.providerId));
+  metaEvents.noteSkipped(list.filter(Boolean).length - real.length);
+  return real;
+};
 store.onBookingCompleted((b) => {
   if (realBookings([b]).length) metaEvents.purchase(b);
 });
@@ -1973,7 +1978,24 @@ app.post("/api/orders", auth.requireAuth("customer"), ah(async (req, res) => {
 
 // The website's Meta Pixel id (public anyway: it's in every page's source once loaded). null = off.
 app.get("/api/meta/pixel", (req, res) => res.json({ pixelId: metaEvents.pixelId() }));
-app.get("/api/admin/meta/status", auth.requireAuth("admin"), (req, res) => res.json(metaEvents.status()));
+app.get("/api/admin/meta/status", auth.requireAuth("admin"), (req, res) =>
+  res.json({ ...metaEvents.status(), testProviders: testProviderIds().size }));
+// Would a booking with this provider be sent to Meta? The same filter real bookings go through.
+app.get("/api/admin/meta/exclusion-check", auth.requireAuth("admin"), ah(async (req, res) => {
+  const provider = await store.getProvider(String(req.query.providerId || ""));
+  if (!provider) return res.status(404).json({ error: "Provider not found" });
+  const excluded = testProviderIds().has(provider.id);
+  res.json({ provider: provider.name, taggedTest: excluded, sentToMeta: !excluded });
+}));
+// Controlled self-test (metaEvents.selfTest): real event format, made-up data, Meta test mode only.
+app.post("/api/admin/meta/self-test", auth.requireAuth("admin"), ah(async (req, res) => {
+  try {
+    const b = req.body || {};
+    res.json(await metaEvents.selfTest({ kind: b.kind, testCode: b.testCode, eventId: b.eventId, fbp: b.fbp, ip: otpGuard.clientIp(req), ua: req.headers["user-agent"] }));
+  } catch (e) {
+    res.status(e.status || 502).json({ error: e.message });
+  }
+}));
 
 // A provider answers every pending service of one order in a single step.
 app.post("/api/orders/:orderId/respond", auth.requireAuth("provider"), ah(async (req, res) => {
