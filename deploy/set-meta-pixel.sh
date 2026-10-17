@@ -34,16 +34,32 @@ TEST_CODE="$(printf %s "$TEST_CODE" | tr -d '[:space:]')"
 case "$TEST_CODE" in '' | TEST[A-Za-z0-9]*) ;; *) echo "A test code starts with TEST. Nothing was changed."; exit 1 ;; esac
 
 echo "== checking with Meta"
+msg_of() { grep -o '"message":"[^"]*"' "$1" | head -1 | cut -d'"' -f4 || true; }
+# Reading the dataset needs more than sending to it (a system-user token may only be allowed to
+# send), so a refused read isn't the end: with a test code we check by sending one test event.
 code=$(curl -s -G --max-time 20 -o "$work/check.json" -w '%{http_code}' "$GRAPH/$PIXEL_ID" \
-  --data-urlencode "fields=id,name" --data-urlencode "access_token@$work/token" || echo 000)
-if [ "$code" != 200 ]; then
-  msg="$(grep -o '"message":"[^"]*"' "$work/check.json" | head -1 | cut -d'"' -f4 || true)"
-  echo "Meta didn't accept it (${code}): ${msg:-no details}"
-  echo "Check the dataset ID, and that the token was generated for this dataset. Nothing was changed."
+  --data-urlencode "fields=id" --data-urlencode "access_token@$work/token" || echo 000)
+if [ "$code" = 200 ]; then
+  echo "   Dataset $PIXEL_ID found"
+elif [ -n "$TEST_CODE" ]; then
+  echo "   (Meta won't show the dataset to this token: $(msg_of "$work/check.json") — checking by sending one test event instead)"
+  now=$(date +%s)
+  printf '[{"event_name":"PageView","event_time":%d,"event_id":"setup-check-%d","action_source":"website","event_source_url":"https://tikdum.com/","user_data":{"client_user_agent":"Tikdum setup check","country":["%s"]}}]' \
+    "$now" "$now" "$(printf in | sha256sum | cut -d' ' -f1)" > "$work/event.json"
+  code=$(curl -s --max-time 20 -o "$work/send.json" -w '%{http_code}' "$GRAPH/$PIXEL_ID/events" \
+    --data-urlencode "data@$work/event.json" --data-urlencode "test_event_code=$TEST_CODE" --data-urlencode "access_token@$work/token" || echo 000)
+  if [ "$code" != 200 ] || ! grep -q '"events_received":1' "$work/send.json"; then
+    echo "Meta didn't accept a test event (${code}): $(msg_of "$work/send.json")"
+    echo "Check the dataset ID and that the system user has the Tikdum Website dataset (Business Settings → System users). Nothing was changed."
+    exit 1
+  fi
+  echo "   ✓ a test PageView reached the dataset — it shows in Events Manager → Test events"
+else
+  echo "Meta didn't accept it (${code}): $(msg_of "$work/check.json")"
+  echo "Run this again with the test event code (Events Manager → Test events) — that checks the token by"
+  echo "sending one test event, which works even when the token can't read the dataset. Nothing was changed."
   exit 1
 fi
-name="$(grep -o '"name":"[^"]*"' "$work/check.json" | head -1 | cut -d'"' -f4 || true)"
-echo "   Dataset: ${name:-?} ($PIXEL_ID)"
 
 tmp="$(mktemp)"
 grep -vE '^META_(PIXEL_ID|CAPI_TOKEN|TEST_EVENT_CODE)=' "$ENV_FILE" > "$tmp" || true
