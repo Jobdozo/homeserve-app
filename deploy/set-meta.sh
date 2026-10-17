@@ -27,13 +27,17 @@ printf "Meta App ID (developers.facebook.com → your app → App settings → B
 IFS= read -r APP_ID
 APP_ID="$(printf %s "$APP_ID" | tr -d '[:space:]')"
 case "$APP_ID" in '' | *[!0-9]*) echo "The App ID is a number. Nothing was changed."; exit 1 ;; esac
+echo "(Paste with right-click → Paste or Ctrl+Shift+V — plain Ctrl+V doesn't work in most terminals.)"
 printf "App secret (same page, click Show; it won't show here): "
 IFS= read -rs SECRET; echo
+SECRET="$(printf %s "$SECRET" | tr -d '[:space:]')"
+if [ -z "$SECRET" ]; then echo "   Nothing was pasted for the App secret. Nothing was changed — run this again."; exit 1; fi
+echo "   ✓ received (${#SECRET} characters — an App secret has 32)"
 printf "User token from Graph API Explorer (it won't show): "
 IFS= read -rs USER_TOKEN; echo
-SECRET="$(printf %s "$SECRET" | tr -d '[:space:]')"
 USER_TOKEN="$(printf %s "$USER_TOKEN" | tr -d '[:space:]')"
-[ -n "$SECRET" ] && [ -n "$USER_TOKEN" ] || { echo "Both the secret and the token are needed. Nothing was changed."; exit 1; }
+if [ -z "$USER_TOKEN" ]; then echo "   Nothing was pasted for the token. Nothing was changed — run this again."; exit 1; fi
+echo "   ✓ received (${#USER_TOKEN} characters — a token is usually 150–300)"
 # Secrets go to curl through files, so they never appear in the process list.
 printf %s "$SECRET" > "$work/secret"
 printf %s "$USER_TOKEN" > "$work/user"
