@@ -7,6 +7,7 @@ import PhoneInput from "../components/PhoneInput";
 import { detectDefaultCountry, COUNTRY_CODES } from "../data/countryCodes";
 import Seo from "../components/Seo";
 import OtpSenderHint from "../components/OtpSenderHint";
+import { trackMeta } from "../utils/metaPixel";
 
 export default function LoginScreen() {
   const { login } = useApp();
@@ -46,7 +47,9 @@ export default function LoginScreen() {
     setError("");
     setBusy(true);
     try {
-      const { token, user } = await api.verifyOtp(fullPhone, code.trim(), "customer", name.trim());
+      const { token, user, isNew } = await api.verifyOtp(fullPhone, code.trim(), "customer", name.trim());
+      // A new account: same event id as the server's Conversions API event (counted once).
+      if (isNew) trackMeta("CompleteRegistration", {}, `reg:${user.id}`);
       login(token, user);
       navigate(location.state?.from || "/home", { replace: true });
     } catch (err) {

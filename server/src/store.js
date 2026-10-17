@@ -2402,6 +2402,13 @@ async function updateBookingStatus(id, status, opts = {}) {
     });
   }
   if (status === "Completed") {
+    for (const listener of completedListeners) {
+      try {
+        listener(existing);
+      } catch (e) {
+        console.error("booking-completed listener failed:", e.message);
+      }
+    }
     // Never let a wallet-side failure block marking the job Completed — the
     // booking status update above has already succeeded at this point. The fee
     // is normally charged on acceptance; this only catches jobs that weren't
@@ -3209,6 +3216,12 @@ async function listActivities(limit = 20, type) {
 const notificationListeners = [];
 function onNotification(listener) {
   notificationListeners.push(listener);
+}
+
+// Told about every booking the moment it's marked Completed (e.g. the Meta Conversions API, metaEvents.js).
+const completedListeners = [];
+function onBookingCompleted(listener) {
+  completedListeners.push(listener);
 }
 
 // skipPush is for the two "new booking request" notifications (createBooking,
@@ -5382,6 +5395,7 @@ module.exports = {
   getProviderReviews,
   addNotification,
   onNotification,
+  onBookingCompleted,
   listNotifications,
   markNotificationRead,
   markAllNotificationsRead,

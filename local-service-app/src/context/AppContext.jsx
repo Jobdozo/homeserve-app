@@ -5,6 +5,7 @@ import { timeSlots } from "../data/mockData";
 import { detectCurrentLocation, APPROXIMATE_OVER_METERS } from "../utils/geolocation";
 import { ensurePushSubscribed, onNativeNotificationTap } from "../utils/pushNotifications";
 import { readSnap, writeSnap, clearSnaps, newest } from "../utils/snapshot";
+import { trackMeta } from "../utils/metaPixel";
 
 const AppContext = createContext(null);
 const CART_KEY = "homeserve-cart-v1";
@@ -677,6 +678,7 @@ export function AppProvider({ children }) {
   const createBooking = useCallback(async ({ serviceId, date, time, address, issue }) => {
     const booking = await api.createBooking({ serviceId, date, time, address, issue });
     setBookings((prev) => upsertById(prev, booking));
+    trackMeta("Schedule", { value: Number(booking.amount) || 0, currency: "INR", content_name: booking.service?.name }, `order:${booking.orderId || booking.id}:schedule`);
     return booking;
   }, []);
 
@@ -807,6 +809,14 @@ export function AppProvider({ children }) {
         contact,
       });
       setBookings((prev) => created.reduce((acc, b) => upsertById(acc, b), prev));
+      if (created.length) {
+        // Same event id as the server's Conversions API event, so Meta counts the order once.
+        trackMeta(
+          "Schedule",
+          { value: created.reduce((s, b) => s + (Number(b.amount) || 0), 0), currency: "INR", content_name: created.map((b) => b.service?.name).filter(Boolean).join(", "), num_items: created.length },
+          `order:${created[0].orderId || created[0].id}:schedule`
+        );
+      }
       setCart((prev) => prev.filter((c) => !ordered.some((o) => o.serviceId === c.serviceId)));
       setAppliedOffer(null);
       if (referralCode || useCredits) refreshReferral();

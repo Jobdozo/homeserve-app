@@ -316,6 +316,7 @@ const RULES = [
   [/^\/admin\/verification\/precheck$/, () => "providers.view"],
   [/^\/admin\/watch\/provider-quality$/, () => "providers.view"],
   [/^\/admin\/watch\/(retention|fraud|reviews)$/, () => "customers.view"],
+  [/^\/admin\/meta\/status$/, () => "reports.view"],
   [/^\/admin\/social\/posts$/, (m) => (m === "GET" ? "social.view" : "social.add")],
   [/^\/admin\/social(\/|$)/, () => "social.view"],
   [/^\/admin\/crm\/settings$/, (m) => (m === "GET" ? "crm.view" : "crm.manage")],

@@ -91,6 +91,14 @@ const io = new Server(server, { cors: { origin: ALLOWED_ORIGINS } });
 // Each side sees the booking with its own privacy masking applied.
 rt.attach(io, { forProvider: (b) => maskCompleted(b), forCustomer: (b) => hideCompletedChat(b) });
 
+// Meta Conversions API (metaEvents.js): bookings placed and completed, so Meta ads can count and
+// optimise for real bookings. Jobs of providers tagged "test" (staff testing) are left out.
+const metaEvents = require("./metaEvents");
+const realBookings = (list) => list.filter((b) => b && !testProviderIds().has(b.providerId));
+store.onBookingCompleted((b) => {
+  if (realBookings([b]).length) metaEvents.purchase(b);
+});
+
 store.onNotification((notification) => {
   rt.notification(notification);
 });
@@ -432,9 +440,12 @@ app.post("/api/auth/otp/verify", ah(async (req, res) => {
   }
 
   if (role === "customer") {
-    const customer = (await store.getCustomerByPhone(phone)) || (await store.createCustomer({ phone, name }));
+    const existing = await store.getCustomerByPhone(phone);
+    const customer = existing || (await store.createCustomer({ phone, name }));
     const token = auth.signToken({ id: customer.id, role: "customer", phone });
-    return res.json({ token, user: customer });
+    // A brand-new account: Meta counts it as a registration (the website pixel uses the same event id).
+    if (!existing) metaEvents.registration(customer, metaEvents.sourceOf(req, otpGuard.clientIp(req)));
+    return res.json({ token, user: customer, ...(existing ? {} : { isNew: true }) });
   }
 
   // A number that isn't a provider account but is an active staff member of
@@ -1944,6 +1955,7 @@ app.post("/api/bookings", auth.requireAuth("customer"), ah(async (req, res) => {
   rt.booking("booking:created", booking);
   rt.activity((await store.listActivities(1))[0]);
   dispatchBooking(booking).catch((e) => console.error("dispatchBooking failed", e));
+  metaEvents.schedule(realBookings([booking]), metaEvents.sourceOf(req, otpGuard.clientIp(req)));
   res.status(201).json(booking);
 }));
 
@@ -1955,8 +1967,13 @@ app.post("/api/orders", auth.requireAuth("customer"), ah(async (req, res) => {
     dispatchBooking(group[0], [group[0].providerId], group).catch((e) => console.error("dispatchBooking failed", e));
   }
   rt.activity((await store.listActivities(1))[0]);
+  metaEvents.schedule(realBookings(bookings), metaEvents.sourceOf(req, otpGuard.clientIp(req)));
   res.status(201).json(bookings);
 }));
+
+// The website's Meta Pixel id (public anyway: it's in every page's source once loaded). null = off.
+app.get("/api/meta/pixel", (req, res) => res.json({ pixelId: metaEvents.pixelId() }));
+app.get("/api/admin/meta/status", auth.requireAuth("admin"), (req, res) => res.json(metaEvents.status()));
 
 // A provider answers every pending service of one order in a single step.
 app.post("/api/orders/:orderId/respond", auth.requireAuth("provider"), ah(async (req, res) => {

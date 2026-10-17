@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { api } from "../api";
@@ -10,6 +10,7 @@ import AddOns from "../components/AddOns";
 import { QtyStepper, SectionLabel, inr } from "../components/ui";
 import { useOptionsSheet } from "../components/optionsSheetContext";
 import { unitPrice, offerSaving, offerBase } from "../utils/cartMath";
+import { trackMeta } from "../utils/metaPixel";
 
 // The map (Leaflet) is only needed when a customer opens it, so it loads on demand.
 const LocationPicker = lazy(() => import("../components/LocationPicker"));
@@ -101,6 +102,13 @@ export default function CartScreen() {
     [cart, services, getService]
   );
   const schedule = { date: lines[0]?.item.date || "", time: lines[0]?.item.time || timeSlots[1] };
+  // Meta Pixel: the cart was opened with something in it (website only), once per visit.
+  const checkoutTracked = useRef(false);
+  useEffect(() => {
+    if (checkoutTracked.current || !lines.length) return;
+    checkoutTracked.current = true;
+    trackMeta("InitiateCheckout", { num_items: lines.length, value: lines.reduce((s, l) => s + (Number(l.service.price) || 0) * (l.item.quantity || 1), 0), currency: "INR" });
+  }, [lines]);
   useEffect(() => {
     if (lines.length > 1 && lines.some((l) => l.item.date !== lines[0].item.date || l.item.time !== lines[0].item.time)) {
       setCartSchedule({ date: lines[0].item.date, time: lines[0].item.time });

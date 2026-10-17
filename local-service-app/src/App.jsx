@@ -7,6 +7,7 @@ import { MainLayout, DetailLayout } from "./components/PhoneFrame";
 import LoginScreen from "./screens/LoginScreen";
 import LogoMark from "./components/LogoMark";
 import { useAndroidBackButton } from "./utils/useAndroidBackButton";
+import { trackMeta } from "./utils/metaPixel";
 
 // Route-level code splitting: only Login (needed before anything else can
 // render) ships in the initial bundle. Every other screen loads on demand
@@ -60,6 +61,8 @@ function AppRoutes() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   useAndroidBackButton({ rootPath: "/home", atRoot: authLoading || !customer || pathname === "/home" });
+  // Meta Pixel page views (website only; does nothing in the Android app).
+  useEffect(() => trackMeta("PageView"), [pathname]);
 
   useEffect(() => {
     if (!pendingNotificationBookingId) return;

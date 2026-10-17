@@ -29,6 +29,10 @@ services:
       META_PAGE_TOKEN: ${META_PAGE_TOKEN:-}
       META_IG_USER_ID: ${META_IG_USER_ID:-}
       SOCIAL_IMAGE_BASE: ${SOCIAL_IMAGE_BASE:-https://api.tikdum.com}
+      # Meta Pixel + Conversions API: bookings for Meta ads (server/src/metaEvents.js; set with deploy/set-meta-pixel.sh).
+      META_PIXEL_ID: ${META_PIXEL_ID:-}
+      META_CAPI_TOKEN: ${META_CAPI_TOKEN:-}
+      META_TEST_EVENT_CODE: ${META_TEST_EVENT_CODE:-}
       MSG91_OTP_HAS_BUTTON: ${MSG91_OTP_HAS_BUTTON:-}
       # Approved WhatsApp template for Admin messages outside the 24-hour window (tikdum_message: "Hello {{1}}, …{{2}}…").
       # VARS = its body variables in order: message, or name,message.

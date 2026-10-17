@@ -12,6 +12,7 @@ import Seo, { SITE_URL, serviceDescription } from "../components/Seo";
 import DesktopServiceDetails from "../components/DesktopServiceDetails";
 import AddOns from "../components/AddOns";
 import { useAddService } from "../components/optionsSheetContext";
+import { trackMeta } from "../utils/metaPixel";
 
 export default function ServiceDetailsScreen() {
   const { serviceId } = useParams();
@@ -32,6 +33,11 @@ export default function ServiceDetailsScreen() {
     clickedFor.current = service.id;
     api.registerAdClick(service.id).catch(() => {});
   }, [service?.id, service?.isAd]);
+
+  // Meta Pixel: a service page was viewed (website only).
+  useEffect(() => {
+    if (service?.id) trackMeta("ViewContent", { content_ids: [service.id], content_name: service.name, content_type: "product", value: Number(service.price) || 0, currency: "INR" });
+  }, [service?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!service && looking) return <CatalogLoading />;
   if (!service) {
