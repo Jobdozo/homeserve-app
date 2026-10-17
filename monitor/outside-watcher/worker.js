@@ -122,7 +122,8 @@ export async function run(env, { now = Date.now(), fetchFn = fetch, retryDelayMs
 
 export default {
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(run(env));
+    // One log line per run (wrangler tail / dashboard logs): check results and any MSG91 error.
+    ctx.waitUntil(run(env).then((r) => console.log(JSON.stringify({ checks: r.results, sent: r.sent }))));
   },
   // Opening the Worker's address shows the last known state (no settings, no numbers).
   async fetch(request, env) {
