@@ -1092,7 +1092,7 @@ app.get("/sitemap.xml", ah(async (req, res) => {
   const data = await seoPages.loadSearchData(store);
   const { categories, services, providers } = data;
   const escapeXml = (s) => String(s).replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]));
-  const absolute = (u) => (/^https?:\/\//.test(u) ? u : `${SITE_URL}${u.startsWith("/") ? "" : "/"}${u}`);
+  const absolute = seoPages.absUrl; // uploaded photos live on the API host
   // Same rules as the pages themselves (seoPages.js): a category with nothing bookable and a
   // provider without an approved, bookable service aren't listed (those pages are noindex / 404).
   const withServices = new Set(services.map((s) => s.categoryId));

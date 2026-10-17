@@ -26,7 +26,16 @@ const ORG_ID = `${SITE}/#organization`;
 // Screens that only make sense signed in: served normally, kept out of search.
 const PRIVATE = [/^\/(bookings|messages|profile|cart|notifications|refer|address|login|search)(\/.*)?$/, /^\/(booking|chat|review|rate)\/[^/]+$/];
 
-const abs = (u) => (!u ? DEFAULT_IMAGE : /^https?:\/\//.test(u) ? u : `${SITE}${u.startsWith("/") ? "" : "/"}${u}`);
+// Uploaded photos (/uploads/…) are served by the API host, not the website (which answers 404);
+// built-in pictures (/category-photos/…, icons) are on the website.
+const UPLOADS_BASE = (process.env.UPLOADS_PUBLIC_BASE || "https://api.tikdum.com").replace(/\/$/, "");
+const absUrl = (u) => {
+  const s = String(u);
+  if (/^https?:\/\//.test(s)) return s;
+  const p = s.startsWith("/") ? s : `/${s}`;
+  return `${p.startsWith("/uploads/") ? UPLOADS_BASE : SITE}${p}`;
+};
+const abs = (u) => (!u ? DEFAULT_IMAGE : absUrl(u));
 const titleOf = (t) => (t ? `${t} | ${SITE_NAME}` : DEFAULT_TITLE);
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const inr = (n) => `₹${Number(n).toLocaleString("en-IN")}`;
@@ -464,4 +473,4 @@ function route(store) {
   };
 }
 
-module.exports = { pageFor, injectHead, headFor, route, getShell, searchCatalog, loadSearchData, DEFAULT_TITLE };
+module.exports = { pageFor, injectHead, headFor, route, getShell, searchCatalog, loadSearchData, absUrl, DEFAULT_TITLE };
