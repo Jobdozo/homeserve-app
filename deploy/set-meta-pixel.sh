@@ -35,6 +35,8 @@ case "$TEST_CODE" in '' | TEST[A-Za-z0-9]*) ;; *) echo "A test code starts with 
 
 echo "== checking with Meta"
 msg_of() { grep -o '"message":"[^"]*"' "$1" | head -1 | cut -d'"' -f4 || true; }
+# Meta's detailed reason (error_user_title / error_user_msg), when it gives one.
+detail_of() { grep -oE '"error_user_(title|msg)":"[^"]*"' "$1" | cut -d'"' -f4 | paste -sd' ' - || true; }
 # Reading the dataset needs more than sending to it (a system-user token may only be allowed to
 # send), so a refused read isn't the end: with a test code we check by sending one test event.
 code=$(curl -s -G --max-time 20 -o "$work/check.json" -w '%{http_code}' "$GRAPH/$PIXEL_ID" \
@@ -44,12 +46,15 @@ if [ "$code" = 200 ]; then
 elif [ -n "$TEST_CODE" ]; then
   echo "   (Meta won't show the dataset to this token: $(msg_of "$work/check.json") — checking by sending one test event instead)"
   now=$(date +%s)
-  printf '[{"event_name":"PageView","event_time":%d,"event_id":"setup-check-%d","action_source":"website","event_source_url":"https://tikdum.com/","user_data":{"client_user_agent":"Tikdum setup check","country":["%s"]}}]' \
-    "$now" "$now" "$(printf in | sha256sum | cut -d' ' -f1)" > "$work/event.json"
+  # Like the server's own events: a (hashed) customer identifier is required, not just the country.
+  printf '[{"event_name":"PageView","event_time":%d,"event_id":"setup-check-%d","action_source":"website","event_source_url":"https://tikdum.com/","user_data":{"client_user_agent":"Mozilla/5.0 (Tikdum setup check)","external_id":["%s"],"country":["%s"]}}]' \
+    "$now" "$now" "$(printf 'setup-check' | sha256sum | cut -d' ' -f1)" "$(printf in | sha256sum | cut -d' ' -f1)" > "$work/event.json"
   code=$(curl -s --max-time 20 -o "$work/send.json" -w '%{http_code}' "$GRAPH/$PIXEL_ID/events" \
     --data-urlencode "data@$work/event.json" --data-urlencode "test_event_code=$TEST_CODE" --data-urlencode "access_token@$work/token" || echo 000)
   if [ "$code" != 200 ] || ! grep -q '"events_received":1' "$work/send.json"; then
     echo "Meta didn't accept a test event (${code}): $(msg_of "$work/send.json")"
+    d="$(detail_of "$work/send.json")"
+    [ -z "$d" ] || echo "   Meta says: $d"
     echo "Check the dataset ID and that the system user has the Tikdum Website dataset (Business Settings → System users). Nothing was changed."
     exit 1
   fi
