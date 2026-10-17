@@ -98,6 +98,13 @@ Admin → AI Agents → **Teams** shows the whole organisation (Leadership, Oper
 
 **Specialists** (Marketing, SEO, Business Analyst, Research & Product) are one generic AI worker with different instructions. They only work on tasks assigned to them in **Tasks**: a new task gets a draft and moves to **Review**; move it back to **In progress** with a comment and they revise. They never publish, send or change anything. Put each specialist's key in `AGENT_KEYS_SPECIALISTS` (comma-separated) and restart the agents service.
 
+**Facebook + Instagram (Marketing Agent).** Give the Marketing Agent the **Marketing Team** role. Once the Page is
+connected (`bash deploy/set-meta.sh`, see `server/src/social.js`), it proposes one post on Monday, Wednesday and
+Friday from 10:00 IST (`SOCIAL_POST_DAYS_IST`, `SOCIAL_POST_HOUR_IST`) and one for every task titled
+**"Post: …"**. Claude writes the caption and picks one of Tikdum's own pictures (category photos, live banners,
+service photos); Approvals shows the picture and caption, and approving publishes to both. Nothing is posted
+without a person's approval; a rejected post is simply dropped.
+
 Not built yet (shown as "Not built yet"): the Google side of Reviews (needs Google Business Profile access), and the Engineering team (needs GitHub branch protection + a repo-only token first).
 
 ## Engineering team (GitHub): Bug Triage, Developer, Code Reviewer, Tester

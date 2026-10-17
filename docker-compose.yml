@@ -24,6 +24,11 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-}
       GEMINI_TEXT_MODEL: ${GEMINI_TEXT_MODEL:-}
+      # Facebook Page + Instagram posting (server/src/social.js; set with deploy/set-meta.sh).
+      META_PAGE_ID: ${META_PAGE_ID:-}
+      META_PAGE_TOKEN: ${META_PAGE_TOKEN:-}
+      META_IG_USER_ID: ${META_IG_USER_ID:-}
+      SOCIAL_IMAGE_BASE: ${SOCIAL_IMAGE_BASE:-https://api.tikdum.com}
       MSG91_OTP_HAS_BUTTON: ${MSG91_OTP_HAS_BUTTON:-}
       # Approved WhatsApp template for Admin messages outside the 24-hour window (tikdum_message: "Hello {{1}}, …{{2}}…").
       # VARS = its body variables in order: message, or name,message.

@@ -9,8 +9,11 @@
 //                             -> revises the draft using that feedback.
 // It never publishes, sends, or changes anything else; a person reviews every
 // draft and marks the task done.
+// The Marketing Agent (role template "marketing") also proposes Facebook/Instagram
+// posts: on schedule and for tasks titled "Post: …" (socialPosts.js).
 const state = require("./state");
 const { complete, untrusted, BudgetExceeded } = require("./claude");
+const socialPosts = require("./socialPosts");
 
 const MAX_PER_RUN = 2;
 
@@ -37,12 +40,22 @@ function promptFor(task, context) {
   ].filter(Boolean).join("\n\n");
 }
 
-async function tick(client, log, name = "specialist") {
+async function tick(client, log, name = "specialist", { now = Date.now() } = {}) {
   const office = await client.get("/agents/office");
   const st = state.load(`specialist-${name}`);
   st.failed = st.failed || {};
-  const work = tasksToWork(office.tasks, st.failed);
-  if (!work.length) return null;
+  // Which specialist this is, refreshed hourly (it can be changed in Admin).
+  if (!st.templateAt || now - st.templateAt > 3600 * 1000) {
+    st.template = (await client.get("/agents/self")).template || null;
+    st.templateAt = now;
+  }
+  const marketing = st.template === "marketing";
+  const posted = marketing ? await socialPosts.run(client, log, { st, office, now }) : 0;
+  const work = tasksToWork(marketing && st.socialConnected ? office.tasks.filter((t) => !socialPosts.isPostTask(t)) : office.tasks, st.failed);
+  if (!work.length) {
+    state.save(`specialist-${name}`, st);
+    return posted ? `${posted} social post(s) proposed for approval` : null;
+  }
   const self = await client.get("/agents/self");
   if (self.kind !== "specialist") throw new Error("This agent isn't set as a Specialist (Admin → AI Agents → Edit → Type)");
   const system = self.instructions || "You are an AI specialist at Tikdum. Draft the requested deliverable for a person to review. Never publish or send anything.";
@@ -66,7 +79,8 @@ async function tick(client, log, name = "specialist") {
   }
   for (const [id] of Object.entries(st.failed)) if (!office.tasks.some((t) => t.id === id)) delete st.failed[id];
   state.save(`specialist-${name}`, st);
-  return done ? `${done} task(s) drafted and sent for review` : null;
+  const parts = [done && `${done} task(s) drafted and sent for review`, posted && `${posted} social post(s) proposed for approval`].filter(Boolean);
+  return parts.length ? parts.join(", ") : null;
 }
 
 module.exports = { tick, tasksToWork, promptFor };

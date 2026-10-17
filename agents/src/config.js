@@ -115,6 +115,13 @@ module.exports = {
     everyMs: num(process.env.SPECIALIST_CHECK_EVERY_SEC, 120) * 1000,
   },
 
+  // Marketing Agent's scheduled Facebook/Instagram posts (socialPosts.js): one proposal on
+  // each of these IST weekdays (0 = Sunday) from this hour. Empty SOCIAL_POST_DAYS_IST = none.
+  social: {
+    daysIst: (process.env.SOCIAL_POST_DAYS_IST ?? "1,3,5").split(",").map((d) => d.trim()).filter((d) => d !== "").map(Number).filter((d) => d >= 0 && d <= 6),
+    hourIst: num(process.env.SOCIAL_POST_HOUR_IST, 10),
+  },
+
   // Engineering team (Bug triage, Developer, Reviewer, Tester): one key per
   // agent, comma-separated; each agent's job comes from its role in Admin.
   // They work on GitHub as a GitHub App (preferred) or a machine-user token.

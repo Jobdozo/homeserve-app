@@ -37,6 +37,7 @@ const MODULES = [
   { key: "ai", label: "AI agents (approvals, alerts, agent accounts)", actions: ["view", "approve", "manage"] },
   { key: "inbox", label: "WhatsApp inbox (customer chats)", actions: ["view", "add", "manage"] },
   { key: "accounting", label: "Accounting & GST (invoices, credit notes, returns)", actions: ["view", "export", "manage"] },
+  { key: "social", label: "Social media posts (Facebook, Instagram)", actions: ["view", "add", "manage"] },
 ];
 
 // One-time grants for permissions added after roles were first saved (saved
@@ -53,12 +54,19 @@ const ROLE_MIGRATIONS = [
       management: ["crm.view"],
     },
   },
+  // create: built-in roles (DEFAULT_ROLES) added after roles were first saved.
+  { id: "2026-10-social", create: ["marketing"], grant: { admin: ["social.view", "social.add"] } },
 ];
 function runRoleMigrations(roles) {
   const done = new Set(jsonStore.readAll("accessMigrations").map((m) => m.id));
   for (const mig of ROLE_MIGRATIONS) {
     if (done.has(mig.id)) continue;
-    for (const [roleId, perms] of Object.entries(mig.grant)) {
+    for (const key of mig.create || []) {
+      const r = DEFAULT_ROLES.find((x) => x.key === key);
+      if (!r || roles.some((x) => x.id === key)) continue;
+      roles.push(jsonStore.insert(ROLES, { id: r.key, name: r.name, description: r.description, permissions: r.permissions, system: true, locked: false, createdAt: new Date().toISOString() }));
+    }
+    for (const [roleId, perms] of Object.entries(mig.grant || {})) {
       const role = roles.find((r) => r.id === roleId);
       if (!role || role.locked) continue;
       const next = [...new Set([...(role.permissions || []), ...perms])];
@@ -111,6 +119,10 @@ const DEFAULT_ROLES = [
       "dashboard.view", ...all("reports", ["view", "export"]), ...all("monitoring", ["view", "export"]), "payments.view", "bookings.view",
       "audit.view", "complaints.view", "providers.view", "customers.view", "services.view", "crm.view",
     ],
+  },
+  {
+    key: "marketing", name: "Marketing Team", description: "Plans and publishes Facebook and Instagram posts; reads reports.",
+    permissions: [...all("social", ["view", "add"]), "cms.view", "reports.view", "dashboard.view", "services.view"],
   },
 ];
 
@@ -304,6 +316,8 @@ const RULES = [
   [/^\/admin\/verification\/precheck$/, () => "providers.view"],
   [/^\/admin\/watch\/provider-quality$/, () => "providers.view"],
   [/^\/admin\/watch\/(retention|fraud|reviews)$/, () => "customers.view"],
+  [/^\/admin\/social\/posts$/, (m) => (m === "GET" ? "social.view" : "social.add")],
+  [/^\/admin\/social(\/|$)/, () => "social.view"],
   [/^\/admin\/crm\/settings$/, (m) => (m === "GET" ? "crm.view" : "crm.manage")],
   [/^\/admin\/crm(\/|$)/, (m) => `crm.${byMethod(m)}`],
   [/^\/admin\/payments\/reconciliation$/, () => "payments.view"],

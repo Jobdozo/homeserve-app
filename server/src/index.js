@@ -70,6 +70,8 @@ app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json());
 // Photos copied to cloud storage go to its CDN; everything else is served from here (see uploads.js).
 app.use("/uploads", uploads.serveUpload);
+// Pictures prepared for Facebook/Instagram posts (social.js); public so Meta can fetch them.
+app.get("/api/social-images/:name", (req, res) => require("./social").serveImage(req, res));
 // Flood protection for the whole API (see rateLimit.js); /api/health is never limited.
 app.use("/api", health.countRequest, rateLimit.apiLimits);
 
@@ -3000,7 +3002,7 @@ app.get("/api/agents/self", agentOnly, crm(async (req, res) => {
     supportAutoSend: agents.getConfig().supportAutoSend,
     kind: req.admin.kind,
     instructions: ["specialist", "engineer"].includes(req.admin.kind) ? req.admin.instructions : undefined,
-    template: req.admin.kind === "engineer" ? req.admin.template : undefined,
+    template: ["engineer", "specialist"].includes(req.admin.kind) ? req.admin.template : undefined,
   });
 }));
 
@@ -3379,6 +3381,22 @@ app.get("/api/admin/watch/fraud", adminOnly, crm(async (req, res) => {
 app.get("/api/admin/watch/reviews", adminOnly, crm(async (req, res) => {
   const [providers, bookings] = await Promise.all([store.listProviders(), store.listBookings({})]);
   res.json(watchdogs.reviewsList({ providers, bookings, ignore: testProviderIds() }));
+}));
+
+// ---- Social media (social.js): Facebook Page + Instagram posts ----
+// Publishing is "social.add": a person posting, or approving a Marketing Agent proposal.
+const social = require("./social");
+app.get("/api/admin/social/status", adminOnly, crm(async (req, res) => res.json(await social.status())));
+app.get("/api/admin/social/images", adminOnly, crm(async (req, res) => {
+  const [categories, services] = await Promise.all([store.listCategories(), store.listServices({ activeOnly: true })]);
+  res.json(social.imageLibrary({ categories, banners: store.listActiveBanners(), services }));
+}));
+app.get("/api/admin/social/posts", adminOnly, crm(async (req, res) => res.json(social.listPosts(Number(req.query.limit) || 30))));
+app.post("/api/admin/social/posts", adminOnly, crm(async (req, res) => {
+  const row = await social.publish(req.body || {}, actorOf(req));
+  const done = Object.entries(row.results).filter(([, r]) => r.ok).map(([k]) => k);
+  await store.logActivity("social", `Posted on ${done.join(" + ")} by ${actorOf(req)}: "${row.caption.slice(0, 60)}${row.caption.length > 60 ? "…" : ""}"`).catch(() => {});
+  res.status(201).json(row);
 }));
 
 // ---- Live Service Provider Monitoring ----

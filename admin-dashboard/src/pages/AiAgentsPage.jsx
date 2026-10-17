@@ -259,7 +259,15 @@ function ApprovalsPanel({ canDecide }) {
                     {a.agentName} · {fmt(a.createdAt)} · <span className="font-mono">{a.type}</span>
                     {a.decidedBy && ` · ${a.status} by ${a.decidedBy}`}
                   </p>
-                  {a.summary && <p className="mt-1 whitespace-pre-line text-[12.5px] text-gray-600">{a.summary}</p>}
+                  {a.type === "social.post" && a.request.body?.imageUrl ? (
+                    // A Facebook/Instagram post: show it roughly as it will look.
+                    <div className="mt-2 flex max-w-xl flex-col gap-3 rounded-xl border border-gray-100 p-3 sm:flex-row">
+                      <img src={a.request.body.imageUrl} alt="Picture for the post" className="h-40 w-40 flex-shrink-0 rounded-lg object-cover" />
+                      <p className="whitespace-pre-line text-[12.5px] text-gray-700">{a.request.body.caption}</p>
+                    </div>
+                  ) : (
+                    a.summary && <p className="mt-1 whitespace-pre-line text-[12.5px] text-gray-600">{a.summary}</p>
+                  )}
                   {a.lastError && <p className="mt-1 text-[12px] text-red-600">Last attempt failed: {a.lastError}</p>}
                   {a.note && <p className="mt-1 text-[12px] text-gray-500">Note: {a.note}</p>}
                   <button className="mt-1 text-[11.5px] font-semibold text-brand" onClick={() => setOpen(open === a.id ? null : a.id)}>
