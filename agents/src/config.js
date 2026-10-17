@@ -62,6 +62,27 @@ module.exports = {
     everyMs: num(process.env.DISPATCH_CHECK_EVERY_SEC, 60) * 1000,
   },
 
+  // Provider Quality (quality.js): daily report + proposed warnings.
+  quality: {
+    key: process.env.AGENT_KEY_QUALITY || "",
+    hourIst: num(process.env.QUALITY_HOUR_IST, 11),
+    everyMs: 15 * 60000,
+  },
+
+  // Retention (retention.js): weekly win-back groups, one proposed message per group.
+  retention: {
+    key: process.env.AGENT_KEY_RETENTION || "",
+    weekdayIst: num(process.env.RETENTION_WEEKDAY_IST, 1), // 0 = Sunday, 1 = Monday
+    hourIst: num(process.env.RETENTION_HOUR_IST, 11),
+    everyMs: 15 * 60000,
+  },
+
+  // Fraud (fraud.js): hourly suspicious patterns, alerts only.
+  fraud: {
+    key: process.env.AGENT_KEY_FRAUD || "",
+    everyMs: num(process.env.FRAUD_CHECK_EVERY_MIN, 60) * 60000,
+  },
+
   verification: {
     key: process.env.AGENT_KEY_VERIFICATION || "",
     everyMs: num(process.env.VERIFICATION_CHECK_EVERY_MIN, 15) * 60000,

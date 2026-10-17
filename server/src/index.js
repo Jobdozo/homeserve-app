@@ -1386,12 +1386,18 @@ app.delete("/api/admin/service-catalog/:id/image", auth.requireAuth("admin"), ah
 // ---- admin: broadcast a notification ----
 app.post("/api/admin/notifications/broadcast", auth.requireAuth("admin"), ah(async (req, res) => {
   const { audience, recipientId, title, message } = req.body || {};
-  if (!["customers", "providers", "single"].includes(audience) || !title || !message) {
-    return res.status(400).json({ error: "audience (customers|providers|single), title and message are required" });
+  if (!["customers", "providers", "single", "customer-list"].includes(audience) || !title || !message) {
+    return res.status(400).json({ error: "audience (customers|providers|single|customer-list), title and message are required" });
   }
   let recipientIds = [];
   let recipientType;
-  if (audience === "customers") {
+  if (audience === "customer-list") {
+    // A chosen group of customers (e.g. a Retention Agent win-back list a person approved).
+    const ids = Array.isArray(req.body.customerIds) ? [...new Set(req.body.customerIds.filter((x) => typeof x === "string" && /^[A-Za-z0-9_-]{1,60}$/.test(x)))] : [];
+    if (!ids.length || ids.length > 500) return res.status(400).json({ error: "customerIds must list 1–500 customers" });
+    recipientType = "customer";
+    recipientIds = ids;
+  } else if (audience === "customers") {
     recipientType = "customer";
     recipientIds = await store.listCustomerIds();
   } else if (audience === "providers") {
@@ -3351,6 +3357,25 @@ app.post("/api/admin/ai/office/goals/:id/decide", adminOnly, crm(async (req, res
 // and Payments agents and shown to staff — see backoffice.js) ----
 app.get("/api/admin/verification/precheck", adminOnly, crm(async (req, res) => res.json(await backoffice.precheckPending())));
 app.get("/api/admin/payments/reconciliation", adminOnly, crm(async (req, res) => res.json(await backoffice.reconcile())));
+
+// Provider Quality, Retention and Fraud agents (watchdogs.js): read-only lists.
+// Providers tagged "test" in Super Admin (staff test accounts) are left out.
+const watchdogs = require("./watchdogs");
+const testProviderIds = () =>
+  new Set(jsonStore.readAll("providerTags").filter((r) => (r.tags || []).some((t) => String(t).trim().toLowerCase() === "test")).map((r) => r.id));
+app.get("/api/admin/watch/provider-quality", adminOnly, crm(async (req, res) => {
+  const [providers, bookings] = await Promise.all([store.listProviders(), store.listBookings({})]);
+  const rows = watchdogs.providerQuality({ providers, bookings, declines: jsonStore.readAll("providerDeclines"), complaints: jsonStore.readAll("complaints"), ignore: testProviderIds() });
+  res.json(rows.map((r) => ({ ...r, warning: watchdogs.warningText(r) })));
+}));
+app.get("/api/admin/watch/retention", adminOnly, crm(async (req, res) => {
+  const [customers, bookings] = await Promise.all([store.listCustomers(), store.listBookings({})]);
+  res.json({ segments: watchdogs.retention({ customers, bookings }), offer: watchdogs.usableOffer(store.listOffers()) });
+}));
+app.get("/api/admin/watch/fraud", adminOnly, crm(async (req, res) => {
+  const [providers, bookings] = await Promise.all([store.listProviders(), store.listBookings({})]);
+  res.json(watchdogs.fraud({ providers, bookings, refundClaims: store.listRefundClaims(), ignore: testProviderIds() }));
+}));
 
 // ---- Live Service Provider Monitoring ----
 app.get("/api/admin/monitoring", auth.requireAuth("admin"), ah(async (req, res) => {

@@ -5,12 +5,12 @@
 #
 #   cd /tmp/homeserve-deploy && git pull && bash deploy/set-agent-key.sh COMPLAINTS
 #
-# Agent names: OPERATIONS REPORTING CEO COMPLAINTS SUPPORT REGISTRATION VERIFICATION DISPATCH PAYMENTS.
+# Agent names: OPERATIONS REPORTING CEO COMPLAINTS SUPPORT REGISTRATION VERIFICATION DISPATCH QUALITY RETENTION FRAUD PAYMENTS.
 # Safe to run again (e.g. after making a new key): it replaces the old line.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ENV_FILE=.env
-NAMES="OPERATIONS REPORTING CEO COMPLAINTS SUPPORT REGISTRATION VERIFICATION DISPATCH PAYMENTS"
+NAMES="OPERATIONS REPORTING CEO COMPLAINTS SUPPORT REGISTRATION VERIFICATION DISPATCH QUALITY RETENTION FRAUD PAYMENTS"
 
 NAME="$(printf %s "${1:-}" | tr '[:lower:]' '[:upper:]')"
 if [ -z "$NAME" ] || ! printf ' %s ' "$NAMES" | grep -q " $NAME "; then

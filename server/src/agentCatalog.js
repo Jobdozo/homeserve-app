@@ -40,9 +40,9 @@ const TEAMS = [
       { key: "payments", name: "Payments Agent", how: "rules", role: "payments", description: "Reconciles wallets and commission; daily money summary." },
       { key: "reporting", name: "Reporting Agent", how: "ai", role: "management", description: "Daily 9 AM business brief in admin and on WhatsApp." },
       { key: "dispatch", name: "Dispatch Agent", how: "rules", role: "operations", description: "Watches bookings no provider took; suggests the best provider with reasons for one-tap assign." },
-      { key: "provider_quality", name: "Provider Quality Agent", how: "planned", role: "operations", description: "Watches ratings, cancellations and complaints per provider. Needs code." },
-      { key: "retention", name: "Retention Agent", how: "planned", role: "management", description: "Finds customers who stopped booking and drafts win-back offers. Needs code." },
-      { key: "fraud", name: "Fraud Agent", how: "planned", role: "payments", description: "Flags suspicious bookings, refunds and accounts. Needs code." },
+      { key: "provider_quality", name: "Provider Quality Agent", how: "rules", role: "operations", description: "Daily: providers with falling ratings, ignored requests, dropped jobs or complaints; proposes a warning for the worst." },
+      { key: "retention", name: "Retention Agent", how: "rules", role: "operations", description: "Weekly: customers who stopped booking, booked once, or got no provider; proposes a win-back message per group." },
+      { key: "fraud", name: "Fraud Agent", how: "rules", role: "operations", description: "Hourly: self-bookings, repeat customer–provider pairs, refund-heavy customers, mass cancellations, instant completions. Alerts only." },
     ],
   },
   {

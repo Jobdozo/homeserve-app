@@ -302,6 +302,8 @@ const RULES = [
   [/^\/admin\/ai\//, (m) => (m === "GET" ? "ai.view" : "ai.manage")],
   [/^\/admin\/inbox(\/|$)/, (m) => (m === "GET" ? "inbox.view" : "inbox.add")],
   [/^\/admin\/verification\/precheck$/, () => "providers.view"],
+  [/^\/admin\/watch\/provider-quality$/, () => "providers.view"],
+  [/^\/admin\/watch\/(retention|fraud)$/, () => "customers.view"],
   [/^\/admin\/crm\/settings$/, (m) => (m === "GET" ? "crm.view" : "crm.manage")],
   [/^\/admin\/crm(\/|$)/, (m) => `crm.${byMethod(m)}`],
   [/^\/admin\/payments\/reconciliation$/, () => "payments.view"],
