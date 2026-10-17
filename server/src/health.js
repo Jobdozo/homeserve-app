@@ -58,7 +58,8 @@ const judgeLoad = ({ cpuPct, loopP99Ms }) => cpuPct >= BUSY_CPU_PCT || loopP99Ms
 let lastLoad = null;
 let requests = 0;
 function countRequest(req, res, next) {
-  requests += 1;
+  // The Network Bot asks /api/health every second; that isn't traffic.
+  if (req.path !== "/health") requests += 1;
   next();
 }
 

@@ -136,3 +136,32 @@ services:
       - /root/tikdum-data/agents-secrets:/app/secrets:ro
     depends_on:
       - server
+
+  # Network Bot (agents/src/netwatch.js, no AI): every second checks the API, the three
+  # website containers and nginx; every 10 s the public HTTPS addresses and the internet.
+  # Anything down for 20 s -> WhatsApp to ADMIN_PHONES straight through MSG91, so it gets
+  # out even while the API is down. Same image as agents (built by build-images.sh agents);
+  # no depends_on, so it keeps watching when the API won't start.
+  netwatch:
+    image: homeserve-agents
+    command: ["node", "src/netwatch.js"]
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      NODE_OPTIONS: --dns-result-order=ipv4first
+      TIKDUM_API_URL: http://127.0.0.1:4000/api
+      AGENT_STATE_DIR: /app/state
+      # Optional: shows the bot in Admin -> AI Agents (heartbeat + alerts in the feed).
+      AGENT_KEY_NETWORK: ${AGENT_KEY_NETWORK:-}
+      ADMIN_PHONES: ${ADMIN_PHONES}
+      # Other numbers for these alerts instead of ADMIN_PHONES (comma-separated), if wanted.
+      NETWATCH_PHONES: ${NETWATCH_PHONES:-}
+      MSG91_AUTH_KEY: ${MSG91_AUTH_KEY}
+      MSG91_WHATSAPP_NUMBER: ${MSG91_WHATSAPP_NUMBER}
+      MSG91_NOTICE_TEMPLATE: ${MSG91_NOTICE_TEMPLATE:-tikdum_message}
+      MSG91_NOTICE_TEMPLATE_LANG: ${MSG91_NOTICE_TEMPLATE_LANG:-en}
+      MSG91_NOTICE_TEMPLATE_VARS: ${MSG91_NOTICE_TEMPLATE_VARS:-name,message}
+      NETWATCH_DOWN_AFTER_SEC: ${NETWATCH_DOWN_AFTER_SEC:-20}
+      NETWATCH_REMIND_MIN: ${NETWATCH_REMIND_MIN:-10}
+    volumes:
+      - /root/tikdum-data/agents-state:/app/state

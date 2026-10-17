@@ -84,7 +84,23 @@ Each agent has a daily USD budget in Admin; when reached it stops calling the AI
   messaged the business number in the last 24h (Meta rule). When `MSG91_NOTICE_TEMPLATE` is set
   (an approved utility template), the server falls back to it, so they arrive any time.
 - Server alerts come from this worker, on the same VPS: if the whole VPS is down, only the
-  GitHub `uptime` check (email) notices.
+  GitHub `uptime` check (email) notices, and GitHub runs it every few hours, not every 10 minutes.
+
+## Network Bot (`src/netwatch.js`, compose service `netwatch`)
+Fixed rules, no AI, its own container from the agents image (`build-images.sh agents` builds
+and restarts both). Every second it checks the API (`/api/health`), the customer, provider and
+admin website containers (ports 5175/5174/5177) and nginx (443); every 10 s it checks tikdum.com,
+provider., admin. and api.tikdum.com over HTTPS and that the server has internet; every 6 hours
+it checks the HTTPS certificates (warns 14 days ahead).
+- Anything failing for 20 s (`NETWATCH_DOWN_AFTER_SEC`): one WhatsApp listing what's down, a
+  reminder every 10 min (`NETWATCH_REMIND_MIN`), and "back up" with how long it lasted.
+- WhatsApp goes straight to MSG91 with the notice template (`MSG91_NOTICE_TEMPLATE`) to
+  `ADMIN_PHONES` (or `NETWATCH_PHONES`), never through the API, so "the API is down" gets out.
+- After the VPS was switched off it says when it went dark and for how long, once it's back.
+  It can't message during that time; only a watcher outside this server can.
+- Optional `AGENT_KEY_NETWORK` (Admin → AI Agents → Teams → Network Bot, then
+  `deploy/set-agent-key.sh NETWORK`) shows it in Admin with a heartbeat.
+- Check by hand: `docker exec homeserve-netwatch-1 node src/netwatch.js --check`
 - Proposal approvals run synchronously; if the server restarts mid-approval the item can
   stay in "executing" — reject/re-propose it.
 

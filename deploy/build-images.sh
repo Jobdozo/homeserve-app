@@ -18,6 +18,17 @@ cd "$(dirname "$0")/.."
 services=("$@")
 [ ${#services[@]} -eq 0 ] && services=(server admin-dashboard local-service-app provider-app)
 
+# The Network Bot (netwatch) runs from the agents image: "netwatch" builds that image, and
+# building agents restarts the bot too, so it never runs older code than the agents.
+build_list=()
+for s in "${services[@]}"; do
+  [ "$s" = netwatch ] && s=agents
+  case " ${build_list[*]:-} " in *" $s "*) ;; *) build_list+=("$s") ;; esac
+done
+services=("${build_list[@]}")
+start=("${services[@]}")
+case " ${services[*]} " in *" agents "*) start+=(netwatch) ;; esac
+
 # Only this one value is needed from .env (the public address of the API baked into the web apps).
 VITE_SERVER_URL="$(grep -E '^VITE_SERVER_URL=' .env | head -1 | cut -d= -f2- | tr -d "\"'" | tr -d '\r')"
 if [ -z "$VITE_SERVER_URL" ]; then echo "VITE_SERVER_URL is missing in .env — stopping."; exit 1; fi
@@ -55,5 +66,5 @@ for s in "${services[@]}"; do
 done
 
 echo "== starting"
-docker compose -p homeserve up -d --no-build "${services[@]}"
+docker compose -p homeserve up -d --no-build "${start[@]}"
 docker compose -p homeserve ps
