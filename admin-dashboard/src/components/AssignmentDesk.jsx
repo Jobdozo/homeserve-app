@@ -42,11 +42,16 @@ function useChime(active) {
   }, [active]);
 }
 
-function Option({ o, responsible, onAssign, busy, canEdit }) {
+function Option({ o, responsible, onAssign, busy, canEdit, best }) {
   return (
-    <div className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border px-3 py-2.5 ${o.available ? "border-gray-100" : "border-dashed border-gray-200 bg-gray-50/60"}`}>
+    <div
+      className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border px-3 py-2.5 ${
+        best ? "border-emerald-300 bg-emerald-50/50" : o.available ? "border-gray-100" : "border-dashed border-gray-200 bg-gray-50/60"
+      }`}
+    >
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-semibold text-gray-900">
+          {best && <span className="mr-1.5 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Best match</span>}
           {o.name}
           {o.rating > 0 && <span className="ml-1.5 text-[11.5px] font-medium text-gray-500">★ {o.rating}</span>}
           <span className="ml-1.5 text-[11.5px] font-medium text-gray-400">{o.jobsDone} jobs</span>
@@ -60,6 +65,7 @@ function Option({ o, responsible, onAssign, busy, canEdit }) {
             </span>
           ))}
         </p>
+        {o.available && o.match?.reasons?.length > 0 && <p className="text-[11px] text-gray-400">{o.match.reasons.join(" · ")}</p>}
       </div>
       <div className="text-right text-[11.5px] leading-tight">
         <p className="font-semibold text-gray-900">Their price ₹{o.price}</p>
@@ -151,7 +157,7 @@ function WaitingBooking({ item, canEdit, onDone }) {
 
       <div className="mt-2 space-y-2">
         {shown.map((o) => (
-          <Option key={o.providerId} o={o} responsible={item.responsible} onAssign={assign} busy={busy === o.providerId} canEdit={canEdit} />
+          <Option key={o.providerId} o={o} responsible={item.responsible} onAssign={assign} busy={busy === o.providerId} canEdit={canEdit} best={o.providerId === item.suggestedProviderId} />
         ))}
         {item.options.length === 0 && <p className="py-3 text-center text-[12.5px] text-gray-400">No provider offers a service in this category.</p>}
       </div>

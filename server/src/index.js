@@ -239,8 +239,10 @@ async function checkAssignmentQueue(now = Date.now()) {
       const mins = Math.round((now - Date.parse(q.since)) / 60000);
       const where = (String(booking.address?.line || "").match(/\b\d{6}\b/) || [""])[0];
       ringAdmins(booking, { again: true }).catch((e) => console.error("admin ring failed:", e.message));
+      const best = store.suggestedOption(await store.assignmentOptions(booking).catch(() => []));
+      const bestLine = best ? `\nBest match: ${best.name}${best.phone ? ` (${best.phone})` : ""} — ${best.match.reasons.slice(0, 3).join(", ")}.` : "\nNobody is available right now — call a provider.";
       await sendOwnerWhatsApp(
-        `🟠 Booking #${booking.ref || booking.id} (${booking.service?.name || "service"}${where ? `, PIN ${where}` : ""}, ${booking.date} ${booking.time || ""}) has waited ${mins} min — no provider accepted it. Assign it in Admin (it pops up on any open Admin screen).`
+        `🟠 Booking #${booking.ref || booking.id} (${booking.service?.name || "service"}${where ? `, PIN ${where}` : ""}, ${booking.date} ${booking.time || ""}) has waited ${mins} min — no provider accepted it.${bestLine}\nAssign it in Admin (it pops up on any open Admin screen).`
       ).catch((e) => console.error("assignment owner alert failed:", e.message));
     }
   }
@@ -2612,6 +2614,11 @@ app.get("/api/admin/assignments", auth.requireAuth("admin"), ah(async (req, res)
 app.post("/api/admin/bookings/:id/assign", auth.requireAuth("admin"), ah(async (req, res) => {
   const providerId = typeof req.body?.providerId === "string" ? req.body.providerId : "";
   if (!providerId) return res.status(400).json({ error: "Choose a provider" });
+  // A Dispatch Agent suggestion approved later: only while the booking is still waiting,
+  // so an old suggestion can't take it away from someone it was given to meanwhile.
+  if (req.body?.onlyIfWaiting && !assignmentsQueue.queued(req.params.id)) {
+    return res.status(409).json({ error: "This booking isn't waiting any more — it was assigned, accepted or cancelled since the suggestion" });
+  }
   let result;
   try {
     result = await store.assignBookingTo(req.params.id, providerId, actorOf(req));

@@ -81,6 +81,16 @@ test("complaint agent can't resolve/close directly but can move stages", () => {
   assert.equal(call(token, "PATCH", "/admin/refund-claims/r1", { status: "approved" }).denied.status, 403);
 });
 
+test("dispatch agent: may propose assigning a waiting booking, never assign it directly", () => {
+  const { apiKey } = agents.createAgent({ name: "Dispatch", roleId: "operations", template: "dispatch" }, "test");
+  const { token } = agents.issueToken(apiKey);
+  const admin = agents.resolveAgent(auth.verifyToken(token).agentId);
+  assert.equal(call(token, "GET", "/admin/assignments").denied, null);
+  assert.equal(call(token, "POST", "/admin/bookings/b1/assign", { providerId: "p1" }).denied.status, 403);
+  const out = agents.propose(admin, { title: "Give #b1 to P1", request: { method: "POST", path: "/admin/bookings/b1/assign", body: { providerId: "p1", onlyIfWaiting: true } } });
+  assert.equal(out.action.type, "booking.assign");
+});
+
 test("proposals: allowlist, role scope, dedupe, single execution", () => {
   const { apiKey } = agents.createAgent({ name: "Verifier", roleId: "verification" }, "test");
   const admin = agents.resolveAgent(auth.verifyToken(agents.issueToken(apiKey).token).agentId);

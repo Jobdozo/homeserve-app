@@ -12,6 +12,7 @@ over HTTP only (never to the data files). Safety model: `server/src/agents.js`.
 | Customer Support | Customer Support | Yes | Every 20 s: drafts (review mode, default) or sends (auto-send) replies to WhatsApp chats in AI mode from the customer's own bookings + your Support knowledge; logs complaints; hands refunds, safety, legal, abuse and anything unsure to a person |
 | Registration | Registration Team | No (rules) | Hourly: reminds providers with incomplete applications what's missing (in-app, max 3×, needs "Notifications → Add" on the role); daily 10:00 IST call list of unfinished sign-ups |
 | Verification Pre-check | Provider Verification Team | No (rules) | Every 15 min: checks pending applications (ID proof, services, areas, agreement, GST format, duplicates); **proposes** approval only when complete — never rejection; documents are not sent to any AI |
+| Dispatch | Operations Team | No (rules) | Every minute: for each booking on the assignment desk (nobody accepted it) **proposes** the best provider with reasons — online, accepts requests, rating, open jobs, fairness, open complaints (`server/src/dispatchRank.js`). One tap in Approvals rings them; an old suggestion is refused once the booking was assigned another way. Warns when nobody is available. The server uses the same ranking to pick who to ring next after a decline or missed ring |
 | Payments | Payment Team | No (rules) | Every 6 h: reconciles wallets vs recharge/deduction history, commission charged vs completed jobs, fees on cancelled jobs, negative wallets; alerts + daily 08:00 IST summary; never moves money |
 | **CEO (chief of staff)** | Reporting / Management Team, **Type: CEO** | Yes | Reads every agent's reports/alerts, the task board and approvals. Answers you in **AI Agents → CEO chat** (or on WhatsApp from the owner number) within ~1 min; posts a daily review at 10:00 IST and **proposes** tasks and weekly goals for your approval. Can't approve, change data, contact customers or create agents |
 
@@ -93,7 +94,7 @@ Admin → AI Agents → **Teams** shows the whole organisation (Leadership, Oper
 
 **Specialists** (Marketing, SEO, Business Analyst, Research & Product) are one generic AI worker with different instructions. They only work on tasks assigned to them in **Tasks**: a new task gets a draft and moves to **Review**; move it back to **In progress** with a comment and they revise. They never publish, send or change anything. Put each specialist's key in `AGENT_KEYS_SPECIALISTS` (comma-separated) and restart the agents service.
 
-Not built yet (shown as "Not built yet"): Dispatch, Provider quality, Retention, Fraud (need code), Reviews & reputation (needs Google Business Profile access), and the Engineering team (needs GitHub branch protection + a repo-only token first).
+Not built yet (shown as "Not built yet"): Provider quality, Retention, Fraud (need code), Reviews & reputation (needs Google Business Profile access), and the Engineering team (needs GitHub branch protection + a repo-only token first).
 
 ## Engineering team (GitHub): Bug Triage, Developer, Code Reviewer, Tester
 All four work only through GitHub pull requests, comments and issues. They can't merge, approve,

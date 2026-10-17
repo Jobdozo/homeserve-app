@@ -39,7 +39,7 @@ const TEAMS = [
       { key: "verification", name: "Verification Agent", how: "rules", role: "verification", description: "Pre-checks provider applications; proposes approval when complete." },
       { key: "payments", name: "Payments Agent", how: "rules", role: "payments", description: "Reconciles wallets and commission; daily money summary." },
       { key: "reporting", name: "Reporting Agent", how: "ai", role: "management", description: "Daily 9 AM business brief in admin and on WhatsApp." },
-      { key: "dispatch", name: "Dispatch Agent", how: "planned", role: "operations", description: "Smarter provider matching and reassignment. Needs code." },
+      { key: "dispatch", name: "Dispatch Agent", how: "rules", role: "operations", description: "Watches bookings no provider took; suggests the best provider with reasons for one-tap assign." },
       { key: "provider_quality", name: "Provider Quality Agent", how: "planned", role: "operations", description: "Watches ratings, cancellations and complaints per provider. Needs code." },
       { key: "retention", name: "Retention Agent", how: "planned", role: "management", description: "Finds customers who stopped booking and drafts win-back offers. Needs code." },
       { key: "fraud", name: "Fraud Agent", how: "planned", role: "payments", description: "Flags suspicious bookings, refunds and accounts. Needs code." },

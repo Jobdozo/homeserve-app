@@ -56,6 +56,12 @@ module.exports = {
     lookbackDays: num(process.env.REGISTRATION_LOOKBACK_DAYS, 7),
   },
 
+  // Dispatch (dispatch.js): suggests a provider for each booking on the assignment desk.
+  dispatch: {
+    key: process.env.AGENT_KEY_DISPATCH || "",
+    everyMs: num(process.env.DISPATCH_CHECK_EVERY_SEC, 60) * 1000,
+  },
+
   verification: {
     key: process.env.AGENT_KEY_VERIFICATION || "",
     everyMs: num(process.env.VERIFICATION_CHECK_EVERY_MIN, 15) * 60000,

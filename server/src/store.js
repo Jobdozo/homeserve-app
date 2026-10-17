@@ -2625,9 +2625,37 @@ async function findAlternativeProviderService(categorySlug, excludeProviderIds, 
       sameServiceName(s.name, name) &&
       providerVisibilityIssues(s.provider.id, vctx, pincode ? { pincode } : {}).length === 0
   );
-  const candidate = fits.find((s) => s.provider.id === preferProviderId) || fits[0];
+  // Everyone here passes the same rules; ring the best match first (dispatchRank.js).
+  const stats = await getDispatchStats().catch(() => ({}));
+  const ranked = dispatchRank.rank(fits, (s) => dispatchInput(s.provider.id, vctx, stats));
+  const candidate = ranked.find((s) => s.provider.id === preferProviderId) || ranked[0];
   if (!candidate) return null;
-  return { serviceId: candidate.id, providerId: candidate.provider.id, amount: candidate.price };
+  return { serviceId: candidate.id, providerId: candidate.provider.id, amount: candidate.price, match: candidate.match };
+}
+
+// ---- dispatch ranking data (see dispatchRank.js) ----
+const dispatchRank = require("./dispatchRank");
+
+// Recent bookings, declines and complaints per provider. Cached like the catalog:
+// a few minutes' staleness doesn't change who is the better match.
+async function getDispatchStats() {
+  return cachedCatalog("dispatchStats", async () => {
+    const { bookings } = await query(`query { bookings(orderBy: { createdAt: DESC }, limit: 5000) { providerId status createdAt } }`);
+    return dispatchRank.buildStats({
+      bookings,
+      declines: jsonStore.readAll("providerDeclines"),
+      complaints: jsonStore.readAll("complaints"),
+    });
+  });
+}
+
+function dispatchInput(providerId, vctx, stats) {
+  return {
+    stat: stats[providerId],
+    rating: vctx.providers.get(providerId)?.rating || 0,
+    openJobs: vctx.capacities[providerId]?.openCount || 0,
+    lastSeenMs: vctx.seen.get(providerId) || null,
+  };
 }
 
 // Tries to move a still-pending booking to another provider in the same
@@ -2661,7 +2689,8 @@ async function reassignBooking(bookingId, excludeProviderIds, opts = {}) {
       { id: bookingId, serviceId: candidate.serviceId, providerId: candidate.providerId, amount: assignments.priceForMove(booking, candidate.amount * qty, candidate.providerId).amount }
     );
     cacheClear("openBookings");
-    await logActivity("booking", `Booking #${bookingRef(bookingId)} reassigned to another provider after no response`);
+    const why = candidate.match ? ` (best match: ${candidate.match.reasons.slice(0, 3).join(", ")})` : "";
+    await logActivity("booking", `Booking #${bookingRef(bookingId)} reassigned to another provider after no response${why}`);
     const updated = await fetchBookingWithRelations(bookingId);
     if (opts.quiet) return { reassigned: true, booking: updated };
     const bookingMessage = `${updated.customer?.name || "A customer"} requested ${updated.service?.name || "a service"} for ${updated.date}`;
@@ -2728,6 +2757,7 @@ async function assignmentOptions(booking) {
   const tried = new Set(assignments.queued(booking.id)?.tried || []);
   const quoted = assignments.coverFor(booking.id)?.quoted ?? booking.amount;
   const charged = assignments.coverFor(booking.id)?.chargedProviderId || booking.providerId;
+  const stats = await getDispatchStats().catch(() => ({}));
   const best = new Map(); // providerId -> their best service for this booking
   for (const sv of services) {
     if (!sv.provider) continue;
@@ -2757,6 +2787,7 @@ async function assignmentOptions(booking) {
       passed: tried.has(providerId),
       issues: issues.map((i) => i.label),
       available: issues.length === 0,
+      match: dispatchRank.scoreProvider(dispatchInput(providerId, vctx, stats)),
     });
   }
   return out.sort(
@@ -2764,10 +2795,14 @@ async function assignmentOptions(booking) {
       Number(b.sameService) - Number(a.sameService) ||
       Number(b.available) - Number(a.available) ||
       Number(a.passed) - Number(b.passed) ||
-      a.price - b.price ||
-      b.rating - a.rating
+      b.match.score - a.match.score ||
+      a.price - b.price
   );
 }
+
+// The Dispatch suggestion for a waiting booking: the best-ranked provider who offers
+// the same service, is available right now and hasn't already passed on it.
+const suggestedOption = (options) => options.find((o) => o.sameService && o.available && !o.passed) || null;
 
 // Bookings waiting for Admin, oldest first, each with who could take it.
 async function listNeedsAssignment() {
@@ -2781,6 +2816,7 @@ async function listNeedsAssignment() {
     const cover = assignments.coverFor(q.id);
     const responsibleId = cover?.chargedProviderId || booking.providerId;
     const responsible = await getProvider(responsibleId).catch(() => null);
+    const options = await assignmentOptions(booking);
     out.push({
       booking: { ...booking, providerId: null, needsAssignment: true },
       since: q.since,
@@ -2788,7 +2824,8 @@ async function listNeedsAssignment() {
       quoted: cover?.quoted ?? booking.amount,
       // who pays a higher price's difference (the provider the customer booked, or who handed it back)
       responsible: { id: responsibleId, name: responsible?.name || "the booked provider", acceptedRule: hasAcceptedPriceDifference(responsibleId) },
-      options: await assignmentOptions(booking),
+      options,
+      suggestedProviderId: suggestedOption(options)?.providerId || null,
     });
   }
   return out;
@@ -5253,6 +5290,7 @@ module.exports = {
   canonicalPhone,
   listNeedsAssignment,
   assignmentOptions,
+  suggestedOption,
   assignBookingTo,
   giveUpBooking,
   notifyCustomerFindingProvider,

@@ -56,6 +56,7 @@ const PROPOSABLE = [
   ["complaint.message", "POST", /^\/admin\/complaints\/[A-Za-z0-9_-]+\/entries$/],
   ["provider.warn", "POST", /^\/admin\/providers\/[A-Za-z0-9_-]+\/warn$/],
   ["notification.broadcast", "POST", /^\/admin\/notifications\/broadcast$/],
+  ["booking.assign", "POST", /^\/admin\/bookings\/[A-Za-z0-9_-]+\/assign$/],
 ];
 
 // ---- config (global kill switch + what the support agent may tell customers) ----
