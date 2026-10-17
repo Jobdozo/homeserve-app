@@ -137,3 +137,15 @@ test("the app's own head is replaced, values are escaped, and structured data ca
   assert.ok(html.indexOf("</head>") > html.indexOf("application/ld+json"), "everything goes inside the head");
   assert.ok(seo.injectHead(shell, seo.pageFor("/nowhere", data)).includes('name="robots" content="noindex, nofollow"'));
 });
+
+test("searchCatalog: a provider set to always-hide in Super Admin has no pages and no services", () => {
+  const { searchCatalog } = require("../src/seoPages");
+  const data = searchCatalog({
+    categories: [{ id: "home-cleaning", active: true }],
+    providers: [{ id: "real", verificationStatus: "approved" }, { id: "test", verificationStatus: "approved" }],
+    services: [{ id: "s1", providerId: "real", categoryId: "home-cleaning", status: "active" }, { id: "s2", providerId: "test", categoryId: "home-cleaning", status: "active" }],
+    hidden: new Set(["test"]),
+  });
+  assert.deepEqual(data.services.map((s) => s.id), ["s1"]);
+  assert.deepEqual(data.providers.map((p) => p.id), ["real"]);
+});

@@ -96,14 +96,23 @@ function ratingOf(list) {
 // What has a page for search engines: lasting facts only — an active service in a live category
 // from an approved provider. Not "bookable this minute" (working hours, online, wallet, request
 // limits): those change through the day, and a page that keeps flipping to 404 drops out of Google.
-function searchCatalog({ categories = [], services = [], providers = [] } = {}) {
+// hidden: providers a Super Admin set to "always hide" (a lasting decision, e.g. a test account).
+function searchCatalog({ categories = [], services = [], providers = [], hidden = new Set() } = {}) {
   const liveCategories = new Set(categories.filter((c) => c.active).map((c) => c.id));
-  const approved = new Set(providers.filter((p) => (p.verificationStatus || "pending") === "approved" && p.verified !== false).map((p) => p.id));
+  const approved = new Set(
+    providers.filter((p) => (p.verificationStatus || "pending") === "approved" && p.verified !== false && !hidden.has(p.id)).map((p) => p.id)
+  );
   return {
     categories,
-    providers,
+    providers: providers.filter((p) => !hidden.has(p.id)),
     services: services.filter((s) => s.status === "active" && liveCategories.has(s.categoryId) && approved.has(s.providerId)),
   };
+}
+
+// Providers currently set to "always hide" in Super Admin (store.setVisibilityOverride).
+function hiddenProviderIds(now = Date.now()) {
+  const rows = require("./jsonStore").readAll("providerVisibilityOverrides");
+  return new Set(rows.filter((o) => o.mode === "hide" && (!o.until || Date.parse(o.until) > now)).map((o) => o.id));
 }
 
 const notFound = (path) => ({ status: 404, title: titleOf("Page not found"), description: DEFAULT_DESCRIPTION, canonical: null, noindex: true, jsonLd: [], path });
@@ -384,7 +393,12 @@ async function loadSearchData(store) {
     store.listProviders(),
     require("./reviewRequests").recentReviews(store),
   ]);
-  return { ...searchCatalog({ categories, services, providers }), tree: require("./locations").tree(), reviews };
+  const hidden = hiddenProviderIds();
+  return {
+    ...searchCatalog({ categories, services, providers, hidden }),
+    tree: require("./locations").tree(),
+    reviews: (reviews || []).filter((r) => !hidden.has(r.providerId)),
+  };
 }
 
 // ---------------------------------------------------------------- HTML
