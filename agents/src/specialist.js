@@ -16,6 +16,9 @@ const { complete, untrusted, BudgetExceeded } = require("./claude");
 const socialPosts = require("./socialPosts");
 
 const MAX_PER_RUN = 2;
+// Room for the draft (~1,000 words) on top of Claude's thinking room (config.anthropic.thinkingRoom).
+// At Haiku 5.5 prices a full-length draft costs well under a cent.
+const MAX_ANSWER_TOKENS = 4000;
 
 // Pure: which tasks need work now. Exported for tests.
 function tasksToWork(tasks, failed = {}) {
@@ -36,7 +39,7 @@ function promptFor(task, context) {
     untrusted("company_data", JSON.stringify(context || {})),
     untrusted("task", `Title: ${task.title}\nPriority: ${task.priority}\n\n${task.description || "(no description)"}`),
     thread ? `Conversation on this task so far (latest last):\n${untrusted("conversation", thread)}` : "",
-    "Write the deliverable now. Start with a one-line summary, then the content. If feedback was given, revise accordingly and say what changed. Keep it practical and ready to use.",
+    "Write the deliverable now. Start with a one-line summary, then the content. If feedback was given, revise accordingly and say what changed. Keep it practical and ready to use, and under about 1,000 words — if the task needs more, deliver the most important part and list what you'd cover next.",
   ].filter(Boolean).join("\n\n");
 }
 
@@ -63,7 +66,7 @@ async function tick(client, log, name = "specialist", { now = Date.now() } = {})
   for (const t of work) {
     try {
       if (t.status === "open") await client.post(`/agents/office/tasks/${encodeURIComponent(t.id)}/status`, { status: "in_progress" });
-      const draft = (await complete(client, { system, prompt: promptFor(t, office.context), maxTokens: 1800 })).slice(0, 7900);
+      const draft = (await complete(client, { system, prompt: promptFor(t, office.context), maxTokens: MAX_ANSWER_TOKENS })).slice(0, 7900);
       await client.post(`/agents/office/tasks/${encodeURIComponent(t.id)}/messages`, { text: draft });
       await client.post(`/agents/office/tasks/${encodeURIComponent(t.id)}/status`, { status: "review", result: draft });
       done++;

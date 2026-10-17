@@ -57,8 +57,9 @@ async function complete(client, { system, prompt, maxTokens = 600, model, timeou
   if (data.stop_reason === "refusal") throw new Error(`Claude declined this request${data.stop_details?.category ? ` (${data.stop_details.category})` : ""} — a person should handle it`);
   // Read text blocks by type: the answer can come after "thinking" blocks.
   const text = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+  // Checked before "no text": a long think can use up the whole limit before any answer starts.
+  if (data.stop_reason === "max_tokens") throw new Error("Claude's answer was cut off (max_tokens) — too much for one step; ask for a shorter piece or split it");
   if (!text) throw new Error("Claude returned no text");
-  if (data.stop_reason === "max_tokens") throw new Error("Claude's answer was cut off (max_tokens) — the change is too big for one step");
   return text;
 }
 
