@@ -10,10 +10,17 @@
 # It uses BuildKit (docker buildx, with network.host allowed) and only falls back to the old
 # classic builder if BuildKit can't build here — the classic builder prints a "deprecated" notice.
 #
-#   cd /tmp/homeserve-deploy && git pull && bash deploy/build-images.sh server admin-dashboard local-service-app
+#   cd /root/homeserve-deploy && git pull && bash deploy/build-images.sh server admin-dashboard local-service-app
 #   (no arguments = server, admin-dashboard, local-service-app, provider-app)
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+# Ubuntu empties /tmp on every boot: on 17 Oct 2026 a VPS restart deleted the old
+# /tmp/homeserve-deploy and its .env. Never deploy from there again.
+case "$PWD" in
+  /tmp/*) echo "This folder is in /tmp, which is wiped when the server restarts. Deploy from /root/homeserve-deploy (see deploy/recover-env.sh). Stopping."; exit 1 ;;
+esac
+[ -f .env ] || { echo "$PWD/.env is missing: deploying now would start the apps without their settings. If it was lost, run deploy/recover-env.sh first. Stopping."; exit 1; }
 
 services=("$@")
 [ ${#services[@]} -eq 0 ] && services=(server admin-dashboard local-service-app provider-app)

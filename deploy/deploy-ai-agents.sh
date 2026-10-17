@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploys the AI agents release on the VPS. Run as root from the repo checkout:
-#   cd /tmp/homeserve-deploy && git pull && bash deploy/deploy-ai-agents.sh
+#   cd /root/homeserve-deploy && git pull && bash deploy/deploy-ai-agents.sh
 #
 # What it does (safe to re-run):
 #   1. Takes a backup first (tikdum-backup, if installed).

@@ -27,7 +27,7 @@ is the safety net.
 ## Set up (once)
 
 ```bash
-cd /tmp/homeserve-deploy && git pull && bash deploy/install-backup.sh
+cd /root/homeserve-deploy && git pull && bash deploy/install-backup.sh
 ```
 
 This installs the tools (`openssl`, `rclone`), creates the encryption key
@@ -49,7 +49,7 @@ without the key the Supabase backups cannot be opened.
 creates the private `tikdum-backups` bucket if needed and runs a backup to test):
 
 ```bash
-cd /tmp/homeserve-deploy && git pull && bash deploy/enable-offsite-backup.sh
+cd /root/homeserve-deploy && git pull && bash deploy/enable-offsite-backup.sh
 ```
 
 **By hand:**
@@ -97,7 +97,7 @@ changes made since the move are only in `records.db`.
 **From a local backup**
 
 ```bash
-cd /tmp/homeserve-deploy
+cd /root/homeserve-deploy
 docker compose -p homeserve stop server
 mv /root/tikdum-data /root/tikdum-data.broken            # keep the current folder just in case
 tar -xzf /root/tikdum-backups/daily/tikdum-data-YYYYMMDD-HHMMSS.tar.gz -C /root

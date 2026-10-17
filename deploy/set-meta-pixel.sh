@@ -4,7 +4,7 @@
 # typed at a hidden prompt — never shown or saved in the shell history), checks them with Meta,
 # saves META_PIXEL_ID / META_CAPI_TOKEN / META_TEST_EVENT_CODE in .env and restarts the API.
 #
-#   cd /tmp/homeserve-deploy && git pull && bash deploy/set-meta-pixel.sh
+#   cd /root/homeserve-deploy && git pull && bash deploy/set-meta-pixel.sh
 #
 # The test event code is used to check the token (one test event); then you choose test mode (server
 # events only in Events Manager → Test events) or live. Safe to run again.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-time (safe to re-run) setup of the nightly backup on the VPS.
-#   cd /tmp/homeserve-deploy && git pull && bash deploy/install-backup.sh
+#   cd /root/homeserve-deploy && git pull && bash deploy/install-backup.sh
 set -euo pipefail
 [ "$(id -u)" = "0" ] || { echo "Run as root."; exit 1; }
 

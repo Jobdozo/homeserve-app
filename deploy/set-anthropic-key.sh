@@ -3,7 +3,7 @@
 # shown on screen or saved in the shell history — after checking with Anthropic that it works.
 # Then rebuilds and restarts the agents.
 #
-#   cd /tmp/homeserve-deploy && git pull && bash deploy/set-anthropic-key.sh
+#   cd /root/homeserve-deploy && git pull && bash deploy/set-anthropic-key.sh
 #
 # Safe to run again (e.g. with a new key): it replaces the old line.
 set -euo pipefail

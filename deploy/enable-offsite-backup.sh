@@ -2,7 +2,7 @@
 # Switches on the nightly off-server backup copy (encrypted, to Supabase Storage) using the
 # S3 keys the server already has for photos (STORAGE_S3_* in .env). No keys are printed.
 #
-#   cd /tmp/homeserve-deploy && git pull && bash deploy/enable-offsite-backup.sh
+#   cd /root/homeserve-deploy && git pull && bash deploy/enable-offsite-backup.sh
 #
 # Safe to run again: it replaces its own block in /etc/tikdum-backup.conf each time.
 set -euo pipefail

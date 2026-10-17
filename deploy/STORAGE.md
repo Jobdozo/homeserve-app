@@ -22,7 +22,7 @@ already holds the off-server backups.
    - `tikdum-private` — **Public bucket: OFF**, file size limit 15 MB.
 2. **Project Settings → Storage → S3 Connection**: create an access key (or reuse the
    one made for backups). Copy the *Access key ID* and *Secret access key*.
-3. On the VPS, add to `/tmp/homeserve-deploy/.env` (the keys go only here, never in Git):
+3. On the VPS, add to `/root/homeserve-deploy/.env` (the keys go only here, never in Git):
 
    ```
    STORAGE_S3_ENDPOINT=https://kayolbcjmmzwoxbdpjvz.storage.supabase.co/storage/v1/s3
@@ -37,7 +37,7 @@ already holds the off-server backups.
 4. Restart the server so it reads them:
 
    ```bash
-   cd /tmp/homeserve-deploy && git pull && bash deploy/build-images.sh server
+   cd /root/homeserve-deploy && git pull && bash deploy/build-images.sh server
    ```
 
 ## Check it

@@ -3,7 +3,7 @@
 # — typed at a prompt, never shown on screen or saved in the shell history — after checking with
 # the Tikdum API that the key works. Then rebuilds and restarts the agents.
 #
-#   cd /tmp/homeserve-deploy && git pull && bash deploy/set-agent-key.sh COMPLAINTS
+#   cd /root/homeserve-deploy && git pull && bash deploy/set-agent-key.sh COMPLAINTS
 #
 # Agent names: OPERATIONS REPORTING CEO COMPLAINTS SUPPORT REGISTRATION VERIFICATION DISPATCH QUALITY RETENTION FRAUD REVIEWS PAYMENTS NETWORK.
 # Safe to run again (e.g. after making a new key): it replaces the old line.

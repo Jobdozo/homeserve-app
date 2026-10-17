@@ -5,7 +5,7 @@
 # the shell history), checks with GitHub that they match and that the App is installed on the
 # repository, then saves the key where the agents read it and restarts them.
 #
-#   cd /tmp/homeserve-deploy && git pull && bash deploy/set-github-app.sh
+#   cd /root/homeserve-deploy && git pull && bash deploy/set-github-app.sh
 #
 # Safe to run again (e.g. with a new private key): it replaces the old one.
 set -euo pipefail

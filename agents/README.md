@@ -155,7 +155,7 @@ and your own token would let an agent bypass branch protection (you're on the by
 
 ### 2. Put it on the server
 ```
-cd /tmp/homeserve-deploy && git pull && bash deploy/set-github-app.sh
+cd /root/homeserve-deploy && git pull && bash deploy/set-github-app.sh
 ```
 Asks for the App ID and the `.pem` contents (pasted at a hidden prompt), checks with GitHub that they
 match and that the App is installed on the repo, saves the key as

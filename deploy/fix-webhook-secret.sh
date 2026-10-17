@@ -3,7 +3,7 @@
 # x-webhook-secret header with every incoming WhatsApp message (customer chats → Support inbox,
 # owner messages → CEO chat). Without it the API refuses every message (503).
 #
-#   cd /tmp/homeserve-deploy && git pull && bash deploy/fix-webhook-secret.sh
+#   cd /root/homeserve-deploy && git pull && bash deploy/fix-webhook-secret.sh
 #
 # What it does, never printing the secret unless it has to make a new one:
 #   - the line is there and filled in → only restarts the API;

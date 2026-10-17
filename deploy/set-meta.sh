@@ -6,7 +6,7 @@
 # checks the posting permissions, saves META_PAGE_ID / META_PAGE_TOKEN / META_IG_USER_ID in
 # .env and restarts the API. Nothing is posted.
 #
-#   cd /tmp/homeserve-deploy && git pull && bash deploy/set-meta.sh
+#   cd /root/homeserve-deploy && git pull && bash deploy/set-meta.sh
 #
 # Safe to run again (e.g. after the Page token was revoked): it replaces the old lines.
 set -euo pipefail
