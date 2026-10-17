@@ -132,12 +132,12 @@ and your own token would let an agent bypass branch protection (you're on the by
 
 ### 2. Put it on the server
 ```
-mkdir -p /root/tikdum-data/agents-secrets
-# copy the .pem there as github-app.pem (e.g. scp from your PC), then:
-chown 1000:1000 /root/tikdum-data/agents-secrets/github-app.pem && chmod 400 /root/tikdum-data/agents-secrets/github-app.pem
+cd /tmp/homeserve-deploy && git pull && bash deploy/set-github-app.sh
 ```
-In `/tmp/homeserve-deploy/.env`: `GITHUB_APP_ID=<id>` and the agents' keys:
-`AGENT_KEYS_ENGINEERING=tkag_dev...,tkag_rev...,tkag_test...,tkag_bug...`
+Asks for the App ID and the `.pem` contents (pasted at a hidden prompt), checks with GitHub that they
+match and that the App is installed on the repo, saves the key as
+`/root/tikdum-data/agents-secrets/github-app.pem` (owner 1000, mode 400) and `GITHUB_APP_ID` in `.env`,
+then restarts the agents. Each Engineering agent key: `bash deploy/set-agent-key.sh ENGINEERING` (once per agent).
 
 ### 3. Create the agents
 Admin → AI Agents → Teams → Engineering → **Add** on each role (type Engineering, role pre-picked).
