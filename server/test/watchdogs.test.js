@@ -84,3 +84,15 @@ test("fraud: self-booking, repeat pairs, refund-heavy, mass cancels and instant 
   const quiet = w.fraud({ providers, bookings, refundClaims: [], ignore: new Set(["p1", "p2"]), now: NOW });
   assert.deepEqual(quiet.map((f) => f.id.split(":")[0]), ["cancels"]);
 });
+
+test("reviewsList: rated bookings only, newest job first, test providers left out", () => {
+  const providers = [{ id: "p1", name: "Ravi" }, { id: "t", name: "ZIPCON" }];
+  const bookings = [
+    done("a", "p1", "c1", 5, 4, { review: { rating: 4, text: " Good " }, reviewed: true }),
+    done("b", "p1", "c2", 1, 2, { review: { rating: 2, text: "" }, reviewed: true }),
+    done("c", "p1", "c3", 2, 0),
+    done("d", "t", "c4", 1, 5, { review: { rating: 5 }, reviewed: true }),
+  ];
+  const list = w.reviewsList({ providers, bookings, ignore: new Set(["t"]) });
+  assert.deepEqual(list.map((r) => [r.bookingId, r.rating, r.text, r.providerName]), [["b", 2, "", "Ravi"], ["a", 4, "Good", "Ravi"]]);
+});

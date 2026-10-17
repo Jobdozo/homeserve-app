@@ -77,6 +77,14 @@ module.exports = {
     everyMs: 15 * 60000,
   },
 
+  // Reviews & Reputation (reviews.js): low-rating alerts + weekly report (AI summary).
+  reviews: {
+    key: process.env.AGENT_KEY_REVIEWS || "",
+    everyMs: num(process.env.REVIEWS_CHECK_EVERY_MIN, 10) * 60000,
+    weekdayIst: num(process.env.REVIEWS_WEEKDAY_IST, 1), // Monday
+    hourIst: num(process.env.REVIEWS_HOUR_IST, 12),
+  },
+
   // Fraud (fraud.js): hourly suspicious patterns, alerts only.
   fraud: {
     key: process.env.AGENT_KEY_FRAUD || "",

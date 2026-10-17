@@ -5,12 +5,15 @@
 #
 #   cd /tmp/homeserve-deploy && git pull && bash deploy/set-agent-key.sh COMPLAINTS
 #
-# Agent names: OPERATIONS REPORTING CEO COMPLAINTS SUPPORT REGISTRATION VERIFICATION DISPATCH QUALITY RETENTION FRAUD PAYMENTS.
+# Agent names: OPERATIONS REPORTING CEO COMPLAINTS SUPPORT REGISTRATION VERIFICATION DISPATCH QUALITY RETENTION FRAUD REVIEWS PAYMENTS.
 # Safe to run again (e.g. after making a new key): it replaces the old line.
+# SPECIALIST (Marketing, SEO, Analyst, Research …) and ENGINEERING keys share one comma-separated
+# list (AGENT_KEYS_SPECIALISTS / AGENT_KEYS_ENGINEERING): run once per agent; each run adds one key
+# and keeps the others.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ENV_FILE=.env
-NAMES="OPERATIONS REPORTING CEO COMPLAINTS SUPPORT REGISTRATION VERIFICATION DISPATCH QUALITY RETENTION FRAUD PAYMENTS"
+NAMES="OPERATIONS REPORTING CEO COMPLAINTS SUPPORT REGISTRATION VERIFICATION DISPATCH QUALITY RETENTION FRAUD REVIEWS PAYMENTS SPECIALIST ENGINEERING"
 
 NAME="$(printf %s "${1:-}" | tr '[:lower:]' '[:upper:]')"
 if [ -z "$NAME" ] || ! printf ' %s ' "$NAMES" | grep -q " $NAME "; then
@@ -40,12 +43,31 @@ case "$code" in
 esac
 
 tmp="$(mktemp)"
-grep -v "^AGENT_KEY_${NAME}=" "$ENV_FILE" > "$tmp" || true
-printf 'AGENT_KEY_%s=%s\n' "$NAME" "$KEY" >> "$tmp"
+case "$NAME" in
+  SPECIALIST|ENGINEERING)
+    VAR="AGENT_KEYS_${NAME}S"
+    OLD="$(grep "^${VAR}=" "$ENV_FILE" | tail -1 | cut -d= -f2- || true)"
+    if printf ',%s,' "$OLD" | grep -qF ",$KEY,"; then
+      LIST="$OLD"
+      echo "   (this key was already in the list)"
+    else
+      LIST="${OLD:+$OLD,}$KEY"
+    fi
+    grep -v "^${VAR}=" "$ENV_FILE" > "$tmp" || true
+    printf '%s=%s\n' "$VAR" "$LIST" >> "$tmp"
+    SAVED="${VAR} ($(printf %s "$LIST" | tr ',' '\n' | grep -c .) key(s) in the list)"
+    unset OLD LIST
+    ;;
+  *)
+    grep -v "^AGENT_KEY_${NAME}=" "$ENV_FILE" > "$tmp" || true
+    printf 'AGENT_KEY_%s=%s\n' "$NAME" "$KEY" >> "$tmp"
+    SAVED="AGENT_KEY_${NAME}"
+    ;;
+esac
 cat "$tmp" > "$ENV_FILE"
 rm -f "$tmp"
 unset KEY
-echo "== AGENT_KEY_${NAME} saved in .env (not shown)"
+echo "== ${SAVED} saved in .env (not shown)"
 
 echo "== rebuilding and restarting the agents"
 bash deploy/build-images.sh agents

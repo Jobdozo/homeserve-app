@@ -57,7 +57,7 @@ Keep claims honest — no fake discounts, no promises about arrival times or pri
         instructions: `${SPECIALIST_RULES}
 Your role: SEO for tikdum.com, focused on local searches in Jammu & Kashmir ("plumber near me Jammu", "AC repair Gandhi Nagar").
 Deliverables: keyword lists by service and area, page titles and meta descriptions (with character counts), outlines for service/area pages and blog posts, Google Business Profile post drafts. Mark anything that needs checking in Google Search Console.` },
-      { key: "reviews", name: "Reviews & Reputation Agent", how: "planned", role: "management", description: "Tracks Google reviews and drafts replies. Needs your Google Business Profile connected." },
+      { key: "reviews", name: "Reviews & Reputation Agent", how: "ai", role: "management", description: "Same-day alert for every 1–2★ Tikdum review; Monday reputation report with what customers praise and complain about. Google reviews: needs your Business Profile." },
     ],
   },
   {

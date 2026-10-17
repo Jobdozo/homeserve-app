@@ -184,4 +184,28 @@ function fraud({ bookings = [], providers = [], refundClaims = [], ignore = new 
   return flags.sort((a, b) => rank[a.severity] - rank[b.severity]);
 }
 
-module.exports = { providerQuality, warningText, retention, usableOffer, SEGMENTS, fraud };
+// ---------------------------------------------------------------- reviews
+
+// Every rated booking, newest job first, for the Reviews & Reputation agent.
+// Reviews carry no date of their own; the agent notices new ones by booking id.
+function reviewsList({ bookings = [], providers = [], ignore = new Set() }) {
+  const providerById = new Map(providers.map((p) => [p.id, p]));
+  return bookings
+    .filter((b) => b.reviewed && b.review?.rating && !ignore.has(b.providerId))
+    .map((b) => ({
+      bookingId: b.id,
+      ref: b.ref || b.id,
+      rating: Number(b.review.rating),
+      text: String(b.review.text || "").trim().slice(0, 600),
+      jobAt: b.statusHistory?.Completed || b.createdAt || null,
+      service: b.service?.name || "",
+      customerId: b.customerId || null,
+      customerName: b.customer?.name || "",
+      customerPhone: b.customer?.phone || "",
+      providerId: b.providerId || null,
+      providerName: providerById.get(b.providerId)?.name || "",
+    }))
+    .sort((a, b) => String(b.jobAt).localeCompare(String(a.jobAt)));
+}
+
+module.exports = { providerQuality, warningText, retention, usableOffer, SEGMENTS, fraud, reviewsList };

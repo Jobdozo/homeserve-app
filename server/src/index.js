@@ -3376,6 +3376,10 @@ app.get("/api/admin/watch/fraud", adminOnly, crm(async (req, res) => {
   const [providers, bookings] = await Promise.all([store.listProviders(), store.listBookings({})]);
   res.json(watchdogs.fraud({ providers, bookings, refundClaims: store.listRefundClaims(), ignore: testProviderIds() }));
 }));
+app.get("/api/admin/watch/reviews", adminOnly, crm(async (req, res) => {
+  const [providers, bookings] = await Promise.all([store.listProviders(), store.listBookings({})]);
+  res.json(watchdogs.reviewsList({ providers, bookings, ignore: testProviderIds() }));
+}));
 
 // ---- Live Service Provider Monitoring ----
 app.get("/api/admin/monitoring", auth.requireAuth("admin"), ah(async (req, res) => {

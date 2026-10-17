@@ -19,6 +19,7 @@ const dispatch = require("./dispatch");
 const quality = require("./quality");
 const retention = require("./retention");
 const fraud = require("./fraud");
+const reviews = require("./reviews");
 const ceo = require("./ceo");
 const specialist = require("./specialist");
 const engineering = require("./engineering");
@@ -33,6 +34,7 @@ const AGENTS = [
   { name: "dispatch", key: config.dispatch.key, everyMs: config.dispatch.everyMs, run: (c) => dispatch.tick(c, log) },
   { name: "quality", key: config.quality.key, everyMs: config.quality.everyMs, run: (c, opts) => quality.tick(c, log, opts) },
   { name: "retention", key: config.retention.key, everyMs: config.retention.everyMs, run: (c, opts) => retention.tick(c, log, opts) },
+  { name: "reviews", key: config.reviews.key, everyMs: config.reviews.everyMs, run: (c, opts) => reviews.tick(c, log, opts) },
   { name: "fraud", key: config.fraud.key, everyMs: config.fraud.everyMs, run: (c) => fraud.tick(c, log) },
   { name: "payments", key: config.payments.key, everyMs: config.payments.everyMs, run: (c) => payments.tick(c, log) },
   { name: "ceo", key: config.ceo.key, everyMs: config.ceo.everyMs, run: (c) => ceo.tick(c, log) },
@@ -66,7 +68,7 @@ async function main() {
   if (active.length === 0) {
     // Stay up idle rather than exit: under `restart: unless-stopped` an exit
     // would crash-loop until keys are added. Add keys and restart the service.
-    log.warn("worker", "No agent keys set (AGENT_KEY_OPERATIONS / _REPORTING / _COMPLAINTS / _SUPPORT / _REGISTRATION / _VERIFICATION / _DISPATCH / _QUALITY / _RETENTION / _FRAUD / _PAYMENTS / _CEO, AGENT_KEYS_SPECIALISTS, AGENT_KEYS_ENGINEERING). Create agents in Admin → AI Agents, add the keys, then restart this service. Idling.");
+    log.warn("worker", "No agent keys set (AGENT_KEY_OPERATIONS / _REPORTING / _COMPLAINTS / _SUPPORT / _REGISTRATION / _VERIFICATION / _DISPATCH / _QUALITY / _RETENTION / _FRAUD / _REVIEWS / _PAYMENTS / _CEO, AGENT_KEYS_SPECIALISTS, AGENT_KEYS_ENGINEERING). Create agents in Admin → AI Agents, add the keys, then restart this service. Idling.");
     if (once) process.exit(1);
     setInterval(() => {}, 1 << 30);
     return;

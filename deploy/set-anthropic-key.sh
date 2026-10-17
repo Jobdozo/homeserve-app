@@ -52,7 +52,7 @@ unset KEY
 echo "== key works and is saved in .env (not shown)"
 
 echo "== agents with a key in .env:"
-for name in OPERATIONS REPORTING CEO COMPLAINTS SUPPORT REGISTRATION VERIFICATION DISPATCH QUALITY RETENTION FRAUD PAYMENTS; do
+for name in OPERATIONS REPORTING CEO COMPLAINTS SUPPORT REGISTRATION VERIFICATION DISPATCH QUALITY RETENTION FRAUD REVIEWS PAYMENTS; do
   if grep -qE "^AGENT_KEY_${name}=.+" "$ENV_FILE"; then echo "   ✓ ${name}"; else echo "   – ${name} (not set up yet)"; fi
 done
 
