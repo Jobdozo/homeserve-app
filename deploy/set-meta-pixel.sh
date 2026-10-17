@@ -6,8 +6,8 @@
 #
 #   cd /tmp/homeserve-deploy && git pull && bash deploy/set-meta-pixel.sh
 #
-# With a test event code, events show up live in Events Manager → Test events (and nowhere else);
-# run this again and press Enter at that question to go live. Safe to run again.
+# The test event code is used to check the token (one test event); then you choose test mode (server
+# events only in Events Manager → Test events) or live. Safe to run again.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ENV_FILE=.env
@@ -28,7 +28,7 @@ TOKEN="$(printf %s "$TOKEN" | tr -d '[:space:]')"
 [ -n "$TOKEN" ] || { echo "   Nothing was pasted. Nothing was changed — run this again."; exit 1; }
 echo "   ✓ received (${#TOKEN} characters)"
 printf %s "$TOKEN" > "$work/token"
-printf "Test event code (Events Manager → Test events, like TEST12345), or press Enter to go live: "
+printf "Test event code (Events Manager → Test events, like TEST12345 — used to check the token; you choose test or live next): "
 IFS= read -r TEST_CODE
 TEST_CODE="$(printf %s "$TEST_CODE" | tr -d '[:space:]')"
 case "$TEST_CODE" in '' | TEST[A-Za-z0-9]*) ;; *) echo "A test code starts with TEST. Nothing was changed."; exit 1 ;; esac
@@ -66,12 +66,20 @@ else
   exit 1
 fi
 
+# Test or live: with a test code the server's events go only to Test events (they don't count for ads).
+MODE_CODE=""
+if [ -n "$TEST_CODE" ]; then
+  printf "Go live now — real sign-ups and bookings count for your ads? (y = live, Enter = stay in test mode): "
+  IFS= read -r answer
+  case "$answer" in y | Y | yes | YES) MODE_CODE="" ;; *) MODE_CODE="$TEST_CODE" ;; esac
+fi
+
 tmp="$(mktemp)"
 grep -vE '^META_(PIXEL_ID|CAPI_TOKEN|TEST_EVENT_CODE)=' "$ENV_FILE" > "$tmp" || true
 {
   printf 'META_PIXEL_ID=%s\n' "$PIXEL_ID"
   printf 'META_CAPI_TOKEN=%s\n' "$(cat "$work/token")"
-  printf 'META_TEST_EVENT_CODE=%s\n' "$TEST_CODE"
+  printf 'META_TEST_EVENT_CODE=%s\n' "$MODE_CODE"
 } >> "$tmp"
 cat "$tmp" > "$ENV_FILE"
 rm -f "$tmp"
@@ -81,9 +89,9 @@ echo "== saved in .env (the token isn't shown)"
 echo "== restarting the API"
 bash deploy/build-images.sh server
 echo
-if [ -n "$TEST_CODE" ]; then
+if [ -n "$MODE_CODE" ]; then
   echo "META ADS MEASUREMENT IS ON IN TEST MODE: open tikdum.com, look around, book something — the events"
-  echo "appear in Events Manager → Test events. Run this again without a test code to go live."
+  echo "appear in Events Manager → Test events. Run this again and answer y to go live."
 else
   echo "META ADS MEASUREMENT IS LIVE: tikdum.com page views, service views, sign-ups and bookings (website and"
   echo "app) are sent to Meta. Events Manager shows them within about 20 minutes."
