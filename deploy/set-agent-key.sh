@@ -45,15 +45,16 @@ esac
 tmp="$(mktemp)"
 case "$NAME" in
   SPECIALIST|ENGINEERING)
-    VAR="AGENT_KEYS_${NAME}S"
-    OLD="$(grep "^${VAR}=" "$ENV_FILE" | tail -1 | cut -d= -f2- || true)"
+    # Keys an earlier version of this script saved as AGENT_KEYS_ENGINEERINGS (a typo) are moved over.
+    if [ "$NAME" = SPECIALIST ]; then VAR=AGENT_KEYS_SPECIALISTS; LINES="^AGENT_KEYS_SPECIALISTS="; else VAR=AGENT_KEYS_ENGINEERING; LINES="^AGENT_KEYS_ENGINEERINGS?="; fi
+    OLD="$( { grep -E "$LINES" "$ENV_FILE" || true; } | cut -d= -f2- | tr ',' '\n' | { grep . || true; } | awk '!seen[$0]++' | paste -sd, - )"
     if printf ',%s,' "$OLD" | grep -qF ",$KEY,"; then
       LIST="$OLD"
       echo "   (this key was already in the list)"
     else
       LIST="${OLD:+$OLD,}$KEY"
     fi
-    grep -v "^${VAR}=" "$ENV_FILE" > "$tmp" || true
+    grep -vE "$LINES" "$ENV_FILE" > "$tmp" || true
     printf '%s=%s\n' "$VAR" "$LIST" >> "$tmp"
     SAVED="${VAR} ($(printf %s "$LIST" | tr ',' '\n' | grep -c .) key(s) in the list)"
     unset OLD LIST
