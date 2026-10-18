@@ -93,6 +93,8 @@ export default function NotificationsPage() {
         </form>
       </div>
 
+      <PushCampaigns />
+
       <div className="rounded-2xl bg-white p-2 shadow-card">
         <h2 className="px-2 pt-2 text-[13px] font-bold text-gray-900">Recent Broadcasts</h2>
         {history === null && <p className="py-10 text-center text-sm text-gray-400">Loading…</p>}
