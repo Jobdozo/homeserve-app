@@ -6,6 +6,7 @@ const path = require("path");
 
 process.env.AGENT_STATE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "tikdum-agent-social-"));
 process.env.ANTHROPIC_API_KEY = "test-key";
+process.env.SOCIAL_POST_DAYS_IST = "1,3,5"; // these tests use a Mon/Wed/Fri schedule (the default is every day)
 const socialPosts = require("../src/socialPosts");
 const specialist = require("../src/specialist");
 const silent = { info() {}, warn() {}, error() {} };

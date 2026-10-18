@@ -1,6 +1,6 @@
 // Facebook + Instagram posts for the Marketing Agent (a specialist whose role
 // template is "marketing"). Two ways a post starts:
-//   - on schedule: Monday, Wednesday and Friday from 10:00 IST, one post each day;
+//   - on schedule: every day from 10:00 IST, one post a day (SOCIAL_POST_DAYS_IST to change);
 //   - a task on the board titled "Post: …" (e.g. "Post: Diwali home-cleaning offer").
 // Claude writes the caption and picks a picture from Tikdum's own images; the post is
 // PROPOSED in Admin → AI Agents → Approvals with the picture, and only goes live on
