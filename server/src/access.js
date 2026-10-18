@@ -56,6 +56,8 @@ const ROLE_MIGRATIONS = [
   },
   // create: built-in roles (DEFAULT_ROLES) added after roles were first saved.
   { id: "2026-10-social", create: ["marketing"], grant: { admin: ["social.view", "social.add"] } },
+  // Marketing proposes scheduled push campaigns (an agent can only propose them: agents.policy).
+  { id: "2026-10-push", grant: { marketing: ["notifications.view", "notifications.add"] } },
 ];
 function runRoleMigrations(roles) {
   const done = new Set(jsonStore.readAll("accessMigrations").map((m) => m.id));
@@ -121,8 +123,8 @@ const DEFAULT_ROLES = [
     ],
   },
   {
-    key: "marketing", name: "Marketing Team", description: "Plans and publishes Facebook and Instagram posts; reads reports.",
-    permissions: [...all("social", ["view", "add"]), "cms.view", "reports.view", "dashboard.view", "services.view"],
+    key: "marketing", name: "Marketing Team", description: "Plans and publishes Facebook and Instagram posts and push notification campaigns; reads reports.",
+    permissions: [...all("social", ["view", "add"]), ...all("notifications", ["view", "add"]), "cms.view", "reports.view", "dashboard.view", "services.view"],
   },
 ];
 
@@ -363,6 +365,7 @@ const RULES = [
   [/^\/admin\/(banners|home-sections|offers)(\/|$)/, (m) => `cms.${byMethod(m)}`],
   [/^\/admin\/locations(\/|$)/, (m) => `locations.${byMethod(m)}`],
   [/^\/admin\/notifications/, (m) => (m === "GET" ? "notifications.view" : "notifications.add")],
+  [/^\/admin\/push-campaigns(\/|$)/, (m) => (m === "GET" ? "notifications.view" : "notifications.add")],
   [/^\/admin\/refund-claims/, (m, b) => (m === "GET" ? "complaints.view" : `complaints.${decisionAction(b?.status)}`)],
   [/^\/admin\/complaint-stages/, (m) => (m === "GET" ? "complaints.view" : "complaints.manage")],
   [/^\/admin\/staff$/, () => "complaints.view"],

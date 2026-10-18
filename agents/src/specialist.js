@@ -10,10 +10,12 @@
 // It never publishes, sends, or changes anything else; a person reviews every
 // draft and marks the task done.
 // The Marketing Agent (role template "marketing") also proposes Facebook/Instagram
-// posts: on schedule and for tasks titled "Post: …" (socialPosts.js).
+// posts: on schedule and for tasks titled "Post: …" (socialPosts.js), and scheduled
+// push notification campaigns for tasks titled "Push: …" (pushPlans.js).
 const state = require("./state");
 const { complete, untrusted, BudgetExceeded } = require("./claude");
 const socialPosts = require("./socialPosts");
+const pushPlans = require("./pushPlans");
 
 const MAX_PER_RUN = 2;
 // Room for the draft (~1,000 words) on top of Claude's thinking room (config.anthropic.thinkingRoom).
@@ -54,10 +56,14 @@ async function tick(client, log, name = "specialist", { now = Date.now() } = {})
   }
   const marketing = st.template === "marketing";
   const posted = marketing ? await socialPosts.run(client, log, { st, office, now }) : 0;
-  const work = tasksToWork(marketing && st.socialConnected ? office.tasks.filter((t) => !socialPosts.isPostTask(t)) : office.tasks, st.failed);
+  const pushed = marketing ? await pushPlans.run(client, log, { st, office, now }) : 0;
+  const mine = marketing ? office.tasks.filter((t) => !pushPlans.isPushTask(t) && !(st.socialConnected && socialPosts.isPostTask(t))) : office.tasks;
+  const work = tasksToWork(mine, st.failed);
+  const proposals = [posted && `${posted} social post(s) proposed for approval`, pushed && `${pushed} push campaign(s) proposed for approval`];
   if (!work.length) {
     state.save(`specialist-${name}`, st);
-    return posted ? `${posted} social post(s) proposed for approval` : null;
+    const parts = proposals.filter(Boolean);
+    return parts.length ? parts.join(", ") : null;
   }
   const self = await client.get("/agents/self");
   if (self.kind !== "specialist") throw new Error("This agent isn't set as a Specialist (Admin → AI Agents → Edit → Type)");
@@ -82,7 +88,7 @@ async function tick(client, log, name = "specialist", { now = Date.now() } = {})
   }
   for (const [id] of Object.entries(st.failed)) if (!office.tasks.some((t) => t.id === id)) delete st.failed[id];
   state.save(`specialist-${name}`, st);
-  const parts = [done && `${done} task(s) drafted and sent for review`, posted && `${posted} social post(s) proposed for approval`].filter(Boolean);
+  const parts = [done && `${done} task(s) drafted and sent for review`, ...proposals].filter(Boolean);
   return parts.length ? parts.join(", ") : null;
 }
 

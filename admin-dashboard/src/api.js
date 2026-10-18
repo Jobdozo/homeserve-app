@@ -293,6 +293,9 @@ export const api = {
     request(`/admin/service-catalog/${id}/apply`, { method: "POST", body: JSON.stringify({ providerId, ...overrides }) }),
   broadcastNotification: (data) =>
     request("/admin/notifications/broadcast", { method: "POST", body: JSON.stringify(data) }),
+  listPushCampaigns: () => request("/admin/push-campaigns"),
+  createPushCampaign: (data) => request("/admin/push-campaigns", { method: "POST", body: JSON.stringify(data) }),
+  cancelPushCampaign: (id) => request(`/admin/push-campaigns/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
 
   listLocations: () => request("/admin/locations"),
   createCity: (data) => request("/admin/locations/cities", { method: "POST", body: JSON.stringify(data) }),

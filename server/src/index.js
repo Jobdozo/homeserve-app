@@ -3438,6 +3438,38 @@ app.post("/api/admin/social/posts", adminOnly, crm(async (req, res) => {
   res.status(201).json(row);
 }));
 
+// ---- Scheduled push campaigns (pushCampaigns.js) ----
+// Creating one is "notifications.add": a person, or a person approving a Marketing
+// Agent proposal (agents themselves are refused in agents.policy). Sent every minute.
+const pushCampaigns = require("./pushCampaigns");
+app.get("/api/admin/push-campaigns", adminOnly, crm(async (req, res) => res.json(pushCampaigns.list(Number(req.query.limit) || 30))));
+app.post("/api/admin/push-campaigns", adminOnly, crm(async (req, res) => {
+  const c = pushCampaigns.create(req.body || {}, actorOf(req));
+  await store.logActivity("notification", `Push campaign "${c.name}" scheduled by ${actorOf(req)}: ${c.sends.length} notifications at ${c.times.join(", ")} IST from ${c.startDate}`).catch(() => {});
+  res.status(201).json(c);
+}));
+app.post("/api/admin/push-campaigns/:id/cancel", adminOnly, crm(async (req, res) => {
+  const c = pushCampaigns.cancel(req.params.id, actorOf(req));
+  await store.logActivity("notification", `Push campaign "${c.name}" stopped by ${actorOf(req)}`).catch(() => {});
+  res.json(c);
+}));
+async function sendCampaignPush(title, message) {
+  const ids = await store.listCustomerIds();
+  for (const id of ids) await store.addNotification({ recipientType: "customer", recipientId: id, type: "announcement", title, message });
+  return ids.length;
+}
+setInterval(() => {
+  pushCampaigns
+    .tick(sendCampaignPush)
+    .then((done) => {
+      for (const d of done) {
+        const text = d.skipped ? `Scheduled push "${d.title}" (${d.campaign}) skipped: the server was down at send time` : `Scheduled push "${d.title}" (${d.campaign}) sent to ${d.reached} customer(s)`;
+        store.logActivity("notification", text).catch(() => {});
+      }
+    })
+    .catch((e) => console.error("push campaigns tick failed:", e));
+}, 60 * 1000).unref();
+
 // ---- Live Service Provider Monitoring ----
 app.get("/api/admin/monitoring", auth.requireAuth("admin"), ah(async (req, res) => {
   res.json(await monitoring.snapshot(req.query));

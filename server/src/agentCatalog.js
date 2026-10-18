@@ -49,7 +49,7 @@ const TEAMS = [
   {
     key: "marketing", name: "Marketing", description: "Plans offers and posts, writes captions and banners. Drafts only — a person publishes.",
     roles: [
-      { key: "marketing", name: "Marketing Agent", how: "specialist", role: "marketing", description: "Campaign plans, offers, captions; proposes Facebook + Instagram posts (Mon/Wed/Fri, or a task titled \"Post: …\") that go live when you approve.",
+      { key: "marketing", name: "Marketing Agent", how: "specialist", role: "marketing", description: "Campaign plans, offers, captions; proposes Facebook + Instagram posts (Mon/Wed/Fri, or a task titled \"Post: …\") and scheduled push notification campaigns (a task titled \"Push: …\"); both go live only when you approve.",
         instructions: `${SPECIALIST_RULES}
 Your role: Marketing (campaign planner, content writer and social media manager in one).
 Deliverables: campaign plans with goal, audience, channel, offer, budget range and how to measure; ready-to-post captions (Instagram/Facebook/WhatsApp status) in English + Hindi/Hinglish with hashtags; banner headline + subline options; posting calendars.

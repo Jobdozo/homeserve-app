@@ -58,6 +58,7 @@ const PROPOSABLE = [
   ["notification.broadcast", "POST", /^\/admin\/notifications\/broadcast$/],
   ["booking.assign", "POST", /^\/admin\/bookings\/[A-Za-z0-9_-]+\/assign$/],
   ["social.post", "POST", /^\/admin\/social\/posts$/],
+  ["push.campaign", "POST", /^\/admin\/push-campaigns$/],
 ];
 
 // ---- config (global kill switch + what the support agent may tell customers) ----
@@ -290,6 +291,9 @@ function policy(req, admin, path) {
     if (recent.length >= NOTIFY_PER_HOUR) return { status: 429, error: "Hourly notification limit reached for this agent" };
     recent.push(now);
     notifyLog.set(admin.agentId, recent);
+  }
+  if (req.method === "POST" && /^\/admin\/push-campaigns(\/|$)/.test(path)) {
+    return { status: 403, error: "AI agents can't start or stop push campaigns — propose one for approval instead" };
   }
   if (req.method === "POST" && /^\/admin\/complaints\/[^/]+\/status$/.test(path) && ["resolved", "closed"].includes(body.status)) {
     return { status: 403, error: "AI agents can't resolve or close complaints — propose it for approval instead" };
