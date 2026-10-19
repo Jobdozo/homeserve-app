@@ -95,6 +95,7 @@ rt.attach(io, { forProvider: (b) => maskCompleted(b), forCustomer: (b) => hideCo
 // optimise for real bookings. Jobs of providers tagged "test" (staff testing) are left out.
 const metaEvents = require("./metaEvents");
 const repeatBookings = require("./repeatBookings");
+const pushPictures = require("./pushPictures");
 const realBookings = (list) => {
   const tests = testProviderIds();
   const real = list.filter((b) => b && !tests.has(b.providerId));
@@ -1408,6 +1409,7 @@ app.post("/api/admin/notifications/broadcast", auth.requireAuth("admin"), ah(asy
   if (!["customers", "providers", "single", "customer-list"].includes(audience) || !title || !message) {
     return res.status(400).json({ error: "audience (customers|providers|single|customer-list), title and message are required" });
   }
+  const image = pushPictures.clean(req.body.image); // optional big picture on phones; 400 if it isn't ours
   let recipientIds = [];
   let recipientType;
   if (audience === "customer-list") {
@@ -1432,10 +1434,17 @@ app.post("/api/admin/notifications/broadcast", auth.requireAuth("admin"), ah(asy
     recipientIds = [id];
   }
   for (const id of recipientIds) {
-    await store.addNotification({ recipientType, recipientId: id, type: "announcement", title, message });
+    await store.addNotification({ recipientType, recipientId: id, type: "announcement", title, message, image });
   }
-  await store.logActivity("notification", `Admin broadcast "${title}" to ${recipientIds.length} ${recipientType}(s)`);
+  await store.logActivity("notification", `Admin broadcast "${title}"${image ? " (with picture)" : ""} to ${recipientIds.length} ${recipientType}(s)`);
   res.status(201).json({ sent: recipientIds.length });
+}));
+
+// A picture for a broadcast or push campaign: re-saved as a 1024×512 banner (pushPictures.js).
+app.post("/api/admin/notifications/picture", auth.requireAuth("admin"), uploads.uploadAsIs.single("file"), ah(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Choose a picture to upload" });
+  const image = await pushPictures.makeBanner(req.file);
+  res.status(201).json({ image, url: pushPictures.abs(image) });
 }));
 
 // ---- banners (admin-managed promo carousel on the customer app home screen) ----
@@ -3515,9 +3524,9 @@ app.post("/api/admin/push-campaigns/:id/cancel", adminOnly, crm(async (req, res)
   await store.logActivity("notification", `Push campaign "${c.name}" stopped by ${actorOf(req)}`).catch(() => {});
   res.json(c);
 }));
-async function sendCampaignPush(title, message) {
+async function sendCampaignPush(title, message, image) {
   const ids = await store.listCustomerIds();
-  for (const id of ids) await store.addNotification({ recipientType: "customer", recipientId: id, type: "announcement", title, message });
+  for (const id of ids) await store.addNotification({ recipientType: "customer", recipientId: id, type: "announcement", title, message, image });
   return ids.length;
 }
 setInterval(() => {

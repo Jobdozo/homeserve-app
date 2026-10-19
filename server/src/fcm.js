@@ -42,12 +42,24 @@ function toStringData(payload) {
 // itself show those while the app is in the background (no app code runs).
 // Never use it for the ring: that would bypass the full-screen ringing
 // notification, which only works through onMessageReceived.
+//
+// A notification with a picture (data.image, pushPictures.js) goes the same way for customers
+// too: Android shows the big picture under the text while the app is closed or in the
+// background, with no app code involved, so it works on every customer app version. With the
+// app open on screen, its own TikdumMessagingService shows the text as before. Customer
+// notifications without a picture stay data-only, handled by that service.
 const PROVIDER_UPDATES_CHANNEL = "tikdum_updates"; // created by the provider app from 3.21; older ones fall back to the default channel
+const CUSTOMER_UPDATES_CHANNEL = "tikdum_customer_updates"; // the customer app's channel (TikdumMessagingService)
 function displayFor(role, data) {
-  if (role !== "provider" || data.type === "booking:created" || !data.title) return null;
+  if (!data.title || data.type === "booking:created") return null;
+  const image = data.image ? String(data.image) : null;
+  let android;
+  if (role === "provider") android = { channelId: PROVIDER_UPDATES_CHANNEL, icon: "ic_launcher_foreground", color: "#634AE0" };
+  else if (role === "customer" && image) android = { channelId: CUSTOMER_UPDATES_CHANNEL, icon: "ic_stat_tikdum", color: "#634AE0" };
+  else return null;
   return {
-    notification: { title: String(data.title).slice(0, 200), body: String(data.body || "").slice(0, 1000) },
-    android: { notification: { channelId: PROVIDER_UPDATES_CHANNEL, icon: "ic_launcher_foreground", color: "#634AE0" } },
+    notification: { title: String(data.title).slice(0, 200), body: String(data.body || "").slice(0, 1000), ...(image ? { imageUrl: image } : {}) },
+    android: { notification: { ...android, ...(image ? { imageUrl: image } : {}) } },
   };
 }
 

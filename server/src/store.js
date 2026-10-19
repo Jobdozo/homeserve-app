@@ -4,6 +4,7 @@ const accounting = require("./accounting");
 const subcategories = require("./subcategories");
 const push = require("./push");
 const fcm = require("./fcm");
+const pushPictures = require("./pushPictures");
 const taxIds = require("./taxIds");
 const serviceOptions = require("./serviceOptions");
 const orderExtras = require("./orderExtras");
@@ -3248,7 +3249,8 @@ function onBookingCompleted(listener) {
 // otherwise, which is exactly the bug this fixes: the socket event this
 // function already fired only reaches a tab that's currently open — a
 // backgrounded or closed app never learns about it without a real push.
-async function addNotification({ recipientType, recipientId, type, title, message, bookingId, skipPush = false }) {
+// image: a push picture path (pushPictures.js) — shown as the big banner on phones and in Chrome.
+async function addNotification({ recipientType, recipientId, type, title, message, bookingId, image, skipPush = false }) {
   const { notification_insert } = await mutate(
     `mutation($recipientType: String!, $recipientId: UUID!, $type: String!, $title: String!, $message: String!, $bookingId: UUID) {
       notification_insert(data: {
@@ -3271,15 +3273,16 @@ async function addNotification({ recipientType, recipientId, type, title, messag
   };
   notificationListeners.forEach((listener) => listener(notification));
   if (!skipPush) {
+    const picture = pushPictures.abs(image);
     push
-      .sendPush(recipientType, recipientId, { title, body: message, type, bookingId: bookingId || null })
+      .sendPush(recipientType, recipientId, { title, body: message, type, bookingId: bookingId || null, ...(picture ? { image: picture } : {}) })
       .catch((e) => console.error("Push send failed for notification", notification.id, e));
     // Separate channel from push.js — this is what the native customer app
     // listens on (see local-service-app/android's TikdumMessagingService).
     // For providers, fcm.js adds a visible notification block (their app
     // only handles the booking ring itself; see fcm.displayFor).
     fcm
-      .sendToDevices(recipientType, recipientId, { title, body: message, type, bookingId: bookingId || null })
+      .sendToDevices(recipientType, recipientId, { title, body: message, type, bookingId: bookingId || null, ...(picture ? { image: picture } : {}) })
       .catch((e) => console.error("FCM send failed for notification", notification.id, e));
   }
   return notification;

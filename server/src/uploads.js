@@ -123,6 +123,8 @@ const optimised = (instance, opts) => ({
   ],
 });
 const upload = optimised(uploadRaw, { thumb: true });
+// Kept exactly as sent, for a route that re-saves the picture itself (pushPictures.js).
+const uploadAsIs = { single: (field) => uploadRaw.single(field) };
 const uploadPrivate = optimised(uploadPrivateRaw, { thumb: false });
 const uploadEvidence = optimised(uploadEvidenceRaw, { thumb: false });
 
@@ -328,4 +330,4 @@ function startCloudSync() {
   setInterval(run, 60 * 1000).unref();
 }
 
-module.exports = { upload, uploadPrivate, uploadEvidence, optimiseFile, makeMissingThumbs, thumbName, UPLOADS_DIR, PRIVATE_PREFIX, markPrivate, privateNames, syncUploads, serveUpload, removeFile, cloudStatus, startCloudSync, nameOf };
+module.exports = { upload, uploadAsIs, uploadPrivate, uploadEvidence, optimiseFile, makeMissingThumbs, thumbName, UPLOADS_DIR, PRIVATE_PREFIX, markPrivate, privateNames, syncUploads, serveUpload, removeFile, cloudStatus, startCloudSync, nameOf };

@@ -12,6 +12,7 @@
 //     never sent late at an odd hour.
 const crypto = require("crypto");
 const jsonStore = require("./jsonStore");
+const pushPictures = require("./pushPictures");
 
 const COLL = "pushCampaigns";
 const LIMITS = {
@@ -43,8 +44,18 @@ function plan(input, { now = Date.now(), others = [] } = {}) {
   if (!name) throw fail(400, "Give the campaign a name");
   if ((body.audience || "customers") !== "customers") throw fail(400, "Campaigns can only go to all customers for now");
 
-  const messages = (Array.isArray(body.messages) ? body.messages : []).map((m) => ({ title: clean(m?.title, LIMITS.titleMax), message: clean(m?.message, LIMITS.messageMax) }));
-  if (!messages.length || messages.length > LIMITS.maxMessages) throw fail(400, `A campaign needs 1–${LIMITS.maxMessages} messages`);
+  const raw = Array.isArray(body.messages) ? body.messages : [];
+  if (!raw.length || raw.length > LIMITS.maxMessages) throw fail(400, `A campaign needs 1–${LIMITS.maxMessages} messages`);
+  // image: an optional picture (pushPictures.js), shown as the big banner on phones.
+  const messages = raw.map((m, i) => {
+    let image;
+    try {
+      image = pushPictures.clean(m?.image);
+    } catch (e) {
+      throw fail(400, `Message ${i + 1}: ${e.message}`);
+    }
+    return { title: clean(m?.title, LIMITS.titleMax), message: clean(m?.message, LIMITS.messageMax), ...(image ? { image } : {}) };
+  });
   const bad = messages.findIndex((m) => !m.title || !m.message);
   if (bad >= 0) throw fail(400, `Message ${bad + 1} needs a title and a message`);
 
@@ -75,7 +86,7 @@ function plan(input, { now = Date.now(), others = [] } = {}) {
       const at = atOf(day, time);
       if (at <= now + 5 * 60 * 1000) continue;
       const msg = messages[sends.length % messages.length];
-      sends.push({ at: new Date(at).toISOString(), title: msg.title, message: msg.message, status: "scheduled" });
+      sends.push({ at: new Date(at).toISOString(), title: msg.title, message: msg.message, ...(msg.image ? { image: msg.image } : {}), status: "scheduled" });
     }
   }
   if (!sends.length) throw fail(400, "Every send time is already in the past — pick a later start date");
@@ -141,7 +152,7 @@ function due(rows, now = Date.now()) {
 }
 
 let running = false;
-// Called every minute. sendToAll(title, message) -> number of customers reached.
+// Called every minute. sendToAll(title, message, image) -> number of customers reached.
 async function tick(sendToAll, { now = Date.now(), log = console } = {}) {
   if (running) return [];
   running = true;
@@ -164,7 +175,7 @@ async function tick(sendToAll, { now = Date.now(), log = console } = {}) {
       }
       mark({ status: "sending" }); // so an overlapping tick can't send it twice
       try {
-        const reached = await sendToAll(s.title, s.message);
+        const reached = await sendToAll(s.title, s.message, s.image || null);
         mark({ status: "sent", sentAt: new Date().toISOString(), reached });
         done.push({ campaign: c.name, title: s.title, reached });
       } catch (e) {

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
 import PushCampaigns from "../components/PushCampaigns";
+import PushPicturePicker from "../components/PushPicturePicker";
 
 const inputCls =
   "w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-[13px] text-gray-800 outline-none focus:border-brand";
@@ -17,6 +18,7 @@ export default function NotificationsPage() {
   const [audience, setAudience] = useState("customers");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
+  const [image, setImage] = useState(null);
   const [sending, setSending] = useState(false);
   const [history, setHistory] = useState(null);
 
@@ -36,9 +38,10 @@ export default function NotificationsPage() {
     if (!title.trim() || !message.trim() || sending) return;
     setSending(true);
     try {
-      await sendBroadcastNotification({ audience, title: title.trim(), message: message.trim() });
+      await sendBroadcastNotification({ audience, title: title.trim(), message: message.trim(), ...(image ? { image } : {}) });
       setTitle("");
       setMessage("");
+      setImage(null);
       refresh();
     } catch (err) {
       showToast(err.message || "Failed to send notification");
@@ -82,6 +85,12 @@ export default function NotificationsPage() {
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Get 20% off all AC services this weekend."
             />
+          </div>
+          <div>
+            <label className={labelCls}>
+              Picture <span className="font-normal text-gray-400">(optional — shown big on phones)</span>
+            </label>
+            <PushPicturePicker value={image} onChange={setImage} />
           </div>
           <button
             type="submit"

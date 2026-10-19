@@ -52,6 +52,20 @@ async function uploadComplaintEvidence(id, file, note) {
   return data;
 }
 
+// A push notification picture: the server re-saves it as a 1024×512 banner -> { image, url }.
+async function uploadPushPicture(file) {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(`${API_BASE}/admin/notifications/picture`, {
+    method: "POST",
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    body,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Upload failed: ${res.status}`);
+  return data;
+}
+
 // Category banners and tile photos go up as multipart too.
 async function uploadCategoryBanner(id, file, kind = "banner") {
   const body = new FormData();
@@ -291,6 +305,7 @@ export const api = {
   deleteServiceCatalogItem: (id) => request(`/admin/service-catalog/${id}`, { method: "DELETE" }),
   applyServiceCatalogItem: (id, providerId, overrides) =>
     request(`/admin/service-catalog/${id}/apply`, { method: "POST", body: JSON.stringify({ providerId, ...overrides }) }),
+  uploadPushPicture,
   broadcastNotification: (data) =>
     request("/admin/notifications/broadcast", { method: "POST", body: JSON.stringify(data) }),
   listPushCampaigns: () => request("/admin/push-campaigns"),

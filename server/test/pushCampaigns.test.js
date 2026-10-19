@@ -92,3 +92,20 @@ test("access: viewing needs notifications.view, creating notifications.add; agen
   const blocked = agents.policy({ method: "POST", body: {} }, { agentId: "a1" }, "/admin/push-campaigns");
   assert.equal(blocked.status, 403);
 });
+
+test("pictures: each message can carry one of Tikdum's pictures, sent with every send of it", async () => {
+  const withPic = [{ ...msgs[0], image: "/push-banners/home-cleaning.jpg" }, msgs[1]];
+  const p = pc.plan({ ...base, messages: withPic, days: 1 }, { now: NOW });
+  assert.equal(p.messages[0].image, "/push-banners/home-cleaning.jpg");
+  assert.equal(p.messages[1].image, undefined);
+  assert.deepEqual(p.sends.map((s) => s.image || null), ["/push-banners/home-cleaning.jpg", null, "/push-banners/home-cleaning.jpg", null]);
+  assert.throws(() => pc.plan({ ...base, messages: [{ ...msgs[0], image: "https://elsewhere.example/a.jpg" }] }, { now: NOW }), /Message 1: Use a picture/);
+  const c = pc.create({ ...base, name: "With pictures", messages: withPic, times: ["10:00"], days: 1, startDate: "2026-10-26" }, "Owner", NOW);
+  const got = [];
+  await pc.tick(async (title, message, image) => {
+    got.push([title, image]);
+    return 1;
+  }, { now: Date.parse("2026-10-26T10:00:30+05:30") });
+  assert.deepEqual(got, [["🏡 A clean home", "/push-banners/home-cleaning.jpg"]]);
+  pc.cancel(c.id, "Owner");
+});

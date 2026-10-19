@@ -64,6 +64,8 @@ self.addEventListener("push", (event) => {
         icon: "/pwa-192.png",
         badge: "/pwa-192.png",
         vibrate: [200, 100, 200],
+        // Offers and announcements can carry a wide banner (Chrome on Android/desktop shows it).
+        ...(data.image ? { image: data.image } : {}),
         data: { bookingId: data.bookingId, type: data.type },
       });
     })()

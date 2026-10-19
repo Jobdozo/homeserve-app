@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
+import PushPicturePicker, { pictureUrl } from "./PushPicturePicker";
 
 // Scheduled push notification campaigns (server/src/pushCampaigns.js): the server sends
 // each message to all customers at its time. Created here, or by approving a Marketing
@@ -37,8 +38,10 @@ function NewCampaign({ onCreated }) {
   const [days, setDays] = useState(7);
   const [times, setTimes] = useState(["09:00", "12:00", "15:00", "18:00"]);
   const [text, setText] = useState("");
+  const [pictures, setPictures] = useState([]); // picture path per message line (or null)
   const [saving, setSaving] = useState(false);
   const messages = parseMessages(text);
+  const setPicture = (i, path) => setPictures((cur) => Object.assign([...cur], { [i]: path }));
   const incomplete = messages.some((m) => !m.title || !m.message);
 
   const toggle = (t) => setTimes((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t].sort()));
@@ -46,11 +49,13 @@ function NewCampaign({ onCreated }) {
     e.preventDefault();
     setSaving(true);
     try {
-      await api.createPushCampaign({ name: name.trim(), startDate, days: Number(days), times, messages });
+      const withPictures = messages.map((m, i) => (pictures[i] ? { ...m, image: pictures[i] } : m));
+      await api.createPushCampaign({ name: name.trim(), startDate, days: Number(days), times, messages: withPictures });
       showToast("Push campaign scheduled");
       setOpen(false);
       setName("");
       setText("");
+      setPictures([]);
       onCreated();
     } catch (err) {
       showToast(err.message || "Couldn't schedule the campaign");
@@ -111,6 +116,23 @@ function NewCampaign({ onCreated }) {
           {incomplete && <span className="text-red-600"> Every line needs a title, a "|" and a message.</span>}
         </p>
       </div>
+      {messages.length > 0 && (
+        <div>
+          <label className={labelCls}>
+            Pictures <span className="font-normal text-gray-400">(optional — shown big on phones)</span>
+          </label>
+          <div className="space-y-2.5">
+            {messages.map((m, i) => (
+              <div key={i} className="rounded-xl border border-gray-100 p-2.5">
+                <p className="mb-1.5 truncate text-[12px] text-gray-700">
+                  <span className="font-semibold">{i + 1}.</span> {m.title || "(no title yet)"}
+                </p>
+                <PushPicturePicker compact value={pictures[i] || null} onChange={(p) => setPicture(i, p)} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="flex gap-2">
         <button
           type="submit"
@@ -176,6 +198,7 @@ function Campaign({ c, onChange }) {
           {c.messages.map((m, i) => (
             <li key={i}>
               <span className="font-semibold">{m.title}</span> — {m.message}
+              {m.image && <img src={pictureUrl(m.image)} alt="" className="mt-1 w-40 rounded-md border border-gray-100" loading="lazy" />}
             </li>
           ))}
         </ol>
