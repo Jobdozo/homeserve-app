@@ -88,6 +88,7 @@ export default function CartScreen() {
   const [forSomeone, setForSomeone] = useState(false);
   const [contact, setContact] = useState({ name: "", phone: "" });
   const [otherDate, setOtherDate] = useState(false);
+  const [repeatAsk, setRepeatAsk] = useState(null); // { question, repeats } from the server
 
   const isFirstOrder = bookings.length === 0;
 
@@ -225,9 +226,11 @@ export default function CartScreen() {
   const unavailableIds = new Set(unavailable.map((l) => l.service.id));
   const contactOk = !forSomeone || (contact.name.trim() && /^[6-9]\d{9}$/.test(contact.phone.replace(/\D/g, "").slice(-10)));
 
-  const handleCheckout = async () => {
+  // confirmRepeat: the customer answered "Book again" to the repeat-booking question below.
+  const placeOrder = async (confirmRepeat = false) => {
     if (submitting || lines.length === 0 || !bookingAddress || unavailable.length > 0 || checkingAvailability || !contactOk || !timeOk) return;
     setSubmitting(true);
+    setRepeatAsk(null);
     try {
       const created = await checkout(bookingAddress, {
         referralCode: appliedReferral?.code,
@@ -235,13 +238,17 @@ export default function CartScreen() {
         serviceIds: lines.map((l) => l.service.id),
         note: note.trim(),
         contact: forSomeone ? { name: contact.name.trim(), phone: contact.phone } : undefined,
+        confirmRepeat,
       });
       navigate(created[0] ? `/booking/${created[0].id}` : "/bookings", { replace: true, state: { orderId: created[0]?.orderId, justBooked: true } });
     } catch (e) {
-      showToast(e.message || "Something went wrong. Please try again.");
+      // The same service was booked within the hour: ask before booking it again.
+      if (e.code === "repeat_booking" && e.data?.question) setRepeatAsk(e.data);
+      else showToast(e.message || "Something went wrong. Please try again.");
       setSubmitting(false);
     }
   };
+  const handleCheckout = () => placeOrder(false);
 
   // next 7 days as chips; anything later through "Another date"
   const days = useMemo(() => {
@@ -761,6 +768,27 @@ export default function CartScreen() {
             }}
           />
         </Suspense>
+      )}
+
+      {repeatAsk && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={(e) => e.target === e.currentTarget && setRepeatAsk(null)}>
+          <div className="w-full max-w-md rounded-t-3xl bg-white p-5 sm:rounded-3xl" role="dialog" aria-modal="true" aria-labelledby="repeat-title">
+            <h2 id="repeat-title" className="text-[16px] font-bold text-ink">Already booked</h2>
+            <p className="mt-2 text-[13px] leading-relaxed text-ink-soft">{repeatAsk.question}</p>
+            <p className="mt-1.5 text-[12px] leading-relaxed text-ink-muted">Book again only if you need a second visit — for example, at another address.</p>
+            <div className="mt-4 flex gap-3">
+              <button
+                onClick={() => navigate(repeatAsk.repeats?.[0]?.id ? `/booking/${repeatAsk.repeats[0].id}` : "/bookings")}
+                className="flex-1 rounded-xl bg-brand py-3 text-sm font-semibold text-white"
+              >
+                View my booking
+              </button>
+              <button onClick={() => placeOrder(true)} disabled={submitting} className="flex-1 rounded-xl border border-line py-3 text-sm font-semibold text-ink-soft disabled:opacity-50">
+                Yes, book again
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

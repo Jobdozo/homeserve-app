@@ -41,6 +41,11 @@ async function request(path, options) {
     const body = await res.json().catch(() => ({}));
     const err = new Error(body.error || `Request failed: ${res.status}`);
     err.status = res.status;
+    if (body.code) {
+      // e.g. "repeat_booking" with its question and the earlier bookings (CartScreen asks the customer)
+      err.code = body.code;
+      err.data = body;
+    }
     throw err;
   }
   if (res.status === 204) return null;

@@ -601,7 +601,23 @@ function mapBooking(b, customer, service) {
 function bookingExtras(b) {
   const options = serviceOptions.bookingLines(b.id);
   const contact = orderExtras.contactFor(b.orderId);
-  return { ...(options ? { options } : {}), ...(contact ? { contact } : {}) };
+  const repeatOf = bookingRepeatOf(b.id);
+  return { ...(options ? { options } : {}), ...(contact ? { contact } : {}), ...(repeatOf ? { repeatOf } : {}) };
+}
+
+// A booking the customer confirmed after being told they'd booked the same service within the
+// hour (repeatBookings.js): { id, ref } of the earlier one. Admin shows it as "Possible duplicate".
+let repeatOfById = null;
+function bookingRepeatOf(bookingId) {
+  if (!repeatOfById) repeatOfById = new Map(jsonStore.readAll("bookingRepeats").map((r) => [r.id, { id: r.repeatOf, ref: r.repeatOfRef }]));
+  return repeatOfById.get(bookingId) || null;
+}
+function markRepeatBooking(bookingId, earlier) {
+  bookingRepeatOf(bookingId);
+  const row = { id: bookingId, repeatOf: earlier.id, repeatOfRef: earlier.ref || null, at: new Date().toISOString() };
+  jsonStore.insert("bookingRepeats", row);
+  repeatOfById.set(bookingId, { id: row.repeatOf, ref: row.repeatOfRef });
+  return repeatOfById.get(bookingId);
 }
 
 function mapMessage(m) {
@@ -5310,6 +5326,7 @@ module.exports = {
   settlePriceCover,
   warmCatalog,
   listBookingsPage,
+  markRepeatBooking,
   listCustomersPage,
   getCustomerById,
   getCustomerByPhone,

@@ -91,7 +91,17 @@ export default function BookingsPage() {
                   onClick={() => setOpenBooking(b)}
                   className="cursor-pointer border-b border-gray-50 last:border-0 hover:bg-gray-50/60"
                 >
-                  <td className="px-4 py-3 font-semibold text-gray-800">#{b.ref || b.id}</td>
+                  <td className="px-4 py-3 font-semibold text-gray-800">
+                    #{b.ref || b.id}
+                    {b.repeatOf && (
+                      <span
+                        title={`Booked again within an hour of #${b.repeatOf.ref || b.repeatOf.id} — check with the customer before sending a second team`}
+                        className="ml-1.5 whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700"
+                      >
+                        Possible duplicate
+                      </span>
+                    )}
+                  </td>
                   <td className="flex items-center gap-2 px-4 py-3 text-gray-700">
                     <CategoryIcon categoryId={b.service?.categoryId} size={28} rounded="rounded-lg" /> {b.service?.name}
                   </td>

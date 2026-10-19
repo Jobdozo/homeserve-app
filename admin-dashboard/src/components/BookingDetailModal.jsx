@@ -107,6 +107,12 @@ export default function BookingDetailModal({ bookingId, fallback, onClose }) {
               {booking.status}
             </span>
           </div>
+          {booking.repeatOf && (
+            <p className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[12px] leading-relaxed text-amber-800">
+              <span className="font-semibold">Possible duplicate.</span> The customer booked this again within an hour of #
+              {booking.repeatOf.ref || booking.repeatOf.id} and confirmed it. Check with them before a second team goes out.
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-3 text-[12.5px]">
             <Field label="Customer" value={booking.customer?.name} />

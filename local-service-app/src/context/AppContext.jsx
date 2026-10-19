@@ -793,7 +793,8 @@ export function AppProvider({ children }) {
   }, []);
 
   const checkout = useCallback(
-    async (address, { referralCode, useCredits, serviceIds, note, contact } = {}) => {
+    // confirmRepeat: the customer said "Book again" to the server's repeat-booking question.
+    async (address, { referralCode, useCredits, serviceIds, note, contact, confirmRepeat } = {}) => {
       // Only book what the customer can actually see in their cart — items
       // hidden because they aren't offered in the current area stay out.
       const ordered = cart.filter((c) => !serviceIds || serviceIds.includes(c.serviceId));
@@ -807,9 +808,11 @@ export function AppProvider({ children }) {
         useCredits,
         note,
         contact,
+        ...(confirmRepeat ? { confirmRepeat: true } : {}),
       });
       setBookings((prev) => created.reduce((acc, b) => upsertById(acc, b), prev));
-      if (created.length) {
+      // A confirmed repeat of the same services isn't a new booking for Meta (the server skips it too).
+      if (created.length && !created.every((b) => b.repeatOf)) {
         // Same event id as the server's Conversions API event, so Meta counts the order once.
         trackMeta(
           "Schedule",

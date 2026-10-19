@@ -94,6 +94,7 @@ rt.attach(io, { forProvider: (b) => maskCompleted(b), forCustomer: (b) => hideCo
 // Meta Conversions API (metaEvents.js): bookings placed and completed, so Meta ads can count and
 // optimise for real bookings. Jobs of providers tagged "test" (staff testing) are left out.
 const metaEvents = require("./metaEvents");
+const repeatBookings = require("./repeatBookings");
 const realBookings = (list) => {
   const tests = testProviderIds();
   const real = list.filter((b) => b && !tests.has(b.providerId));
@@ -1955,26 +1956,87 @@ app.get("/api/admin/bookings/:id/swaps", auth.requireAuth("admin"), ah(async (re
   );
 }));
 
-app.post("/api/bookings", auth.requireAuth("customer"), ah(async (req, res) => {
-  const booking = await store.createBooking({ ...req.body, customerId: req.user.id });
-  rt.booking("booking:created", booking);
-  rt.activity((await store.listActivities(1))[0]);
-  dispatchBooking(booking).catch((e) => console.error("dispatchBooking failed", e));
-  metaEvents.schedule(realBookings([booking]), metaEvents.sourceOf(req, otpGuard.clientIp(req)));
-  res.status(201).json(booking);
-}));
+// Repeat bookings (repeatBookings.js). A double tap gets { reuse: the earlier bookings }; a repeat
+// within the hour is answered here with a 409 and a question (-> { asked: true }) unless the
+// customer already said yes (confirmRepeat); otherwise { matches: the earlier booking per line }.
+async function checkRepeatBookings(req, res, lines) {
+  const services = await Promise.all(lines.map((l) => (l?.serviceId ? store.getService(l.serviceId) : null)));
+  const described = lines.map((l, i) => ({ serviceId: l?.serviceId, name: services[i]?.name, categoryId: services[i]?.categoryId }));
+  const from = new Date(Date.now() - repeatBookings.WINDOW_MS).toISOString();
+  const { items } = await store.listBookingsPage({ customerId: req.user.id, from, limit: 50 });
+  const found = repeatBookings.find(described, items);
+  if (found.doubleTap) return { reuse: [...new Map(found.matches.map((m) => [m.id, m])).values()] };
+  if (found.matches.some(Boolean) && req.body?.confirmRepeat !== true) {
+    const { question, error } = repeatBookings.describe(found.matches);
+    const repeats = found.matches.filter(Boolean).map((m) => ({ id: m.id, ref: m.ref, service: m.service?.name, date: m.date, time: m.time, createdAt: m.createdAt }));
+    res.status(409).json({ error, code: "repeat_booking", question, repeats });
+    return { asked: true };
+  }
+  return { matches: found.matches };
+}
+
+// A repeat the customer confirmed: marked for Admin ("Possible duplicate"), logged, and the
+// provider is asked to check with the customer before sending a second team.
+async function markRepeatBookings(created, matches) {
+  for (let i = 0; i < created.length; i++) {
+    const b = created[i];
+    const earlier = matches[i];
+    if (!b || !earlier) continue;
+    b.repeatOf = store.markRepeatBooking(b.id, earlier);
+    const who = b.customer?.name || "A customer";
+    const what = b.service?.name || "a service";
+    try {
+      await store.logActivity("booking", `Possible duplicate: #${b.ref} — ${who} booked ${what} again within an hour of #${earlier.ref}`);
+      if (earlier.providerId === b.providerId) {
+        await store.addNotification({
+          recipientType: "provider",
+          recipientId: b.providerId,
+          type: "booking",
+          title: "Possible repeat booking",
+          message: `${who} booked ${what} again within an hour (#${b.ref}; first booking #${earlier.ref}). Please check with the customer before sending a second team.`,
+          bookingId: b.id,
+        });
+      }
+    } catch (e) {
+      console.error("repeat booking notice failed", e);
+    }
+  }
+}
+
+app.post("/api/bookings", auth.requireAuth("customer"), ah(async (req, res) =>
+  repeatBookings.oneAtATime(req.user.id, async () => {
+    const repeat = await checkRepeatBookings(req, res, [req.body || {}]);
+    if (repeat.asked) return;
+    if (repeat.reuse) return res.status(200).json(repeat.reuse[0]);
+    const booking = await store.createBooking({ ...req.body, customerId: req.user.id });
+    await markRepeatBookings([booking], repeat.matches);
+    rt.booking("booking:created", booking);
+    rt.activity((await store.listActivities(1))[0]);
+    dispatchBooking(booking).catch((e) => console.error("dispatchBooking failed", e));
+    // A confirmed repeat isn't a new booking for Meta's ad optimisation.
+    metaEvents.schedule(realBookings([booking].filter((b) => !b.repeatOf)), metaEvents.sourceOf(req, otpGuard.clientIp(req)));
+    res.status(201).json(booking);
+  })
+));
 
 // A cart checkout: creates one booking per line item, all sharing an orderId.
-app.post("/api/orders", auth.requireAuth("customer"), ah(async (req, res) => {
-  const bookings = await store.createOrder({ ...req.body, customerId: req.user.id });
-  bookings.forEach((b) => rt.booking("booking:created", b));
-  for (const group of groupByProvider(bookings)) {
-    dispatchBooking(group[0], [group[0].providerId], group).catch((e) => console.error("dispatchBooking failed", e));
-  }
-  rt.activity((await store.listActivities(1))[0]);
-  metaEvents.schedule(realBookings(bookings), metaEvents.sourceOf(req, otpGuard.clientIp(req)));
-  res.status(201).json(bookings);
-}));
+app.post("/api/orders", auth.requireAuth("customer"), ah(async (req, res) =>
+  repeatBookings.oneAtATime(req.user.id, async () => {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    const repeat = items.length ? await checkRepeatBookings(req, res, items) : { matches: [] };
+    if (repeat.asked) return;
+    if (repeat.reuse) return res.status(200).json(repeat.reuse);
+    const bookings = await store.createOrder({ ...req.body, customerId: req.user.id });
+    await markRepeatBookings(bookings, repeat.matches);
+    bookings.forEach((b) => rt.booking("booking:created", b));
+    for (const group of groupByProvider(bookings)) {
+      dispatchBooking(group[0], [group[0].providerId], group).catch((e) => console.error("dispatchBooking failed", e));
+    }
+    rt.activity((await store.listActivities(1))[0]);
+    metaEvents.schedule(realBookings(bookings.filter((b) => !b.repeatOf)), metaEvents.sourceOf(req, otpGuard.clientIp(req)));
+    res.status(201).json(bookings);
+  })
+));
 
 // The website's Meta Pixel id (public anyway: it's in every page's source once loaded). null = off.
 app.get("/api/meta/pixel", (req, res) => res.json({ pixelId: metaEvents.pixelId() }));
