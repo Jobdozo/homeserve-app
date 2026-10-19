@@ -169,12 +169,27 @@ try {
 } catch {
   sharp = null;
 }
+// FLUX has no negative prompt: naming text or logos — even as "no logos" — makes it draw them (it
+// put made-up badges on uniforms). Its prompt keeps only what should be in the picture: no "no …"
+// sentences, no prices or numbers (a ₹ in the prompt becomes a sign in the picture).
+function forFlux(prompt) {
+  return String(prompt)
+    .replace(/\s*\(#[0-9A-Fa-f]{6}\)/g, "")
+    .replace(/Absolutely no text[^.]*\.\s*/g, "")
+    .replace(/ with no badges, patches, name tags, embroidery, logos or lettering/g, ", the fabric completely blank and solid")
+    .replace(/the generic, unbranded products/g, "the plain products")
+    .replace(/No people and no body parts\./g, "Only objects in the scene.")
+    .replace(/[^.]*[₹\d][^.]*\.\s*/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 async function drawWithCloudflare(prompt, ratio) {
   const { account, token, model } = cf();
   const res = await fetch(`${CF_API}/accounts/${encodeURIComponent(account)}/ai/run/${model}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: String(prompt).slice(0, 2000), steps: 8 }),
+    body: JSON.stringify({ prompt: forFlux(prompt).slice(0, 2000), steps: 8 }),
     signal: AbortSignal.timeout(90000),
   });
   const data = await res.json().catch(() => ({}));
@@ -189,8 +204,10 @@ async function drawWithCloudflare(prompt, ratio) {
   return { mime: "image/jpeg", data: out };
 }
 
-// The real Tikdum logo (icon + name, src/assets/tikdum-badge.png) in the bottom-left corner, about
-// a quarter of the picture wide. AI models can't draw the exact logo, so it goes on afterwards.
+// The real Tikdum logo (icon + name, src/assets/tikdum-badge.png) on the left, about a quarter of the
+// picture wide. AI models can't draw the exact logo, so it goes on afterwards. It sits at 66–74% of
+// the height, not in the corner: the apps show square pictures cut to 4:3 or 16:9 from the middle,
+// which removes up to 22% at the top and bottom.
 // IMAGE_STUDIO_LOGO=off leaves pictures as drawn. Without the image library, pictures stay as drawn.
 const BADGE = path.join(__dirname, "assets", "tikdum-badge.png");
 async function stampLogo(image) {
@@ -204,7 +221,7 @@ async function stampLogo(image) {
     const badgeH = (await sharp(badge).metadata()).height;
     const margin = Math.round(width * 0.025);
     const data = await base
-      .composite([{ input: badge, left: margin, top: Math.max(0, height - badgeH - margin) }])
+      .composite([{ input: badge, left: margin, top: Math.min(Math.round(height * 0.66), Math.max(0, height - badgeH - margin)) }])
       .jpeg({ quality: 90 })
       .toBuffer();
     return { mime: "image/jpeg", data, logo: true };
@@ -420,4 +437,4 @@ async function status() {
   return out;
 }
 
-module.exports = { audienceFor, buildBrief, pickModels, enqueue, settle, listCandidates, status, MAX_QUEUE, DAILY_LIMIT, _inspect: inspect, _drawImage: drawImage, _stampLogo: stampLogo, _resetGemini: () => { geminiRestUntil = 0; } };
+module.exports = { audienceFor, buildBrief, pickModels, enqueue, settle, listCandidates, status, MAX_QUEUE, DAILY_LIMIT, _inspect: inspect, _drawImage: drawImage, _stampLogo: stampLogo, _forFlux: forFlux, _resetGemini: () => { geminiRestUntil = 0; } };

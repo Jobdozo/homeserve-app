@@ -256,9 +256,26 @@ test("stampLogo: the Tikdum logo goes in the bottom-left corner", { skip: !sharp
   process.env.IMAGE_STUDIO_LOGO = "off";
   assert.equal(out.logo, true);
   const px = async (x, y) => [...(await sharp(out.data).extract({ left: x, top: y, width: 1, height: 1 }).raw().toBuffer())];
-  const corner = await px(262, 958); // the badge's white background, right of the "Tikdum" name
-  const top = await px(900, 40); // untouched
-  assert.ok(corner.every((v) => v > 200), `badge is white: ${corner}`);
+  // At 66–74% of the height (kept when the apps cut a square to 4:3 or 16:9), not in the corner.
+  const badge = await px(262, 715); // the badge's white background, right of the "Tikdum" name
+  const corner = await px(262, 958);
+  const top = await px(900, 40);
+  assert.ok(badge.every((v) => v > 200), `badge is white: ${badge}`);
+  assert.ok(corner.every((v) => v < 60), `bottom corner unchanged: ${corner}`);
   assert.ok(top.every((v) => v < 60), `rest unchanged: ${top}`);
+  assert.ok(715 > 1024 * 0.22 && 715 + 40 < 1024 * 0.78, "inside what a 16:9 cut keeps");
   assert.equal((await studio._stampLogo({ mime: "image/jpeg", data: plain })).logo, undefined); // off: as drawn
+});
+
+test("FLUX prompt: only what should be in the picture — no 'no logos', no prices, no colour codes", () => {
+  const brief = studio.buildBrief({ kind: "service", name: "Ant Control", category: "Pest Control", tagline: "₹600–₹1000 per 2BHK", audience: "any", people: true });
+  assert.match(brief, /Absolutely no text/); // Gemini keeps the full brief
+  const flux = studio._forFlux(brief);
+  assert.doesNotMatch(flux, /logo|lettering|badge|text|watermark|₹|\d|#5B3FE0/i);
+  assert.match(flux, /plain black polo T-shirt uniform and a plain black cap, the fabric completely blank and solid/);
+  assert.match(flux, /Ant Control in Pest Control/);
+  assert.match(flux, /soft purple and white as accent colours/);
+  const still = studio._forFlux(studio.buildBrief({ kind: "subcategory", name: "Waxing", category: "Salon & Spa", audience: "female", people: false }));
+  assert.match(still, /Only objects in the scene\./);
+  assert.doesNotMatch(still, /unbranded|people/i);
 });
