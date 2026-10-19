@@ -5,6 +5,7 @@ import DesktopHeader from "./DesktopHeader";
 import DesktopFooter from "./DesktopFooter";
 import Toast from "../components/Toast";
 import OfflineBanner from "./OfflineBanner";
+import AppBanner from "./AppBanner";
 import { useApp } from "../context/AppContext";
 
 function LoadingState() {
@@ -84,6 +85,7 @@ export function MainLayout() {
       <DesktopHeader />
       <div className={`app-body${wide ? " wide" : ""}`}>
         <div className={`phone-frame${wide ? " wide" : ""}`}>
+          <AppBanner />
           <OfflineBanner />
           <ConnectionBanner />
           <div className="screen no-scrollbar">{loading ? <LoadingState /> : <Outlet />}</div>
@@ -104,6 +106,7 @@ export function DetailLayout() {
       <DesktopHeader />
       <div className={`app-body${wide ? " wide" : ""}`}>
         <div className={`phone-frame${wide ? " wide" : ""}`}>
+          <AppBanner />
           <OfflineBanner />
           <ConnectionBanner />
           <div className="screen no-scrollbar">{loading ? <LoadingState /> : <Outlet />}</div>
