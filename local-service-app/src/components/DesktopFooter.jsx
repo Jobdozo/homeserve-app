@@ -87,7 +87,7 @@ export default function DesktopFooter() {
         </Col>
       </div>
       <div className="border-t border-gray-100">
-        <p className="mx-auto max-w-6xl px-8 py-5 text-[13px] text-gray-400">© {new Date().getFullYear()} Tikdum. All rights reserved.</p>
+        <p className="mx-auto max-w-6xl px-8 py-5 text-[13px] text-gray-400">© {new Date().getFullYear()} Tikdum, a brand of OAIA Electronics Private Limited. All rights reserved.</p>
       </div>
     </footer>
   );
