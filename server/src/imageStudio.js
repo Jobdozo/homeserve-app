@@ -86,20 +86,94 @@ const KINDS = {
 
 // What the picture shows:
 //   person   — a professional at work (personLine);
-//   service  — the service itself, no people: the place, appliance or finished result (a spotless
-//              bathroom for bathroom cleaning) — the default in Admin;
+//   service  — the service itself, no people: the place, appliance or finished result, described
+//              for THIS service (sceneFor) — the default in Admin;
 //   products — a still life of products and tools: always for body services (waxing, massage …).
-const SERVICE_SCENE =
-  "The service itself, not a person: show the place, appliance or finished result this service is about — for example a spotless, sparkling modern bathroom for bathroom cleaning, " +
-  "a split AC unit on a clean wall for AC repair, a gleaming kitchen chimney above a clean hob for chimney cleaning, a neat electrical switchboard for electrician work — " +
-  "in a bright, tidy Indian home, with the professional tools of the job neatly placed nearby. No people and no body parts.";
+// A shared list of examples ("a bathroom for cleaning, an AC for AC repair …") made every picture
+// an AC or a chimney: each service gets its own description instead, with no examples.
 const PRODUCTS_SCENE =
   "Product still life only: the generic, unbranded products and tools used for this service, neatly arranged on a soft lavender surface in a spotless bright treatment room. No people and no body parts.";
 
-function buildBrief({ kind, name, category, type, tagline, audience, people, show }) {
+// Built-in scenes, most specific first; matched on the service name, then its category.
+const SCENES = [
+  [/water\s?tank|overhead tank|sump/i, "a clean blue plastic water storage tank on a sunny rooftop, its lid open, with a hose, a long brush and a bucket beside it"],
+  [/\bro\b|purifier|water filter|candle/i, "a wall-mounted RO water purifier in a clean kitchen, with new filter cartridges and a glass of clear water on the counter below it"],
+  [/chimney|gas stove|hob|burner/i, "a gleaming stainless-steel kitchen chimney above a spotless gas stove, with service tools and a cloth on the counter"],
+  [/bathroom|toilet|washroom/i, "a spotless, sparkling modern bathroom with shining white tiles, a gleaming washbasin and toilet, with cleaning bottles and a scrub brush placed neatly in a corner"],
+  [/sofa|upholster|chair cleaning|mattress/i, "a fresh, clean fabric sofa in a bright living room with an upholstery cleaning machine and its wand beside it"],
+  [/carpet|rug/i, "a freshly cleaned carpet with bright colours in a living room, a carpet cleaning machine parked at its edge"],
+  [/kitchen clean|kitchen deep|cabinets? clean/i, "a spotless modern Indian kitchen with gleaming countertops and cabinet fronts, cleaning sprays and microfibre cloths placed neatly"],
+  [/cockroach|termite|bed ?bug|mosquito|lizard|rodent|\brat\b|\bant\b|pest/i, "a pest control sprayer canister and a gel bait applicator beside the base of clean kitchen cabinets in a spotless kitchen"],
+  [/\bac\b|air ?condition|split ac|window ac/i, "a modern white split air conditioner mounted high on a clean wall with its front panel open, a gauge manifold and tools on a step stool below"],
+  [/geyser|water heater/i, "a white electric water geyser on a bathroom wall with its cover off, a multimeter and screwdrivers on a shelf beside it"],
+  [/washing machine/i, "a front-loading washing machine in a clean utility area with its back panel removed, a multimeter and tools laid out beside it"],
+  [/fridge|refrigerator/i, "a double-door refrigerator in a clean kitchen with its lower service panel open and repair tools on a mat in front of it"],
+  [/microwave|oven/i, "a microwave oven on a kitchen counter with its outer cover removed and a screwdriver set beside it"],
+  [/\btv\b|television|led tv/i, "a large flat-screen TV lying face down on a soft mat with its back cover open and repair tools beside it"],
+  [/mixer|grinder|iron\b|kettle|toaster|small appliance/i, "a mixer grinder and an electric iron opened up on a tidy repair bench with screwdrivers and spare parts"],
+  [/inverter|battery|ups\b/i, "a home inverter and battery in a neat corner with fresh wiring, a multimeter and terminal tools"],
+  [/fan\b|ceiling fan|exhaust/i, "a new ceiling fan being fitted to a clean white ceiling, with its blades and a screwdriver set on a step ladder"],
+  [/\b(lights?|led|lamps?|bulbs?|lighting)\b/i, "a bright modern room with new ceiling lights and LED fittings, a box of bulbs and a screwdriver on a table"],
+  [/electric|switch|socket|wiring|mcb|doorbell/i, "an open electrical distribution board with neat colour-coded wiring, a multimeter, insulated screwdrivers and a new switch plate on a workbench"],
+  [/plumb|tap|faucet|pipe|leak|drain|basin|sink|flush/i, "a gleaming chrome tap over a clean sink with a pipe wrench, plumber's tape and new pipe fittings laid out on the counter"],
+  [/laptop|computer|\bpc\b|desktop|printer|data recovery|virus/i, "an open laptop and a desktop tower on a tidy repair desk with a precision screwdriver set, memory sticks and an anti-static mat"],
+  [/cctv|camera|security/i, "a white CCTV security camera mounted on the corner of a clean house wall, with a coil of cable and tools below"],
+  [/paint|whitewash|texture/i, "a freshly painted wall in a soft colour with paint rollers, a paint tray and paint buckets on a drop cloth"],
+  [/wallpaper|interior|false ceiling|ceiling|curtain|blind|modular/i, "a stylish modern living room with fresh wallpaper, a false ceiling with warm lights and new curtains"],
+  [/carpent|furniture|wood|door|cabinet|\bbed\b|wardrobe|\block\b/i, "a solid wooden cabinet door being fitted on a workbench, with a drill, chisels, a measuring tape and wood shavings"],
+  [/mason|brick|tile|tiling|grout|cement|plaster|wall repair/i, "a freshly tiled wall and floor with a trowel, tile spacers and a bucket of grout beside it"],
+  [/pack|mover|shifting|relocat|transport|vehicle/i, "neatly stacked, taped cardboard moving boxes and bubble-wrapped furniture in a bright empty room, a moving truck visible through the window"],
+  [/laundry|dry clean|ironing|press/i, "neatly folded fresh laundry and crisp pressed shirts on hangers beside a steam iron"],
+  [/domestic|maid|house ?help|cook|babysit|elder|caretaker/i, "a tidy, freshly organised home: a made bed with folded towels, a clean floor and a neat kitchen in the background"],
+  [/clean|sanitis|disinfect/i, "a bright, spotless living room with shining floors, with a mop, a bucket and cleaning supplies neatly placed"],
+  [/garden|lawn|plant/i, "a neatly trimmed home garden with fresh green plants, a lawn mower and gardening tools"],
+];
+function builtInScene(text) {
+  const hit = SCENES.find(([re]) => re.test(String(text || "")));
+  return hit ? hit[1] : null;
+}
+
+// One sentence written by Cloudflare's text model for a service no built-in scene fits.
+const CF_TEXT_MODEL = () => process.env.CF_AI_TEXT_MODEL || "@cf/meta/llama-3.1-8b-instruct";
+const PEOPLE_WORDS = /\b(person|people|man|men|woman|women|worker|technician|professional|customer|he|she|hands?|someone)\b/i;
+async function writeScene({ name, category, type }) {
+  if (!cfReady()) return null;
+  const { account, token } = cf();
+  const ask =
+    `Describe in ONE sentence of at most 40 words a photograph that clearly shows the home service "${name}"${type ? ` (${type})` : ""}${category ? ` in the category ${category}` : ""}, ` +
+    "using only objects: the specific room, appliance, item or finished result, and the tools of the job. No people. No text or signs. Reply with the sentence only.";
+  try {
+    const res = await fetch(`${CF_API}/accounts/${encodeURIComponent(account)}/ai/run/${CF_TEXT_MODEL()}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: ask }], max_tokens: 90, temperature: 0.3 }),
+      signal: AbortSignal.timeout(20000),
+    });
+    const data = await res.json().catch(() => ({}));
+    const text = String(data?.result?.response || "").replace(/^["'\s]+|["'\s]+$/g, "").replace(/\s+/g, " ").slice(0, 300);
+    if (!res.ok || text.length < 20 || PEOPLE_WORDS.test(text)) return null;
+    return text.replace(/\.?$/, "");
+  } catch {
+    return null;
+  }
+}
+
+// The scene for a "service" picture: a built-in one for the service name, else one written for it,
+// else the category's built-in one, else a plain description.
+async function sceneFor(t) {
+  return (
+    builtInScene(`${t.name} ${t.type || ""}`) ||
+    (await writeScene(t)) ||
+    builtInScene(t.category) ||
+    `the room, items and tools involved in ${t.name}, shown clean and finished`
+  );
+}
+
+function buildBrief({ kind, name, category, type, tagline, audience, people, show, scene: sceneText }) {
   const subject = [name, type && type !== name ? `(${type})` : "", category ? `in ${category}` : ""].filter(Boolean).join(" ");
   const what = show || (people ? "person" : "products");
-  const scene = what === "person" ? personLine(audience) : what === "service" ? SERVICE_SCENE : PRODUCTS_SCENE;
+  const serviceScene = `The service itself, not a person: ${sceneText || builtInScene(`${name} ${type || ""}`) || builtInScene(category) || `the room, items and tools involved in ${name}, shown clean and finished`}, in a bright, tidy Indian home. No people and no body parts.`;
+  const scene = what === "person" ? personLine(audience) : what === "service" ? serviceScene : PRODUCTS_SCENE;
   const wide = KINDS[kind]?.ratio === "16:9" ? " Wide composition with calm space on the left for a heading." : " Square composition, subject centred with breathing room.";
   return `${STYLE} Subject — ${KINDS[kind]?.label || "a service"}: ${subject}${tagline ? `. ${tagline}` : ""}. ${scene}${wide}`;
 }
@@ -190,7 +264,7 @@ function forFlux(prompt) {
     .replace(/ with no badges, patches, name tags, embroidery, logos or lettering/g, ", the fabric completely blank and solid")
     .replace(/the generic, unbranded products/g, "the plain products")
     .replace(/No people and no body parts\./g, "Only objects in the scene.")
-    .replace(/The service itself, not a person: show/g, "Show")
+    .replace(/The service itself, not a person: /g, "")
     .replace(/[^.]*[₹\d][^.]*\.\s*/g, " ")
     .replace(/\s{2,}/g, " ")
     .trim();
@@ -228,12 +302,15 @@ async function stampLogo(image) {
     const base = sharp(image.data, { failOn: "none" });
     const { width, height } = await base.metadata();
     if (!width || !height) return image;
-    const badgeW = Math.round(width * 0.27);
+    // A wide picture (category banner) is shown narrower in places, cut at both sides: its logo sits
+    // 14% in from the left and is sized by the height, so it stays whole.
+    const wide = width / height > 1.3;
+    const badgeW = Math.round(wide ? height * 0.42 : width * 0.27);
     const badge = await sharp(BADGE).resize({ width: badgeW }).png().toBuffer();
     const badgeH = (await sharp(badge).metadata()).height;
     const margin = Math.round(width * 0.025);
     const data = await base
-      .composite([{ input: badge, left: margin, top: Math.min(Math.round(height * 0.66), Math.max(0, height - badgeH - margin)) }])
+      .composite([{ input: badge, left: wide ? Math.round(width * 0.14) : margin, top: Math.min(Math.round(height * 0.66), Math.max(0, height - badgeH - margin)) }])
       .jpeg({ quality: 90 })
       .toBuffer();
     return { mime: "image/jpeg", data, logo: true };
@@ -355,6 +432,11 @@ async function processJob(job) {
   if (!list.length) throw fail(400, key() ? "This Gemini key can't use any image model" : NOT_SET_UP);
   // The automatic check needs a Gemini text model; without one, a person checks it when approving.
   const checker = list.find((m) => m.name === "gemini" && m.textModel)?.textModel || null;
+  if (job.brief) {
+    const scene = await sceneFor(job.brief);
+    job.prompt = buildBrief({ ...job.brief, scene });
+    jsonStore.update(CANDIDATES, job.id, { prompt: job.prompt, scene });
+  }
   let last = null;
   let qc = null;
   let used = null;
@@ -411,7 +493,9 @@ function enqueue(targets, actor) {
       createdAt: new Date().toISOString(),
       requestedBy: actor || null,
     });
-    queue.push({ id: row.id, prompt, ratio: KINDS[t.targetType].ratio, expect: who });
+    // A "service" picture gets its own scene (sceneFor) when it's drawn: that can call a text model.
+    const brief = { kind: t.targetType, name: t.name, category: t.category, type: t.type, tagline: t.tagline, ...who, show };
+    queue.push({ id: row.id, prompt, ratio: KINDS[t.targetType].ratio, expect: who, brief: show === "service" ? brief : null });
     made.push(row);
     open.add(k);
   }
@@ -453,4 +537,4 @@ async function status() {
   return out;
 }
 
-module.exports = { audienceFor, buildBrief, pickModels, enqueue, settle, listCandidates, status, MAX_QUEUE, DAILY_LIMIT, _inspect: inspect, _drawImage: drawImage, _stampLogo: stampLogo, _forFlux: forFlux, _resetGemini: () => { geminiRestUntil = 0; } };
+module.exports = { audienceFor, buildBrief, pickModels, enqueue, settle, listCandidates, status, MAX_QUEUE, DAILY_LIMIT, _inspect: inspect, _drawImage: drawImage, _stampLogo: stampLogo, _forFlux: forFlux, _sceneFor: sceneFor, _builtInScene: builtInScene, _resetGemini: () => { geminiRestUntil = 0; } };

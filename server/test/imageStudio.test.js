@@ -287,7 +287,7 @@ test("show 'service': the service itself, no people (body services stay products
   assert.doesNotMatch(brief, /uniform/);
   const flux = studio._forFlux(brief);
   assert.match(flux, /^Photorealistic/);
-  assert.match(flux, /Show the place, appliance or finished result/);
+  assert.match(flux, /a spotless, sparkling modern bathroom/);
   assert.match(flux, /Only objects in the scene\./);
   assert.doesNotMatch(flux, /person|people/i);
 
@@ -302,6 +302,50 @@ test("show 'service': the service itself, no people (body services stay products
   const [c] = studio.enqueue([{ targetType: "service", targetId: "show-3", name: "Fan Repair", category: "Electrician" }]);
   assert.equal(c.show, "person"); // the API's old default
   await wait(() => ["show-1", "show-2", "show-3"].every((id) => studio.listCandidates().find((x) => x.targetId === id && x.status !== "generating")));
+  delete process.env.CF_AI_ACCOUNT_ID;
+  delete process.env.CF_AI_TOKEN;
+});
+
+test("each service gets its own scene — not the same AC or chimney for every one", async () => {
+  const s = (name, category) => studio._builtInScene(`${name}`) || studio._builtInScene(category);
+  assert.match(s("Cockroach Control", "Pest Control"), /pest control sprayer/);
+  assert.match(s("Pest Control", ""), /pest control sprayer/);
+  assert.match(s("Laundry Services", ""), /folded fresh laundry/);
+  assert.match(s("Plumbing", ""), /chrome tap/);
+  assert.match(s("Tap Repair", "Plumbing"), /chrome tap/);
+  assert.match(s("AC Repair", ""), /split air conditioner/);
+  assert.match(s("Water Tank Cleaning", ""), /water storage tank/);
+  assert.match(s("RO/Water Purifier Services", ""), /RO water purifier/);
+  assert.match(s("Computer Repair", ""), /laptop/);
+  assert.match(s("Painting", ""), /freshly painted wall/);
+  assert.match(s("Carpentry", ""), /wooden cabinet door/);
+  assert.match(s("Masonry Services", ""), /tiled wall/);
+  assert.match(s("Packers & Movers", ""), /moving boxes/);
+  assert.match(s("Domestic Help", ""), /made bed/);
+  assert.match(s("Electrician", ""), /distribution board/);
+  assert.match(s("Electric Iron Repair", "Appliance Repair"), /electric iron/);
+  assert.match(s("Gas Stove Inspection & Minor Repair", ""), /gas stove/);
+  assert.match(s("Bathroom Cleaning", "Home Cleaning"), /bathroom/);
+  assert.equal(studio._builtInScene("Installed things"), null, "'led' inside a word doesn't count as LED lights");
+  // 16 different scenes for 16 categories: no two the same.
+  const names = ["Pest Control", "Laundry", "Plumbing", "AC Repair", "Water Tank Cleaning", "RO Purifier", "Computer Repair", "Painting", "Carpentry", "Masonry", "Packers & Movers", "Domestic Help", "Electrician", "Gas Stove", "Bathroom Cleaning", "Sofa Cleaning"];
+  assert.equal(new Set(names.map((n) => studio._builtInScene(n))).size, names.length);
+
+  // No built-in scene for the name: Cloudflare's text model writes one; a reply about people is ignored.
+  process.env.CF_AI_ACCOUNT_ID = "acc123";
+  process.env.CF_AI_TOKEN = "cf-secret-token";
+  let reply = "A large architectural floor plan with lighting symbols, sample pendant lamps and a tape measure on a drafting table.";
+  const asked = [];
+  global.fetch = async (url, opts) => {
+    asked.push({ url: String(url), body: JSON.parse(opts.body) });
+    return { ok: true, status: 200, json: async () => ({ success: true, result: { response: reply } }) };
+  };
+  const written = await studio._sceneFor({ name: "Vastu Consultation", category: "Interior Services" });
+  assert.equal(written, "A large architectural floor plan with lighting symbols, sample pendant lamps and a tape measure on a drafting table");
+  assert.match(asked[0].url, /\/ai\/run\/@cf\/meta\/llama-3\.1-8b-instruct$/);
+  assert.match(asked[0].body.messages[0].content, /Vastu Consultation/);
+  reply = "A friendly technician holding a lamp.";
+  assert.match(await studio._sceneFor({ name: "Vastu Consultation", category: "Interior Services" }), /stylish modern living room/); // falls back to the category's scene
   delete process.env.CF_AI_ACCOUNT_ID;
   delete process.env.CF_AI_TOKEN;
 });
