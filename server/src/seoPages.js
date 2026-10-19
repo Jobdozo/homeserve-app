@@ -440,23 +440,34 @@ function injectHead(shell, p) {
 
 // ---------------------------------------------------------------- serving
 
+// The copy is checked with the website on every page (If-None-Match: a 304 on the same machine,
+// a millisecond or two), so a deploy shows at once. It used to be kept for a minute, and for that
+// minute after each deploy pages pointed at the old build's script, which no longer exists: a
+// blank page. If the website doesn't answer, the last good copy is used and asked again in 10 s.
 const SHELL_URL = process.env.SEO_SHELL_URL || "http://127.0.0.1:5175/__shell";
-const SHELL_TTL = 60 * 1000;
-let shell = { html: null, at: 0 };
-async function getShell(fetchImpl = fetch) {
-  if (shell.html && Date.now() - shell.at < SHELL_TTL) return shell.html;
+const SHELL_RETRY_MS = 10 * 1000;
+let shell = { html: null, etag: null, lastModified: null, retryAt: 0 };
+async function getShell(fetchImpl = fetch, now = Date.now()) {
+  if (shell.html && now < shell.retryAt) return shell.html;
   try {
-    const res = await fetchImpl(SHELL_URL, { signal: AbortSignal.timeout(2000) });
+    const headers = {};
+    if (shell.html && shell.etag) headers["If-None-Match"] = shell.etag;
+    if (shell.html && shell.lastModified) headers["If-Modified-Since"] = shell.lastModified;
+    const res = await fetchImpl(SHELL_URL, { headers, signal: AbortSignal.timeout(shell.html ? 1000 : 2000) });
+    if (res.status === 304 && shell.html) return shell.html;
     if (!res.ok) throw new Error(`shell ${res.status}`);
     const html = await res.text();
     if (!/<\/head>/i.test(html)) throw new Error("shell has no head");
-    shell = { html, at: Date.now() };
+    shell = { html, etag: res.headers.get("etag"), lastModified: res.headers.get("last-modified"), retryAt: 0 };
   } catch (e) {
     if (!shell.html) throw e; // nothing to fall back on: nginx serves the plain page
-    shell.at = Date.now() - SHELL_TTL + 10 * 1000; // keep the last good copy, try again in 10 s
+    shell.retryAt = now + SHELL_RETRY_MS; // keep the last good copy, try again in 10 s
   }
   return shell.html;
 }
+getShell.reset = () => {
+  shell = { html: null, etag: null, lastModified: null, retryAt: 0 };
+};
 
 // GET /__page (from the website's nginx). Data comes from the same caches the apps use;
 // if it's slow, the page goes out with the generic head rather than keeping anyone waiting.

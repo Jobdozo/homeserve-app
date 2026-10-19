@@ -149,3 +149,40 @@ test("searchCatalog: a provider set to always-hide in Super Admin has no pages a
   assert.deepEqual(data.services.map((s) => s.id), ["s1"]);
   assert.deepEqual(data.providers.map((p) => p.id), ["real"]);
 });
+
+test("getShell: checks the website on every page, so a deploy shows at once", async () => {
+  seo.getShell.reset();
+  let version = "v1";
+  const calls = [];
+  const fake = async (url, { headers }) => {
+    calls.push(headers["If-None-Match"] || null);
+    const etag = `"${version}"`;
+    if (headers["If-None-Match"] === etag) return { status: 304, ok: false, headers: new Map() };
+    return { status: 200, ok: true, headers: new Map([["etag", etag]]), text: async () => `<html><head><script src="/assets/index-${version}.js"></script></head></html>` };
+  };
+  assert.match(await seo.getShell(fake, 0), /index-v1/);
+  assert.match(await seo.getShell(fake, 1), /index-v1/); // unchanged: 304, the cached copy
+  version = "v2"; // a deploy
+  assert.match(await seo.getShell(fake, 2), /index-v2/); // the very next page has the new build
+  assert.deepEqual(calls, [null, '"v1"', '"v1"']);
+});
+
+test("getShell: if the website doesn't answer, the last good copy is used and asked again in 10 s", async () => {
+  seo.getShell.reset();
+  let up = true;
+  let asked = 0;
+  const fake = async () => {
+    asked++;
+    if (!up) throw new Error("down");
+    return { status: 200, ok: true, headers: new Map(), text: async () => "<html><head></head></html>" };
+  };
+  await seo.getShell(fake, 0);
+  up = false;
+  assert.equal(await seo.getShell(fake, 1000), "<html><head></head></html>");
+  assert.equal(await seo.getShell(fake, 5000), "<html><head></head></html>");
+  assert.equal(asked, 2); // not asked again within 10 s
+  await seo.getShell(fake, 12000);
+  assert.equal(asked, 3);
+  seo.getShell.reset();
+  await assert.rejects(seo.getShell(fake, 0)); // nothing cached yet: nginx serves the plain page
+});
