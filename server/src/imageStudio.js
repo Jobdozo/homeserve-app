@@ -29,6 +29,18 @@ const STALE_MS = 6 * 60 * 1000;
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const key = () => process.env.GEMINI_API_KEY || "";
+// Second picture maker: Cloudflare Workers AI (FLUX). Used when Gemini isn't set up, is out of
+// quota, or fails; IMAGE_PROVIDER=gemini|cloudflare forces one. Set with deploy/set-cloudflare-ai.sh.
+const CF_API = process.env.CF_API_BASE || "https://api.cloudflare.com/client/v4";
+const cf = () => ({ account: process.env.CF_AI_ACCOUNT_ID || "", token: process.env.CF_AI_TOKEN || "", model: process.env.CF_AI_IMAGE_MODEL || "@cf/black-forest-labs/flux-1-schnell" });
+const cfReady = () => Boolean(cf().account && cf().token);
+const provider = () => String(process.env.IMAGE_PROVIDER || "auto").toLowerCase();
+const configured = () => Boolean(key()) || cfReady();
+const NOT_SET_UP = "No picture maker is set up yet — add Cloudflare Workers AI (deploy/set-cloudflare-ai.sh) or GEMINI_API_KEY to the server settings.";
+// After Gemini says "quota exceeded", it isn't asked again for an hour.
+const GEMINI_REST_MS = 60 * 60 * 1000;
+let geminiRestUntil = 0;
+const geminiResting = () => Date.now() < geminiRestUntil;
 const istDay = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
 
 // ---------------- who is in the picture ----------------
@@ -142,6 +154,66 @@ async function drawImage(imageModel, prompt, ratio) {
   return { mime: blob.mimeType || blob.mime_type || "image/png", data: Buffer.from(blob.data, "base64") };
 }
 
+// One picture from Cloudflare Workers AI. FLUX draws a square; a wide (16:9) picture is cut
+// from its middle. Returns { mime, data (Buffer) }.
+let sharp = null;
+try {
+  sharp = require("sharp");
+} catch {
+  sharp = null;
+}
+async function drawWithCloudflare(prompt, ratio) {
+  const { account, token, model } = cf();
+  const res = await fetch(`${CF_API}/accounts/${encodeURIComponent(account)}/ai/run/${model}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: String(prompt).slice(0, 2000), steps: 8 }),
+    signal: AbortSignal.timeout(90000),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.success === false) {
+    const msg = String(data?.errors?.[0]?.message || `Cloudflare returned ${res.status}`).replace(token, "***").slice(0, 300);
+    throw fail(res.status === 429 ? 429 : 502, `Cloudflare AI: ${msg}`);
+  }
+  const b64 = data?.result?.image;
+  if (!b64) throw fail(422, "Cloudflare AI didn't return a picture");
+  let out = Buffer.from(b64, "base64");
+  if (ratio === "16:9" && sharp) out = await sharp(out).resize({ width: 1344, height: 756, fit: "cover" }).jpeg({ quality: 88 }).toBuffer();
+  return { mime: "image/jpeg", data: out };
+}
+
+// The picture makers to try, in order: Gemini first (unless resting after "quota exceeded"),
+// then Cloudflare. [{ name, imageModel, textModel? }]
+async function makers() {
+  const out = [];
+  const p = provider();
+  if (key() && p !== "cloudflare" && !geminiResting()) {
+    try {
+      const m = await models();
+      if (m.imageModel) out.push({ name: "gemini", imageModel: m.imageModel, textModel: m.textModel });
+    } catch (e) {
+      if (e.status === 429) geminiRestUntil = Date.now() + GEMINI_REST_MS;
+      if (!cfReady()) throw e;
+    }
+  }
+  if (cfReady() && p !== "gemini") out.push({ name: "cloudflare", imageModel: cf().model });
+  return out;
+}
+
+async function draw(list, prompt, ratio) {
+  let lastError = null;
+  for (const m of list) {
+    try {
+      const image = m.name === "gemini" ? await drawImage(m.imageModel, prompt, ratio) : await drawWithCloudflare(prompt, ratio);
+      return { image, maker: m };
+    } catch (e) {
+      lastError = e;
+      if (m.name === "gemini" && (e.status === 429 || /quota/i.test(e.message))) geminiRestUntil = Date.now() + GEMINI_REST_MS;
+    }
+  }
+  throw lastError || fail(400, NOT_SET_UP);
+}
+
 // A second look, by a text model that can see the picture.
 async function inspect(textModel, image, expect) {
   const ask =
@@ -218,28 +290,35 @@ async function pump() {
 }
 
 async function processJob(job) {
-  const { imageModel, textModel } = await models();
-  if (!imageModel) throw fail(400, "This Gemini key can't use any image model");
+  const list = await makers();
+  if (!list.length) throw fail(400, key() ? "This Gemini key can't use any image model" : NOT_SET_UP);
+  // The automatic check needs a Gemini text model; without one, a person checks it when approving.
+  const checker = list.find((m) => m.name === "gemini" && m.textModel)?.textModel || null;
   let last = null;
   let qc = null;
+  let used = null;
   for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
     if (usageToday() >= DAILY_LIMIT) throw fail(429, `Daily limit of ${DAILY_LIMIT} pictures reached — try again tomorrow`);
     addUsage();
     const brief = attempt === 1 ? job.prompt : `${job.prompt} Avoid these problems seen in the previous try: ${(qc?.issues || []).join("; ") || "none"}.`;
-    const image = await drawImage(imageModel, brief, job.ratio);
-    qc = textModel ? await inspect(textModel, image, job.expect).catch((e) => ({ ok: false, issues: [`The check couldn't run: ${e.message}`], checked: false })) : { ok: true, issues: [], checked: false };
+    const { image, maker } = await draw(list, brief, job.ratio);
+    used = maker;
+    // A check that can't run (e.g. Gemini out of quota) doesn't cost a second picture.
+    qc = checker && !geminiResting()
+      ? await inspect(checker, image, job.expect).catch((e) => ({ ok: true, issues: [`Not checked automatically: ${e.message}`.slice(0, 160)], checked: false }))
+      : { ok: true, issues: [], checked: false };
     if (last) deleteFile(last.url);
     const file = `${crypto.randomBytes(16).toString("hex")}${extFor(image.mime)}`;
     fs.writeFileSync(path.join(UPLOADS_DIR, file), image.data);
     last = { url: `/uploads/${file}` };
     if (qc.ok) break;
   }
-  jsonStore.update(CANDIDATES, job.id, { status: "pending", url: last.url, qc, imageModel, tries: MAX_TRIES });
+  jsonStore.update(CANDIDATES, job.id, { status: "pending", url: last.url, qc, imageModel: used.name === "cloudflare" ? `cloudflare:${used.imageModel}` : used.imageModel, tries: MAX_TRIES });
 }
 
 // targets: [{ targetType, targetId, name, category, type, tagline, audience? }]
 function enqueue(targets, actor) {
-  if (!key()) throw fail(400, "Gemini isn't set up yet — add GEMINI_API_KEY to the server settings.");
+  if (!configured()) throw fail(400, NOT_SET_UP);
   const list = Array.isArray(targets) ? targets : [];
   if (list.length === 0) throw fail(400, "Choose at least one item");
   if (list.length > MAX_QUEUE) throw fail(400, `Choose at most ${MAX_QUEUE} items at a time`);
@@ -282,14 +361,29 @@ function settle(id, status, actor) {
 }
 
 async function status() {
-  const out = { configured: Boolean(key()), usedToday: usageToday(), dailyLimit: DAILY_LIMIT, imageModel: null, textModel: null, error: null };
-  if (!out.configured) return out;
+  const out = {
+    configured: configured(),
+    usedToday: usageToday(),
+    dailyLimit: DAILY_LIMIT,
+    provider: provider(),
+    gemini: Boolean(key()),
+    geminiResting: geminiResting(),
+    cloudflare: cfReady() ? cf().model : null,
+    imageModel: null,
+    textModel: null,
+    error: null,
+  };
+  if (!key()) {
+    if (cfReady()) out.imageModel = `cloudflare:${cf().model}`;
+    return out;
+  }
   try {
     Object.assign(out, await models());
   } catch (e) {
     out.error = e.message;
+    if (cfReady()) out.imageModel = `cloudflare:${cf().model}`;
   }
   return out;
 }
 
-module.exports = { audienceFor, buildBrief, pickModels, enqueue, settle, listCandidates, status, MAX_QUEUE, DAILY_LIMIT, _inspect: inspect, _drawImage: drawImage };
+module.exports = { audienceFor, buildBrief, pickModels, enqueue, settle, listCandidates, status, MAX_QUEUE, DAILY_LIMIT, _inspect: inspect, _drawImage: drawImage, _resetGemini: () => { geminiRestUntil = 0; } };

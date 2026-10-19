@@ -179,3 +179,56 @@ test("batch size is capped and unknown targets are ignored", () => {
   assert.throws(() => studio.enqueue([]), /at least one/);
   assert.equal(studio.enqueue([{ targetType: "bogus", targetId: "1", name: "x" }, { targetType: "service", targetId: "", name: "x" }]).length, 0);
 });
+
+test("Cloudflare Workers AI: used when Gemini is out of quota, and on its own without a Gemini key", async () => {
+  const cfCalls = [];
+  const fakeCloudflare = (u, opts) => {
+    cfCalls.push({ url: u, auth: opts.headers.Authorization, prompt: JSON.parse(opts.body).prompt });
+    return { ok: true, status: 200, json: async () => ({ success: true, result: { image: PNG.toString("base64") } }) };
+  };
+  process.env.CF_AI_ACCOUNT_ID = "acc123";
+  process.env.CF_AI_TOKEN = "cf-secret-token";
+  process.env.GEMINI_API_KEY = "test-key-123";
+  studio._resetGemini();
+  let geminiImageCalls = 0;
+  global.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    if (u.includes("api.cloudflare.com")) return fakeCloudflare(u, opts);
+    if (u.includes("/models?")) return { ok: true, status: 200, json: async () => ({ models: [{ name: "models/gemini-3.1-flash-image", supportedGenerationMethods: ["generateContent"] }, { name: "models/gemini-3.0-flash", supportedGenerationMethods: ["generateContent"] }] }) };
+    if (/-image:generateContent/.test(u)) geminiImageCalls++;
+    return { ok: false, status: 429, json: async () => ({ error: { message: "You exceeded your current quota" } }) };
+  };
+  studio.enqueue([{ targetType: "service", targetId: "cf-1", name: "Tap Repair", category: "Plumbing" }]);
+  const a = await wait(() => studio.listCandidates().find((x) => x.targetId === "cf-1" && x.status !== "generating"));
+  assert.equal(a.status, "pending");
+  assert.equal(a.imageModel, "cloudflare:@cf/black-forest-labs/flux-1-schnell");
+  assert.equal(a.qc.checked, false); // no automatic check while Gemini is out of quota: a person checks it
+  assert.equal(geminiImageCalls, 1);
+  assert.match(cfCalls[0].url, /\/accounts\/acc123\/ai\/run\/@cf\/black-forest-labs\/flux-1-schnell$/);
+  assert.equal(cfCalls[0].auth, "Bearer cf-secret-token");
+  // Gemini rests for an hour after "quota exceeded": the next picture goes straight to Cloudflare.
+  studio.enqueue([{ targetType: "service", targetId: "cf-2", name: "Fan Repair", category: "Electrician" }]);
+  await wait(() => studio.listCandidates().find((x) => x.targetId === "cf-2" && x.status !== "generating"));
+  assert.equal(geminiImageCalls, 1);
+  assert.equal((await studio.status()).geminiResting, true);
+
+  // Cloudflare only.
+  delete process.env.GEMINI_API_KEY;
+  const s = await studio.status();
+  assert.equal(s.configured, true);
+  assert.equal(s.imageModel, "cloudflare:@cf/black-forest-labs/flux-1-schnell");
+  studio.enqueue([{ targetType: "service", targetId: "cf-3", name: "Sofa Cleaning", category: "Home Cleaning" }]);
+  const c = await wait(() => studio.listCandidates().find((x) => x.targetId === "cf-3" && x.status !== "generating"));
+  assert.equal(c.status, "pending");
+
+  // A Cloudflare error is a failed candidate, and the token never shows in it.
+  global.fetch = async () => ({ ok: false, status: 403, json: async () => ({ success: false, errors: [{ message: "Authentication error for cf-secret-token" }] }) });
+  studio.enqueue([{ targetType: "service", targetId: "cf-4", name: "Geyser Repair", category: "Appliance Repair" }]);
+  const f = await wait(() => studio.listCandidates().find((x) => x.targetId === "cf-4" && x.status !== "generating"));
+  assert.equal(f.status, "failed");
+  assert.match(f.error, /Cloudflare AI: Authentication error/);
+  assert.doesNotMatch(f.error, /cf-secret-token/);
+  delete process.env.CF_AI_ACCOUNT_ID;
+  delete process.env.CF_AI_TOKEN;
+  studio._resetGemini();
+});

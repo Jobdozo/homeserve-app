@@ -24,6 +24,11 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-}
       GEMINI_TEXT_MODEL: ${GEMINI_TEXT_MODEL:-}
+      # Second picture maker: Cloudflare Workers AI (set with deploy/set-cloudflare-ai.sh). IMAGE_PROVIDER: auto|gemini|cloudflare.
+      CF_AI_ACCOUNT_ID: ${CF_AI_ACCOUNT_ID:-}
+      CF_AI_TOKEN: ${CF_AI_TOKEN:-}
+      CF_AI_IMAGE_MODEL: ${CF_AI_IMAGE_MODEL:-}
+      IMAGE_PROVIDER: ${IMAGE_PROVIDER:-auto}
       # Facebook Page + Instagram posting (server/src/social.js; set with deploy/set-meta.sh).
       META_PAGE_ID: ${META_PAGE_ID:-}
       META_PAGE_TOKEN: ${META_PAGE_TOKEN:-}

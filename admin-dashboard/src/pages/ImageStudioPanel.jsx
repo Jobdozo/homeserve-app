@@ -169,31 +169,34 @@ export default function ImageStudioPanel() {
           <div>
             <p className="text-[14px] font-bold text-gray-900">Image Studio</p>
             <p className="max-w-2xl text-[12px] text-gray-500">
-              Gemini draws a picture in Tikdum's style. Women's services show a woman, men's a man, and body services (waxing, massage, polishing) show products only, never a person.
-              Nothing is used until you approve it.
+              AI draws a picture in Tikdum's style (Gemini, or Cloudflare when Gemini is out of quota). Women's services show a woman, men's a man, and body services
+              (waxing, massage, polishing) show products only, never a person. Nothing is used until you approve it.
             </p>
           </div>
           {status && (
-            <span className={"rounded-full px-3 py-1 text-[11.5px] font-semibold " + (status.configured && !status.error ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
-              {status.configured ? (status.error ? "Gemini key problem" : "Gemini connected") : "Gemini not set up"}
-            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {status.gemini && (
+                <span className={"rounded-full px-3 py-1 text-[11.5px] font-semibold " + (status.error || status.geminiResting ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700")}>
+                  {status.error ? "Gemini key problem" : status.geminiResting ? "Gemini out of quota" : "Gemini connected"}
+                </span>
+              )}
+              {status.cloudflare && <span className="rounded-full bg-emerald-100 px-3 py-1 text-[11.5px] font-semibold text-emerald-700">Cloudflare AI connected</span>}
+              {!status.configured && <span className="rounded-full bg-amber-100 px-3 py-1 text-[11.5px] font-semibold text-amber-700">No picture maker set up</span>}
+            </div>
           )}
         </div>
         {status && !status.configured && (
-          <ol className="mt-3 list-decimal space-y-1 rounded-xl bg-amber-50 p-3 pl-7 text-[12px] text-amber-800">
-            <li>Create a key at Google AI Studio (aistudio.google.com → Get API key).</li>
-            <li>
-              On the server, add <code className="rounded bg-white px-1">GEMINI_API_KEY=your-key</code> to the <code className="rounded bg-white px-1">.env</code> next to docker-compose.yml.
-            </li>
-            <li>
-              Run <code className="rounded bg-white px-1">docker compose -p homeserve up -d server</code>, then refresh this page.
-            </li>
-          </ol>
+          <p className="mt-3 rounded-xl bg-amber-50 p-3 text-[12px] text-amber-800">
+            On the server, run <code className="rounded bg-white px-1">bash deploy/set-cloudflare-ai.sh</code> (Cloudflare Workers AI) or add <code className="rounded bg-white px-1">GEMINI_API_KEY</code> to the
+            .env, then refresh this page.
+          </p>
         )}
-        {status?.error && <p className="mt-2 text-[12px] text-red-600">{status.error}</p>}
-        {status?.configured && !status.error && (
+        {status?.error && !status.cloudflare && <p className="mt-2 text-[12px] text-red-600">{status.error}</p>}
+        {status?.configured && (
           <p className="mt-2 text-[11.5px] text-gray-400">
-            Pictures: {status.imageModel || "—"} · check: {status.textModel || "none"} · used today {status.usedToday} of {status.dailyLimit}
+            Pictures: {status.imageModel || "—"}
+            {status.cloudflare && status.gemini ? ` (falls back to cloudflare:${status.cloudflare})` : ""} · check: {status.textModel && !status.geminiResting ? status.textModel : "by you when approving"} · used today{" "}
+            {status.usedToday} of {status.dailyLimit}
           </p>
         )}
       </div>
