@@ -11,6 +11,13 @@ export const PUSH_BANNERS = [
   { path: "/push-banners/gas-stove-chimney.jpg", label: "Gas Stove & Chimney" },
   { path: "/push-banners/computer-repair.jpg", label: "Computer & Laptop" },
   { path: "/push-banners/pest-control.jpg", label: "Pest Control" },
+  // Festival greetings
+  { path: "/push-banners/dussehra.jpg", label: "Dussehra" },
+  { path: "/push-banners/karwa-chauth.jpg", label: "Karwa Chauth" },
+  { path: "/push-banners/dhanteras.jpg", label: "Dhanteras" },
+  { path: "/push-banners/diwali.jpg", label: "Diwali" },
+  { path: "/push-banners/bhai-dooj.jpg", label: "Bhai Dooj" },
+  { path: "/push-banners/gurpurab.jpg", label: "Gurpurab" },
 ];
 export const pictureUrl = (path) => (!path ? null : path.startsWith("/uploads/") ? `${SERVER_URL}${path}` : `https://tikdum.com${path}`);
 
