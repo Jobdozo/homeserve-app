@@ -67,7 +67,8 @@ const STYLE =
 
 function personLine(audience) {
   const who = audience === "female" ? "an Indian woman professional in her late twenties" : audience === "male" ? "an Indian man professional in his thirties" : "a friendly Indian home-service professional";
-  return `${who}, wearing a neat purple-and-white uniform, smiling warmly, working with the tools of the job.`;
+  // "plain … no badges": picture models otherwise invent name tags and logos with gibberish lettering.
+  return `${who}, wearing a neat plain purple-and-white uniform with no badges, patches, name tags, embroidery or lettering, smiling warmly, working with the tools of the job.`;
 }
 
 const KINDS = {
