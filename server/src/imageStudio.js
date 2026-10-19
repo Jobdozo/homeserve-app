@@ -84,11 +84,22 @@ const KINDS = {
   category: { ratio: "16:9", label: "a service category banner (wide)" },
 };
 
-function buildBrief({ kind, name, category, type, tagline, audience, people }) {
+// What the picture shows:
+//   person   — a professional at work (personLine);
+//   service  — the service itself, no people: the place, appliance or finished result (a spotless
+//              bathroom for bathroom cleaning) — the default in Admin;
+//   products — a still life of products and tools: always for body services (waxing, massage …).
+const SERVICE_SCENE =
+  "The service itself, not a person: show the place, appliance or finished result this service is about — for example a spotless, sparkling modern bathroom for bathroom cleaning, " +
+  "a split AC unit on a clean wall for AC repair, a gleaming kitchen chimney above a clean hob for chimney cleaning, a neat electrical switchboard for electrician work — " +
+  "in a bright, tidy Indian home, with the professional tools of the job neatly placed nearby. No people and no body parts.";
+const PRODUCTS_SCENE =
+  "Product still life only: the generic, unbranded products and tools used for this service, neatly arranged on a soft lavender surface in a spotless bright treatment room. No people and no body parts.";
+
+function buildBrief({ kind, name, category, type, tagline, audience, people, show }) {
   const subject = [name, type && type !== name ? `(${type})` : "", category ? `in ${category}` : ""].filter(Boolean).join(" ");
-  const scene = people
-    ? personLine(audience)
-    : "Product still life only: the generic, unbranded products and tools used for this service, neatly arranged on a soft lavender surface in a spotless bright treatment room. No people and no body parts.";
+  const what = show || (people ? "person" : "products");
+  const scene = what === "person" ? personLine(audience) : what === "service" ? SERVICE_SCENE : PRODUCTS_SCENE;
   const wide = KINDS[kind]?.ratio === "16:9" ? " Wide composition with calm space on the left for a heading." : " Square composition, subject centred with breathing room.";
   return `${STYLE} Subject — ${KINDS[kind]?.label || "a service"}: ${subject}${tagline ? `. ${tagline}` : ""}. ${scene}${wide}`;
 }
@@ -179,6 +190,7 @@ function forFlux(prompt) {
     .replace(/ with no badges, patches, name tags, embroidery, logos or lettering/g, ", the fabric completely blank and solid")
     .replace(/the generic, unbranded products/g, "the plain products")
     .replace(/No people and no body parts\./g, "Only objects in the scene.")
+    .replace(/The service itself, not a person: show/g, "Show")
     .replace(/[^.]*[₹\d][^.]*\.\s*/g, " ")
     .replace(/\s{2,}/g, " ")
     .trim();
@@ -379,8 +391,11 @@ function enqueue(targets, actor) {
     if (!KINDS[t.targetType] || !t.targetId || !t.name) continue;
     const k = `${t.targetType}:${t.targetId}`;
     if (open.has(k)) continue; // already being drawn, or waiting for approval
-    const who = audienceFor({ name: t.name, category: t.category, type: t.type, override: t.audience });
-    const prompt = buildBrief({ kind: t.targetType, name: t.name, category: t.category, type: t.type, tagline: t.tagline, ...who });
+    const found = audienceFor({ name: t.name, category: t.category, type: t.type, override: t.audience });
+    // t.show: "service" (no people — Admin's default) or "person"; body services are always products.
+    const show = !found.people ? "products" : t.show === "service" ? "service" : "person";
+    const who = { audience: found.audience, people: show === "person" };
+    const prompt = buildBrief({ kind: t.targetType, name: t.name, category: t.category, type: t.type, tagline: t.tagline, ...who, show });
     const row = jsonStore.insert(CANDIDATES, {
       targetType: t.targetType,
       targetId: String(t.targetId),
@@ -390,6 +405,7 @@ function enqueue(targets, actor) {
       tagline: String(t.tagline || "").slice(0, 120),
       audience: who.audience,
       people: who.people,
+      show,
       prompt,
       status: "generating",
       createdAt: new Date().toISOString(),

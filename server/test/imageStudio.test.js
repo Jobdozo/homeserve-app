@@ -279,3 +279,29 @@ test("FLUX prompt: only what should be in the picture — no 'no logos', no pric
   assert.match(still, /Only objects in the scene\./);
   assert.doesNotMatch(still, /unbranded|people/i);
 });
+
+test("show 'service': the service itself, no people (body services stay products only)", async () => {
+  const brief = studio.buildBrief({ kind: "service", name: "Bathroom Cleaning", category: "Home Cleaning", audience: "any", people: false, show: "service" });
+  assert.match(brief, /The service itself, not a person/);
+  assert.match(brief, /spotless, sparkling modern bathroom/);
+  assert.doesNotMatch(brief, /uniform/);
+  const flux = studio._forFlux(brief);
+  assert.match(flux, /^Photorealistic/);
+  assert.match(flux, /Show the place, appliance or finished result/);
+  assert.match(flux, /Only objects in the scene\./);
+  assert.doesNotMatch(flux, /person|people/i);
+
+  process.env.CF_AI_ACCOUNT_ID = "acc123";
+  process.env.CF_AI_TOKEN = "cf-secret-token";
+  global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ success: true, result: { image: PNG.toString("base64") } }) });
+  const [a] = studio.enqueue([{ targetType: "service", targetId: "show-1", name: "Bathroom Cleaning", category: "Home Cleaning", show: "service" }]);
+  assert.equal(a.show, "service");
+  assert.equal(a.people, false);
+  const [b] = studio.enqueue([{ targetType: "service", targetId: "show-2", name: "Full Body Waxing", category: "Salon & Spa", show: "person" }]);
+  assert.equal(b.show, "products"); // body services: never a person
+  const [c] = studio.enqueue([{ targetType: "service", targetId: "show-3", name: "Fan Repair", category: "Electrician" }]);
+  assert.equal(c.show, "person"); // the API's old default
+  await wait(() => ["show-1", "show-2", "show-3"].every((id) => studio.listCandidates().find((x) => x.targetId === id && x.status !== "generating")));
+  delete process.env.CF_AI_ACCOUNT_ID;
+  delete process.env.CF_AI_TOKEN;
+});

@@ -43,6 +43,7 @@ export default function ImageStudioPanel() {
   const [catalog, setCatalog] = useState([]);
   const [selected, setSelected] = useState(new Set());
   const [audience, setAudience] = useState({}); // id -> auto|female|male|any
+  const [show, setShow] = useState("service"); // what pictures show: the service itself (no people) or a professional
   const [candidates, setCandidates] = useState([]);
   const [busy, setBusy] = useState(false);
   const [working, setWorking] = useState(null); // candidate id being approved
@@ -107,6 +108,7 @@ export default function ImageStudioPanel() {
           type: r.type,
           tagline: r.tagline,
           audience: audience[r.id] || "auto",
+          show,
         }));
         await api.generateImages(batch);
       }
@@ -149,7 +151,16 @@ export default function ImageStudioPanel() {
       await api.settleImage(c.id, "rejected");
       if (again) {
         await api.generateImages([
-          { targetType: c.targetType, targetId: c.targetId, name: c.name, category: c.category, type: c.type, tagline: c.tagline, audience: c.audience === "female" || c.audience === "male" ? c.audience : "auto" },
+          {
+            targetType: c.targetType,
+            targetId: c.targetId,
+            name: c.name,
+            category: c.category,
+            type: c.type,
+            tagline: c.tagline,
+            audience: c.audience === "female" || c.audience === "male" ? c.audience : "auto",
+            show: c.show === "person" || c.people ? "person" : "service",
+          },
         ]);
       }
     } catch (e) {
@@ -220,6 +231,21 @@ export default function ImageStudioPanel() {
         <label className="flex items-center gap-1.5 text-[12px] text-gray-600">
           <input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} className="accent-brand" /> Only without a picture
         </label>
+        <div className="flex items-center gap-1 rounded-xl bg-gray-50 p-1" title="What new pictures show. Body services (waxing, massage …) always show products only.">
+          <span className="px-1.5 text-[11.5px] text-gray-500">Picture shows</span>
+          {[
+            ["service", "The service (no people)"],
+            ["person", "A professional at work"],
+          ].map(([v, l]) => (
+            <button
+              key={v}
+              onClick={() => setShow(v)}
+              className={"rounded-lg px-2.5 py-1 text-[11.5px] font-semibold " + (show === v ? "bg-brand text-white" : "text-gray-500")}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
         <span className="text-[12px] text-gray-400">{targets.length} shown</span>
         <button onClick={() => setSelected(new Set(targets.filter((t) => !t.busy).slice(0, 25).map((t) => t.id)))} className="text-[12px] font-semibold text-brand">
           Select first 25
@@ -284,7 +310,17 @@ export default function ImageStudioPanel() {
                     <p className="text-[13px] font-semibold text-gray-900">{c.name}</p>
                     <span className="flex-shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold capitalize text-gray-500">{c.targetType}</span>
                   </div>
-                  <p className="text-[11px] text-gray-400">{c.people ? (c.audience === "any" ? "A professional" : c.audience === "female" ? "A woman" : "A man") : "Products only (no people)"}</p>
+                  <p className="text-[11px] text-gray-400">
+                    {c.people
+                      ? c.audience === "any"
+                        ? "A professional"
+                        : c.audience === "female"
+                          ? "A woman"
+                          : "A man"
+                      : c.show === "service"
+                        ? "The service (no people)"
+                        : "Products only (no people)"}
+                  </p>
                   {c.qc && (
                     <p
                       className={
