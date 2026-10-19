@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Connects Image Studio to Cloudflare Workers AI (the FLUX picture model) — the picture maker used
-# when Gemini isn't set up or is out of quota. Asks for the Cloudflare account ID and an API token
-# (typed at a prompt, never shown on screen or saved in the shell history), draws one small test
-# picture to check the token works, saves both in .env and restarts the API.
+# when Gemini isn't set up or is out of quota. Asks only for the API token (typed at a prompt, never
+# shown on screen or saved in the shell history), draws one small test picture to check it works,
+# saves it with Tikdum's Cloudflare account ID in .env and restarts the API.
 #
 #   cd /root/homeserve-deploy && git pull && bash deploy/set-cloudflare-ai.sh
+#
+# Another Cloudflare account: CF_AI_ACCOUNT_ID=<id> bash deploy/set-cloudflare-ai.sh
 #
 # The token: Cloudflare dashboard → My Profile → API Tokens → Create Token → "Workers AI" template
 # (Account → Workers AI → Read and Edit), for the Tikdum account only.
@@ -14,13 +16,12 @@ cd "$(dirname "$0")/.."
 ENV_FILE=.env
 [ -f "$ENV_FILE" ] || { echo "$PWD/$ENV_FILE not found — stopping."; exit 1; }
 
-DEFAULT_ACCOUNT="15795f3116e27726387d32069bca8292"
-printf "Cloudflare account ID [%s]: " "$DEFAULT_ACCOUNT"
-IFS= read -r ACCOUNT
-ACCOUNT="$(printf %s "${ACCOUNT:-$DEFAULT_ACCOUNT}" | tr -d '[:space:]')"
+# Tikdum's Cloudflare account (not a secret: it's in every dashboard address).
+ACCOUNT="$(printf %s "${CF_AI_ACCOUNT_ID:-15795f3116e27726387d32069bca8292}" | tr -d '[:space:]')"
 case "$ACCOUNT" in
-  *[!0-9a-f]* | "") echo "That doesn't look like a Cloudflare account ID (32 letters a–f and numbers). Nothing was changed."; exit 1 ;;
+  *[!0-9a-f]* | "") echo "CF_AI_ACCOUNT_ID doesn't look like a Cloudflare account ID (32 letters a–f and numbers). Nothing was changed."; exit 1 ;;
 esac
+echo "Cloudflare account: $ACCOUNT"
 
 printf "Paste the Cloudflare API token (it won't show) and press Enter: "
 IFS= read -rs TOKEN
