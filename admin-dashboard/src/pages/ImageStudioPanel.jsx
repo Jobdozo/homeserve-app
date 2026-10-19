@@ -286,8 +286,16 @@ export default function ImageStudioPanel() {
                   </div>
                   <p className="text-[11px] text-gray-400">{c.people ? (c.audience === "any" ? "A professional" : c.audience === "female" ? "A woman" : "A man") : "Products only (no people)"}</p>
                   {c.qc && (
-                    <p className={"rounded-lg px-2 py-1 text-[11px] " + (c.qc.ok ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
-                      {c.qc.ok ? "Passed the check" : "Check found: " + c.qc.issues.join("; ")}
+                    <p
+                      className={
+                        "rounded-lg px-2 py-1 text-[11px] " + (c.qc.ok && c.qc.checked !== false ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")
+                      }
+                    >
+                      {!c.qc.ok
+                        ? "Check found: " + c.qc.issues.join("; ")
+                        : c.qc.checked === false
+                          ? "Not checked automatically — look closely for text, hands and faces"
+                          : "Passed the check"}
                     </p>
                   )}
                   <div className="flex gap-2">

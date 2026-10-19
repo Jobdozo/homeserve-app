@@ -6,6 +6,7 @@ const path = require("path");
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "tikdum-imagestudio-"));
 process.env.JWT_SECRET = "test-secret";
+process.env.IMAGE_STUDIO_LOGO = "off"; // the logo stamp has its own test below
 const studio = require("../src/imageStudio");
 const { UPLOADS_DIR } = require("../src/uploads");
 
@@ -231,4 +232,33 @@ test("Cloudflare Workers AI: used when Gemini is out of quota, and on its own wi
   delete process.env.CF_AI_ACCOUNT_ID;
   delete process.env.CF_AI_TOKEN;
   studio._resetGemini();
+});
+
+test("brief: Tikdum's black uniform, plain (the logo is stamped on afterwards)", () => {
+  const trade = studio.buildBrief({ kind: "service", name: "Fan Repair", category: "Electrician", audience: "any", people: true });
+  assert.match(trade, /plain black polo T-shirt uniform and a plain black cap/);
+  assert.match(trade, /no badges, patches, name tags, embroidery, logos or lettering/);
+  assert.doesNotMatch(trade, /purple-and-white uniform/);
+  assert.match(studio.buildBrief({ kind: "service", name: "Facial", category: "Salon & Spa", audience: "female", people: true }), /plain black salon uniform top/);
+});
+
+let sharpAvailable = true;
+try {
+  require("sharp");
+} catch {
+  sharpAvailable = false;
+}
+test("stampLogo: the Tikdum logo goes in the bottom-left corner", { skip: !sharpAvailable && "sharp isn't installed here" }, async () => {
+  const sharp = require("sharp");
+  const plain = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: { r: 30, g: 30, b: 30 } } }).jpeg().toBuffer();
+  process.env.IMAGE_STUDIO_LOGO = "on";
+  const out = await studio._stampLogo({ mime: "image/jpeg", data: plain });
+  process.env.IMAGE_STUDIO_LOGO = "off";
+  assert.equal(out.logo, true);
+  const px = async (x, y) => [...(await sharp(out.data).extract({ left: x, top: y, width: 1, height: 1 }).raw().toBuffer())];
+  const corner = await px(262, 958); // the badge's white background, right of the "Tikdum" name
+  const top = await px(900, 40); // untouched
+  assert.ok(corner.every((v) => v > 200), `badge is white: ${corner}`);
+  assert.ok(top.every((v) => v < 60), `rest unchanged: ${top}`);
+  assert.equal((await studio._stampLogo({ mime: "image/jpeg", data: plain })).logo, undefined); // off: as drawn
 });

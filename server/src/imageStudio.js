@@ -62,13 +62,19 @@ function audienceFor({ name = "", category = "", type = "", override = "auto" })
 // ---------------- the brief ----------------
 const STYLE =
   "Photorealistic, bright, clean commercial photograph for a home-services app in India. Soft natural light, shallow depth of field, warm and trustworthy mood. " +
-  "Use soft purple (#5B3FE0) and white as accent colours in the props, uniform or background. " +
+  "Use soft purple (#5B3FE0) and white as accent colours in the props or background. " +
   "Absolutely no text, no letters, no numbers, no logos, no brand names, no watermarks, no borders. Natural proportions, correct hands, no distortion.";
 
 function personLine(audience) {
   const who = audience === "female" ? "an Indian woman professional in her late twenties" : audience === "male" ? "an Indian man professional in his thirties" : "a friendly Indian home-service professional";
-  // "plain … no badges": picture models otherwise invent name tags and logos with gibberish lettering.
-  return `${who}, wearing a neat plain purple-and-white uniform with no badges, patches, name tags, embroidery or lettering, smiling warmly, working with the tools of the job.`;
+  // Tikdum's uniform is a black polo (trades add a black cap), as in the category photos. "Plain … no
+  // badges": picture models otherwise invent name tags and logos with gibberish lettering; the real
+  // Tikdum logo is stamped on afterwards (stampLogo).
+  const outfit =
+    audience === "female"
+      ? "a neat plain black salon uniform top"
+      : "a neat plain black polo T-shirt uniform and a plain black cap";
+  return `${who}, wearing ${outfit} with no badges, patches, name tags, embroidery, logos or lettering, smiling warmly, working with the tools of the job.`;
 }
 
 const KINDS = {
@@ -181,6 +187,31 @@ async function drawWithCloudflare(prompt, ratio) {
   let out = Buffer.from(b64, "base64");
   if (ratio === "16:9" && sharp) out = await sharp(out).resize({ width: 1344, height: 756, fit: "cover" }).jpeg({ quality: 88 }).toBuffer();
   return { mime: "image/jpeg", data: out };
+}
+
+// The real Tikdum logo (icon + name, src/assets/tikdum-badge.png) in the bottom-left corner, about
+// a quarter of the picture wide. AI models can't draw the exact logo, so it goes on afterwards.
+// IMAGE_STUDIO_LOGO=off leaves pictures as drawn. Without the image library, pictures stay as drawn.
+const BADGE = path.join(__dirname, "assets", "tikdum-badge.png");
+async function stampLogo(image) {
+  if (!sharp || String(process.env.IMAGE_STUDIO_LOGO || "on").toLowerCase() === "off" || !fs.existsSync(BADGE)) return image;
+  try {
+    const base = sharp(image.data, { failOn: "none" });
+    const { width, height } = await base.metadata();
+    if (!width || !height) return image;
+    const badgeW = Math.round(width * 0.27);
+    const badge = await sharp(BADGE).resize({ width: badgeW }).png().toBuffer();
+    const badgeH = (await sharp(badge).metadata()).height;
+    const margin = Math.round(width * 0.025);
+    const data = await base
+      .composite([{ input: badge, left: margin, top: Math.max(0, height - badgeH - margin) }])
+      .jpeg({ quality: 90 })
+      .toBuffer();
+    return { mime: "image/jpeg", data, logo: true };
+  } catch (e) {
+    console.error("Image studio: couldn't add the logo", e.message);
+    return image;
+  }
 }
 
 // The picture makers to try, in order: Gemini first (unless resting after "quota exceeded"),
@@ -309,8 +340,10 @@ async function processJob(job) {
       ? await inspect(checker, image, job.expect).catch((e) => ({ ok: true, issues: [`Not checked automatically: ${e.message}`.slice(0, 160)], checked: false }))
       : { ok: true, issues: [], checked: false };
     if (last) deleteFile(last.url);
-    const file = `${crypto.randomBytes(16).toString("hex")}${extFor(image.mime)}`;
-    fs.writeFileSync(path.join(UPLOADS_DIR, file), image.data);
+    // The check looks at the picture as drawn; the logo goes on the copy that is kept.
+    const kept = await stampLogo(image);
+    const file = `${crypto.randomBytes(16).toString("hex")}${extFor(kept.mime)}`;
+    fs.writeFileSync(path.join(UPLOADS_DIR, file), kept.data);
     last = { url: `/uploads/${file}` };
     if (qc.ok) break;
   }
@@ -387,4 +420,4 @@ async function status() {
   return out;
 }
 
-module.exports = { audienceFor, buildBrief, pickModels, enqueue, settle, listCandidates, status, MAX_QUEUE, DAILY_LIMIT, _inspect: inspect, _drawImage: drawImage, _resetGemini: () => { geminiRestUntil = 0; } };
+module.exports = { audienceFor, buildBrief, pickModels, enqueue, settle, listCandidates, status, MAX_QUEUE, DAILY_LIMIT, _inspect: inspect, _drawImage: drawImage, _stampLogo: stampLogo, _resetGemini: () => { geminiRestUntil = 0; } };
