@@ -11,14 +11,16 @@ cd "$(dirname "$0")/.."
 ENV_FILE=.env
 [ -f "$ENV_FILE" ] || { echo "$PWD/$ENV_FILE not found — stopping."; exit 1; }
 
-printf "Paste the Gemini API key (starts with AIza; it won't show) and press Enter: "
+printf "Paste the Gemini API key (it won't show) and press Enter: "
 IFS= read -rs KEY
 echo
 KEY="$(printf %s "$KEY" | tr -d '[:space:]')"
+# Older keys start with "AIza", newer ones with "AQ."; Google itself decides below whether it works.
 case "$KEY" in
-  AIza*) ;;
-  *) echo "That doesn't look like a Gemini API key (it starts with AIza). Nothing was changed."; exit 1 ;;
+  AIza* | AQ.*) ;;
+  *) echo "That doesn't look like a Gemini API key (they start with AIza or AQ.). Nothing was changed."; exit 1 ;;
 esac
+[ "${#KEY}" -ge 30 ] || { echo "That key looks too short — copy the whole key. Nothing was changed."; exit 1; }
 
 API=https://generativelanguage.googleapis.com/v1beta
 body="$(mktemp)"
