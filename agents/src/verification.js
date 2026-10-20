@@ -47,13 +47,25 @@ function dueForWhatsApp(pending, sent, now, cfg = config.verification) {
     .slice(0, cfg.waPerRun);
 }
 
-// The message (goes into the "tikdum_message" template: "Hello {{name}}, {{message}}").
+// Short names of what's missing, for a WhatsApp line.
+const SHORT = {
+  name: "your name",
+  category: "service category",
+  area: "service area",
+  services: "a service with price",
+  business_id: "Udyam or GST number",
+  id_proof: "ID proof",
+  agreement: "accept the agreement",
+  gst_format: "correct GST number",
+  gst_doc: "GST certificate",
+};
+
+// The message, kept short (goes into the "tikdum_message" template: "Hello {{name}}, {{message}}";
+// inside WhatsApp's 24-hour window it goes as plain text, so it starts with a capital).
 function whatsAppText(p, count = 0) {
-  const items = fixable(p).map((k) => FRIENDLY[k]);
-  const list = items.length === 1 ? items[0] : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
-  // Starts with a capital: inside WhatsApp's 24-hour window it goes as plain text, without the template's "Hello <name>,".
-  const opener = count === 0 ? "Your Tikdum Business application is almost complete" : "A friendly reminder: your Tikdum Business application is still waiting";
-  return `${opener}. To activate your provider ID and start getting job requests, please add ${list}. Open the Tikdum Business app → Profile to finish. Reply here if you need help.`;
+  const items = fixable(p).map((k) => SHORT[k] || FRIENDLY[k]);
+  const opener = count === 0 ? "Your Tikdum Business ID is almost ready ✅" : "Reminder: your Tikdum Business ID is still pending.";
+  return `${opener} Please add: ${items.join(", ")}. Tikdum Business app → Profile. Need help? Reply here.`;
 }
 
 async function followUp(client, log, pending, st, now) {

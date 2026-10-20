@@ -117,10 +117,10 @@ test("verification WhatsApp: who and when (after a day, every 3 days, max 3, 10:
   assert.equal(verification.dueForWhatsApp([incomplete], { p1: { count: 1, last: at(11) - 73 * 3600000 } }, at(11)).length, 1);
   assert.equal(verification.dueForWhatsApp([incomplete], { p1: { count: 3, last: 0 } }, at(11)).length, 0); // max 3
   const text = verification.whatsAppText(incomplete);
-  assert.match(text, /^Your Tikdum Business application is almost complete\. To activate your provider ID/);
-  assert.match(text, /add your Udyam registration number or GST number \(any one\) under Profile → Edit and accepting the Tikdum provider agreement/);
+  assert.equal(text, "Your Tikdum Business ID is almost ready ✅ Please add: Udyam or GST number, accept the agreement. Tikdum Business app → Profile. Need help? Reply here.");
+  assert.ok(text.length < 160, "short enough for one glance on WhatsApp");
   assert.doesNotMatch(text, /ID proof|Aadhaar/);
-  assert.match(verification.whatsAppText(incomplete, 1), /^A friendly reminder/);
+  assert.match(verification.whatsAppText(incomplete, 1), /^Reminder: your Tikdum Business ID is still pending\./);
 });
 
 test("verification WhatsApp tick: sends with 'WhatsApp inbox → Add', otherwise says so once", async () => {
@@ -144,11 +144,11 @@ test("verification WhatsApp tick: sends with 'WhatsApp inbox → Add', otherwise
   const sent = writes(c, "/admin/inbox/send");
   assert.equal(sent.length, 1);
   assert.equal(sent[0][2].providerId, "w1");
-  assert.match(sent[0][2].message, /Udyam registration number or GST number/);
+  assert.match(sent[0][2].message, /Please add: Udyam or GST number/);
   c = fake(routes);
   await verification.tick(c, silent, { now: at11 + 3600000 });
   assert.equal(writes(c, "/admin/inbox/send").length, 0); // not again within 3 days
   c = fake(routes);
   await verification.tick(c, silent, { now: at11 + 73 * 3600000 });
-  assert.match(writes(c, "/admin/inbox/send")[0][2].message, /^A friendly reminder/);
+  assert.match(writes(c, "/admin/inbox/send")[0][2].message, /^Reminder:/);
 });
