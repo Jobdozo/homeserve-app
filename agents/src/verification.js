@@ -47,26 +47,11 @@ function dueForWhatsApp(pending, sent, now, cfg = config.verification) {
     .slice(0, cfg.waPerRun);
 }
 
-// Short names of what's missing, for a WhatsApp line.
-const SHORT = {
-  name: "your name",
-  category: "service category",
-  area: "service area",
-  services: "a service with price",
-  business_id: "Udyam or GST number",
-  id_proof: "ID proof",
-  agreement: "accept the agreement",
-  gst_format: "correct GST number",
-  gst_doc: "GST certificate",
-};
-
-// The message, kept short (goes into the "tikdum_message" template: "Hello {{name}}, {{message}}";
-// inside WhatsApp's 24-hour window it goes as plain text, so it starts with a capital).
+// The owner's wording: no list of what's missing (the app's Profile shows it).
 function whatsAppText(p, count = 0, freeUntil = config.verification.waFreeUntil) {
-  const items = fixable(p).map((k) => SHORT[k] || FRIENDLY[k]);
   const opener = count === 0 ? "Your Tikdum Business ID is almost ready ✅" : "Reminder: your Tikdum Business ID is still pending.";
   const free = freeUntil ? `Free registration till ${freeUntil}!` : "Registration is free!";
-  return `${opener} Please add: ${items.join(", ")}. Complete the registration and start getting job requests. ${free} Tikdum Business app → Profile.`;
+  return `${opener} Complete the registration and start getting job requests. ${free} Tikdum Business app → Profile.`;
 }
 
 async function followUp(client, log, pending, st, now) {

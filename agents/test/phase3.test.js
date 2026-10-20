@@ -119,13 +119,13 @@ test("verification WhatsApp: who and when (after a day, every 3 days, max 3, 10:
   const text = verification.whatsAppText(incomplete, 0, "");
   assert.equal(
     text,
-    "Your Tikdum Business ID is almost ready ✅ Please add: Udyam or GST number, accept the agreement. Complete the registration and start getting job requests. Registration is free! Tikdum Business app → Profile."
+    "Your Tikdum Business ID is almost ready ✅ Complete the registration and start getting job requests. Registration is free! Tikdum Business app → Profile."
   );
-  assert.doesNotMatch(text, /ID proof|Aadhaar/);
   assert.equal(
-    verification.whatsAppText(incomplete, 1, "10 November"),
-    "Reminder: your Tikdum Business ID is still pending. Please add: Udyam or GST number, accept the agreement. Complete the registration and start getting job requests. Free registration till 10 November! Tikdum Business app → Profile."
+    verification.whatsAppText(incomplete, 1, ""),
+    "Reminder: your Tikdum Business ID is still pending. Complete the registration and start getting job requests. Registration is free! Tikdum Business app → Profile."
   );
+  assert.match(verification.whatsAppText(incomplete, 1, "10 November"), /Free registration till 10 November!/);
 });
 
 test("verification WhatsApp tick: sends with 'WhatsApp inbox → Add', otherwise says so once", async () => {
@@ -149,7 +149,7 @@ test("verification WhatsApp tick: sends with 'WhatsApp inbox → Add', otherwise
   const sent = writes(c, "/admin/inbox/send");
   assert.equal(sent.length, 1);
   assert.equal(sent[0][2].providerId, "w1");
-  assert.match(sent[0][2].message, /Please add: Udyam or GST number/);
+  assert.match(sent[0][2].message, /Complete the registration and start getting job requests/);
   c = fake(routes);
   await verification.tick(c, silent, { now: at11 + 3600000 });
   assert.equal(writes(c, "/admin/inbox/send").length, 0); // not again within 3 days
