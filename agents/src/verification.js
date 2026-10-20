@@ -62,10 +62,11 @@ const SHORT = {
 
 // The message, kept short (goes into the "tikdum_message" template: "Hello {{name}}, {{message}}";
 // inside WhatsApp's 24-hour window it goes as plain text, so it starts with a capital).
-function whatsAppText(p, count = 0) {
+function whatsAppText(p, count = 0, freeUntil = config.verification.waFreeUntil) {
   const items = fixable(p).map((k) => SHORT[k] || FRIENDLY[k]);
   const opener = count === 0 ? "Your Tikdum Business ID is almost ready ✅" : "Reminder: your Tikdum Business ID is still pending.";
-  return `${opener} Please add: ${items.join(", ")}. Tikdum Business app → Profile. Need help? Reply here.`;
+  const free = freeUntil ? `Free registration till ${freeUntil}!` : "Registration is free!";
+  return `${opener} Please add: ${items.join(", ")}. Complete the registration and start getting job requests. ${free} Tikdum Business app → Profile.`;
 }
 
 async function followUp(client, log, pending, st, now) {

@@ -101,6 +101,8 @@ module.exports = {
     waPerRun: num(process.env.VERIFICATION_WA_PER_RUN, 10),
     waFromHourIst: num(process.env.VERIFICATION_WA_FROM_HOUR_IST, 10),
     waToHourIst: num(process.env.VERIFICATION_WA_TO_HOUR_IST, 19),
+    // "Free registration till 10 November!" — empty: "Registration is free!"
+    waFreeUntil: String(process.env.VERIFICATION_WA_FREE_UNTIL || "").trim().slice(0, 40),
   },
 
   payments: {

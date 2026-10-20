@@ -116,11 +116,16 @@ test("verification WhatsApp: who and when (after a day, every 3 days, max 3, 10:
   assert.equal(verification.dueForWhatsApp([incomplete], { p1: { count: 1, last: at(11) - 24 * 3600000 } }, at(11)).length, 0); // 3-day gap
   assert.equal(verification.dueForWhatsApp([incomplete], { p1: { count: 1, last: at(11) - 73 * 3600000 } }, at(11)).length, 1);
   assert.equal(verification.dueForWhatsApp([incomplete], { p1: { count: 3, last: 0 } }, at(11)).length, 0); // max 3
-  const text = verification.whatsAppText(incomplete);
-  assert.equal(text, "Your Tikdum Business ID is almost ready ✅ Please add: Udyam or GST number, accept the agreement. Tikdum Business app → Profile. Need help? Reply here.");
-  assert.ok(text.length < 160, "short enough for one glance on WhatsApp");
+  const text = verification.whatsAppText(incomplete, 0, "");
+  assert.equal(
+    text,
+    "Your Tikdum Business ID is almost ready ✅ Please add: Udyam or GST number, accept the agreement. Complete the registration and start getting job requests. Registration is free! Tikdum Business app → Profile."
+  );
   assert.doesNotMatch(text, /ID proof|Aadhaar/);
-  assert.match(verification.whatsAppText(incomplete, 1), /^Reminder: your Tikdum Business ID is still pending\./);
+  assert.equal(
+    verification.whatsAppText(incomplete, 1, "10 November"),
+    "Reminder: your Tikdum Business ID is still pending. Please add: Udyam or GST number, accept the agreement. Complete the registration and start getting job requests. Free registration till 10 November! Tikdum Business app → Profile."
+  );
 });
 
 test("verification WhatsApp tick: sends with 'WhatsApp inbox → Add', otherwise says so once", async () => {
