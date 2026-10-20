@@ -36,7 +36,7 @@ const TEAMS = [
       { key: "support", name: "Support Agent", how: "ai", role: "support", description: "Answers customers on WhatsApp (drafts for review until you switch on auto-send); hands refunds, safety and anything unsure to people." },
       { key: "complaints", name: "Complaint Triage Agent", how: "ai", role: "complaints", description: "Sorts complaints, escalates safety, proposes replies and refund decisions." },
       { key: "registration", name: "Registration Agent", how: "rules", role: "registration", description: "Daily call list of unfinished sign-ups; reminds providers what's missing." },
-      { key: "verification", name: "Verification Agent", how: "rules", role: "verification", description: "Pre-checks provider applications; proposes approval when complete." },
+      { key: "verification", name: "Verification Agent", how: "rules", role: "verification", description: "Pre-checks provider applications; proposes approval when complete. WhatsApps providers whose documents or profile are incomplete, saying exactly what to add (after a day, then every 3 days, up to 3 times; needs \"WhatsApp inbox → Add\")." },
       { key: "payments", name: "Payments Agent", how: "rules", role: "payments", description: "Reconciles wallets and commission; daily money summary." },
       { key: "reporting", name: "Reporting Agent", how: "ai", role: "management", description: "Daily 9 AM business brief in admin and on WhatsApp." },
       { key: "dispatch", name: "Dispatch Agent", how: "rules", role: "operations", description: "Watches bookings no provider took; suggests the best provider with reasons for one-tap assign." },

@@ -47,6 +47,9 @@ const READ_ACTIONS = ["view", "export"];
 const AGENT_WRITES = ["complaints.add", "complaints.edit", "notifications.add", "inbox.add"];
 // Per-agent ceiling on direct notifications (in-app messages to one person).
 const NOTIFY_PER_HOUR = 30;
+// Per-agent ceiling on new WhatsApp messages started from Tikdum's number (/admin/inbox/send),
+// e.g. the Verification Agent's follow-ups: each one outside the 24-hour window is a paid template.
+const WHATSAPP_PER_HOUR = 20;
 
 // What an agent may propose for a person to approve: [type, method, path regex].
 const PROPOSABLE = [
@@ -281,6 +284,7 @@ function issueToken(apiKey) {
 
 // ---- request policy (runs inside access.guard, after the permission check) ----
 const notifyLog = new Map(); // agentId -> [timestamps]
+const waLog = new Map(); // agentId -> [timestamps] of /admin/inbox/send
 
 function policy(req, admin, path) {
   const body = req.body || {};
@@ -291,6 +295,13 @@ function policy(req, admin, path) {
     if (recent.length >= NOTIFY_PER_HOUR) return { status: 429, error: "Hourly notification limit reached for this agent" };
     recent.push(now);
     notifyLog.set(admin.agentId, recent);
+  }
+  if (req.method === "POST" && path === "/admin/inbox/send") {
+    const now = Date.now();
+    const recent = (waLog.get(admin.agentId) || []).filter((t) => now - t < 3600 * 1000);
+    if (recent.length >= WHATSAPP_PER_HOUR) return { status: 429, error: "Hourly WhatsApp limit reached for this agent" };
+    recent.push(now);
+    waLog.set(admin.agentId, recent);
   }
   if (req.method === "POST" && /^\/admin\/push-campaigns(\/|$)/.test(path)) {
     return { status: 403, error: "AI agents can't start or stop push campaigns — propose one for approval instead" };

@@ -96,4 +96,4 @@ async function tick(client, log) {
   return nudged || digest ? `${incomplete.length} incomplete applications, ${nudged} nudged${digest ? ", daily call list posted" : ""}` : null;
 }
 
-module.exports = { tick, dueForNudge, unfinishedSignups, nudgeText };
+module.exports = { tick, dueForNudge, unfinishedSignups, nudgeText, FRIENDLY };

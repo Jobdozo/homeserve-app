@@ -109,3 +109,12 @@ test("pictures: each message can carry one of Tikdum's pictures, sent with every
   assert.deepEqual(got, [["🏡 A clean home", "/push-banners/home-cleaning.jpg"]]);
   pc.cancel(c.id, "Owner");
 });
+
+test("agents: at most 20 new WhatsApps an hour each (Verification Agent follow-ups)", () => {
+  const req = { method: "POST", body: { providerId: "p1", message: "hi" } };
+  for (let i = 0; i < 20; i++) assert.equal(agents.policy(req, { agentId: "wa-agent" }, "/admin/inbox/send"), null);
+  const blocked = agents.policy(req, { agentId: "wa-agent" }, "/admin/inbox/send");
+  assert.equal(blocked.status, 429);
+  assert.match(blocked.error, /WhatsApp limit/);
+  assert.equal(agents.policy(req, { agentId: "other-agent" }, "/admin/inbox/send"), null); // per agent
+});

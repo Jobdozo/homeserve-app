@@ -94,6 +94,13 @@ module.exports = {
   verification: {
     key: process.env.AGENT_KEY_VERIFICATION || "",
     everyMs: num(process.env.VERIFICATION_CHECK_EVERY_MIN, 15) * 60000,
+    // WhatsApp follow-ups to providers whose documents/profile are incomplete (verification.js).
+    waFirstAfterHours: num(process.env.VERIFICATION_WA_FIRST_AFTER_HOURS, 24), // give them a day first
+    waEveryHours: num(process.env.VERIFICATION_WA_EVERY_HOURS, 72),
+    waMax: num(process.env.VERIFICATION_WA_MAX, 3),
+    waPerRun: num(process.env.VERIFICATION_WA_PER_RUN, 10),
+    waFromHourIst: num(process.env.VERIFICATION_WA_FROM_HOUR_IST, 10),
+    waToHourIst: num(process.env.VERIFICATION_WA_TO_HOUR_IST, 19),
   },
 
   payments: {

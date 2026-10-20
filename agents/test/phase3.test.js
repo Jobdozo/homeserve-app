@@ -105,3 +105,49 @@ test("payments: one alert per issue, daily summary, never touches money", async 
   assert.equal(await payments.tick(c), null); // same issues, summary already sent today
   assert.ok(!c.calls.some(([m, p]) => m !== "GET" && /wallet|recharge/.test(p)));
 });
+
+test("verification WhatsApp: who and when (after a day, every 3 days, max 3, 10:00–19:00 IST, fixable items only)", () => {
+  const at = (h) => Date.parse(`2026-10-20T${String(h).padStart(2, "0")}:00:00+05:30`);
+  const fresh = { ...incomplete, providerId: "p4", waitingDays: 0 };
+  const noPhone = { ...incomplete, providerId: "p5", phone: "" };
+  assert.deepEqual(verification.dueForWhatsApp([incomplete, ready, dupe, fresh, noPhone], {}, at(11)).map((p) => p.providerId), ["p1"]);
+  assert.equal(verification.dueForWhatsApp([incomplete], {}, at(8)).length, 0); // too early
+  assert.equal(verification.dueForWhatsApp([incomplete], {}, at(19)).length, 0); // too late
+  assert.equal(verification.dueForWhatsApp([incomplete], { p1: { count: 1, last: at(11) - 24 * 3600000 } }, at(11)).length, 0); // 3-day gap
+  assert.equal(verification.dueForWhatsApp([incomplete], { p1: { count: 1, last: at(11) - 73 * 3600000 } }, at(11)).length, 1);
+  assert.equal(verification.dueForWhatsApp([incomplete], { p1: { count: 3, last: 0 } }, at(11)).length, 0); // max 3
+  const text = verification.whatsAppText(incomplete);
+  assert.match(text, /^Your Tikdum Business application is almost complete\. To activate your provider ID/);
+  assert.match(text, /a photo of your ID proof.* and accepting the Tikdum provider agreement/);
+  assert.match(verification.whatsAppText(incomplete, 1), /^A friendly reminder/);
+});
+
+test("verification WhatsApp tick: sends with 'WhatsApp inbox → Add', otherwise says so once", async () => {
+  const at11 = Date.parse("2026-10-21T11:00:00+05:30");
+  const routes = {
+    "GET /admin/verification/precheck": [{ ...incomplete, providerId: "w1" }],
+    "GET /agents/self": { agent: { permissions: ["providers.view"] } },
+    "POST /agents/feed": { duplicate: false },
+  };
+  let c = fake(routes);
+  await verification.tick(c, silent, { now: at11 });
+  assert.equal(writes(c, "/admin/inbox/send").length, 0);
+  assert.match(writes(c, "/agents/feed").find(([, , b]) => b.dedupeKey === "verification-wa-permission")[2].body, /WhatsApp inbox → Add/);
+  c = fake(routes);
+  await verification.tick(c, silent, { now: at11 });
+  assert.equal(writes(c, "/agents/feed").filter(([, , b]) => b.dedupeKey === "verification-wa-permission").length, 0); // said once
+
+  routes["GET /agents/self"] = { agent: { permissions: ["inbox.add"] } };
+  c = fake(routes);
+  await verification.tick(c, silent, { now: at11 });
+  const sent = writes(c, "/admin/inbox/send");
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0][2].providerId, "w1");
+  assert.match(sent[0][2].message, /ID proof/);
+  c = fake(routes);
+  await verification.tick(c, silent, { now: at11 + 3600000 });
+  assert.equal(writes(c, "/admin/inbox/send").length, 0); // not again within 3 days
+  c = fake(routes);
+  await verification.tick(c, silent, { now: at11 + 73 * 3600000 });
+  assert.match(writes(c, "/admin/inbox/send")[0][2].message, /^A friendly reminder/);
+});
