@@ -30,7 +30,7 @@ function fake(routes) {
 }
 const writes = (c, p) => c.calls.filter(([m, path]) => m !== "GET" && (!p || path === p));
 
-const incomplete = { providerId: "p1", name: "Ravi", phone: "+91981", ready: false, missing: ["id_proof", "agreement"], checks: [], docs: [], waitingDays: 2 };
+const incomplete = { providerId: "p1", name: "Ravi", phone: "+91981", ready: false, missing: ["business_id", "agreement"], checks: [], docs: [], waitingDays: 2 };
 const ready = { providerId: "p2", name: "Sita", category: "cleaning", phone: "+91982", ready: true, missing: [], waitingDays: 1,
   checks: [{ key: "id_proof", label: "ID proof uploaded", ok: true, required: true }], docs: [{ docType: "id_proof", url: "/uploads/a.jpg" }] };
 const dupe = { ...incomplete, providerId: "p3", missing: ["duplicate"], checks: [{ key: "duplicate", label: "No duplicate", ok: false, required: true, detail: "Looks like: Ravi (approved)" }] };
@@ -41,7 +41,7 @@ test("registration: nudge rules (cooldown, max, only fixable items)", () => {
   assert.equal(registration.dueForNudge([incomplete], { p1: { count: 1, last: now - 3600000 } }, now).length, 0);
   assert.equal(registration.dueForNudge([incomplete], { p1: { count: 3, last: 0 } }, now).length, 0);
   assert.equal(registration.dueForNudge([dupe], {}, now).length, 0);
-  assert.match(registration.nudgeText(incomplete), /ID proof.*agreement/);
+  assert.match(registration.nudgeText(incomplete), /Udyam registration number or GST number \(any one\).*agreement/);
   const rows = [
     { role: "provider", phone: "+911", hasAccount: false, lastAt: new Date().toISOString() },
     { role: "admin", phone: "+912", hasAccount: false, lastAt: new Date().toISOString() },
@@ -82,7 +82,7 @@ test("verification: proposes approval only for complete applications, never reje
   const props = writes(c, "/agents/actions");
   assert.equal(props.length, 1);
   assert.deepEqual(props[0][2].request, { method: "PATCH", path: "/providers/p2/verification", body: { status: "approved" } });
-  assert.match(props[0][2].summary, /open the ID proof/);
+  assert.match(props[0][2].summary, /check the Udyam or GST number/);
   assert.ok(writes(c, "/agents/feed").some(([, , b]) => /duplicate/.test(b.title)));
   await verification.tick(c, silent);
   assert.equal(writes(c, "/agents/actions").length, 1); // not re-proposed
@@ -118,7 +118,8 @@ test("verification WhatsApp: who and when (after a day, every 3 days, max 3, 10:
   assert.equal(verification.dueForWhatsApp([incomplete], { p1: { count: 3, last: 0 } }, at(11)).length, 0); // max 3
   const text = verification.whatsAppText(incomplete);
   assert.match(text, /^Your Tikdum Business application is almost complete\. To activate your provider ID/);
-  assert.match(text, /a photo of your ID proof.* and accepting the Tikdum provider agreement/);
+  assert.match(text, /add your Udyam registration number or GST number \(any one\) under Profile → Edit and accepting the Tikdum provider agreement/);
+  assert.doesNotMatch(text, /ID proof|Aadhaar/);
   assert.match(verification.whatsAppText(incomplete, 1), /^A friendly reminder/);
 });
 
@@ -143,7 +144,7 @@ test("verification WhatsApp tick: sends with 'WhatsApp inbox → Add', otherwise
   const sent = writes(c, "/admin/inbox/send");
   assert.equal(sent.length, 1);
   assert.equal(sent[0][2].providerId, "w1");
-  assert.match(sent[0][2].message, /ID proof/);
+  assert.match(sent[0][2].message, /Udyam registration number or GST number/);
   c = fake(routes);
   await verification.tick(c, silent, { now: at11 + 3600000 });
   assert.equal(writes(c, "/admin/inbox/send").length, 0); // not again within 3 days

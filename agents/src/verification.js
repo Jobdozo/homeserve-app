@@ -23,7 +23,7 @@ function proposalFor(p) {
   const docs = p.docs.map((d) => `${docLabel[d.docType] || d.docType}: ${d.url}`);
   return {
     title: `Approve provider ${p.name} (${p.category || "no category"})`,
-    summary: `All required checks pass. Before approving, open the ID proof and confirm the name and photo match this provider.\n\n${lines.join("\n")}`,
+    summary: `All required checks pass. Before approving, check the Udyam or GST number belongs to this provider (and open the ID proof if one was uploaded).\n\n${lines.join("\n")}`,
     reasoning: `Automated checklist only — documents were not read by AI.\nPhone: ${p.phone} · waiting ${p.waitingDays ?? "?"} days\n${docs.join("\n")}`,
     dedupeKey: `verify:${p.providerId}`,
     request: { method: "PATCH", path: `/providers/${encodeURIComponent(p.providerId)}/verification`, body: { status: "approved" } },

@@ -14,6 +14,7 @@ const FRIENDLY = {
   category: "your main service category",
   area: "the areas / PIN codes you serve",
   services: "at least one service with a price",
+  business_id: "your Udyam registration number or GST number (any one) under Profile → Edit",
   id_proof: "a photo of your ID proof (Aadhaar, PAN, Voter ID or Driving Licence)",
   agreement: "accepting the Tikdum provider agreement",
   gst_format: "a correct GST number (or remove it)",

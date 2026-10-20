@@ -12,7 +12,17 @@ const access = require("../src/access");
 const complete = {
   id: "p1", name: "Ravi Kumar", category: "plumbing", phone: "+919811100000", serviceArea: "Gandhi Nagar",
   coverage: { pincodes: ["180004"] }, agreementAccepted: true, experience: "5 years", joinedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+  udyamNumber: "UDYAM-JK-01-0012345",
 };
+
+test("checklist: a Udyam or a GST number (any one) is required; an ID proof photo is not", () => {
+  const none = { ...complete, udyamNumber: null };
+  const r = providerChecklist(none, { docs: [], services: [{}], others: [] });
+  assert.deepEqual(r.missing, ["business_id"]);
+  assert.equal(r.checks.find((c) => c.key === "id_proof").required, false);
+  assert.equal(providerChecklist(complete, { docs: [], services: [{}] }).ready, true); // Udyam, no ID photo
+  assert.equal(providerChecklist({ ...none, gstNumber: "27AAPFU0939F1ZV" }, { docs: [{ docType: "gst_certificate" }], services: [{}] }).ready, true); // GST
+});
 
 test("checklist: complete application is ready", () => {
   const r = providerChecklist(complete, { docs: [{ docType: "id_proof" }], services: [{ id: "s1" }], others: [complete] });
@@ -26,7 +36,7 @@ test("checklist: missing items, bad GST and duplicates block readiness", () => {
   const dupe = { id: "p3", name: "ravi kumar", category: "Plumbing", verificationStatus: "approved" };
   const r = providerChecklist(p, { docs: [], services: [], others: [p, dupe] });
   assert.equal(r.ready, false);
-  for (const k of ["services", "id_proof", "agreement", "gst_format", "gst_doc", "duplicate"]) assert.ok(r.missing.includes(k), k);
+  for (const k of ["services", "agreement", "gst_format", "gst_doc", "duplicate"]) assert.ok(r.missing.includes(k), k);
   assert.match(r.checks.find((c) => c.key === "duplicate").detail, /ravi kumar \(approved\)/);
   assert.equal(providerChecklist({ ...complete, gstNumber: "27AAPFU0939F1ZV" }, { docs: [{ docType: "id_proof" }, { docType: "gst_certificate" }], services: [{}] }).ready, true);
   assert.equal(providerChecklist({ ...complete, name: "New Provider" }, { docs: [{ docType: "id_proof" }], services: [{}] }).missing[0], "name");

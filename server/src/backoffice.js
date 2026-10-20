@@ -24,7 +24,10 @@ function providerChecklist(p, { docs = [], services = [], others = [] } = {}) {
   add("category", "Main category chosen", Boolean(p.category));
   add("area", "Service area / PIN codes set", Boolean(p.serviceArea) || p.coverage?.serveAllAreas || (p.coverage?.pincodes || []).length > 0);
   add("services", "At least one service added", services.length > 0, true, services.length ? `${services.length} service(s)` : undefined);
-  add("id_proof", "ID proof uploaded", docs.some((d) => d.docType === "id_proof"));
+  // Business registration: a Udyam or a GST number, any one (formats are checked when saved).
+  // An ID proof photo is shown when uploaded but no longer required.
+  add("business_id", "Udyam or GST number added", Boolean(String(p.udyamNumber || "").trim() || String(p.gstNumber || "").trim()));
+  add("id_proof", "ID proof uploaded", docs.some((d) => d.docType === "id_proof"), false);
   add("agreement", "Provider agreement accepted", p.agreementAccepted === true);
   if (p.gstNumber) {
     add("gst_format", "GST number format valid", GSTIN.test(String(p.gstNumber).toUpperCase().replace(/\s/g, "")), true);
