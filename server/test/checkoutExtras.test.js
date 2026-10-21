@@ -36,6 +36,21 @@ test("options: cleaned on save, priced on booking, required and max enforced", (
   assert.deepEqual(serviceOptions.priceSelection({ id: "plain", name: "Plain", price: 100 }, { x: ["y"] }), { extra: 0, lines: [] });
 });
 
+test("options: a full-price group's choice replaces the service price; extras still add", () => {
+  const CLEAN = { id: "svc-clean", name: "Home Deep Cleaning", price: 4500 };
+  const [size, extras] = serviceOptions.setOptions([CLEAN.id], [
+    { name: "Home size", required: true, max: 1, fullPrice: true, choices: [{ name: "1 BHK", price: 4500 }, { name: "2 BHK", price: 6500 }] },
+    { name: "Extras", required: false, max: 2, choices: [{ name: "Balcony", price: 300 }] },
+  ]);
+  assert.equal(size.fullPrice, true);
+  assert.equal("fullPrice" in extras, false);
+  const one = serviceOptions.priceSelection(CLEAN, { [size.id]: [size.choices[0].id] });
+  assert.equal(CLEAN.price + one.extra, 4500); // not 9,000
+  assert.deepEqual(one.lines, [{ group: "Home size", choice: "1 BHK", price: 4500, fullPrice: true }]);
+  const two = serviceOptions.priceSelection(CLEAN, { [size.id]: [size.choices[1].id], [extras.id]: [extras.choices[0].id] });
+  assert.equal(CLEAN.price + two.extra, 6800);
+});
+
 test("options: bad input is refused with a reason", () => {
   assert.throws(() => serviceOptions.normalizeGroups([{ name: "", choices: [{ name: "A" }] }]), /needs a name/);
   assert.throws(() => serviceOptions.normalizeGroups([{ name: "G", choices: [] }]), /at least one choice/);

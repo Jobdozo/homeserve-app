@@ -1,7 +1,10 @@
 // Service options: choices a customer makes when adding a service, each with a
 // price added to the service's own price. E.g. "AC type" (required, pick 1:
 // Split +₹50 / Window +₹0) and "Make it better" (up to 3: Jet-pump wash +₹299,
-// Outdoor unit wash +₹149). Set by Super Admin per service (optionally copied
+// Outdoor unit wash +₹149). A group marked fullPrice is priced the other way:
+// its choices ARE the price ("Home size": 1 BHK ₹4,500 / 2 BHK ₹6,500), so a
+// picked choice replaces the service's own price instead of adding to it.
+// Set by Super Admin per service (optionally copied
 // to every service with the same name). The server prices every booking from
 // these, never from what the app sends.
 //
@@ -55,6 +58,7 @@ function normalizeGroups(input) {
       name,
       required: Boolean(g?.required),
       max,
+      ...(g?.fullPrice ? { fullPrice: true } : {}),
       choices,
     };
   });
@@ -80,6 +84,8 @@ function priceSelection(service, selection) {
   const groups = getOptions(service.id);
   const lines = [];
   let extra = 0;
+  let full = 0;
+  let anyFull = false;
   const sel = selection && typeof selection === "object" ? selection : {};
   for (const g of groups) {
     const raw = Array.isArray(sel[g.id]) ? sel[g.id] : sel[g.id] ? [sel[g.id]] : [];
@@ -87,11 +93,15 @@ function priceSelection(service, selection) {
     if (g.required && picked.length === 0) throw fail(`Choose ${g.name.toLowerCase()} for ${service.name}`);
     if (picked.length > g.max) throw fail(`Choose at most ${g.max} for ${g.name.toLowerCase()} (${service.name})`);
     for (const c of picked) {
-      lines.push({ group: g.name, choice: c.name, price: c.price });
-      extra += c.price;
+      lines.push({ group: g.name, choice: c.name, price: c.price, ...(g.fullPrice ? { fullPrice: true } : {}) });
+      if (g.fullPrice) {
+        full += c.price;
+        anyFull = true;
+      } else extra += c.price;
     }
   }
-  return { extra, lines };
+  // Callers price a line as service.price + extra, so a full-price pick takes the service's own price back out.
+  return { extra: anyFull ? full + extra - service.price : extra, lines };
 }
 
 function saveBookingLines(bookingId, lines) {

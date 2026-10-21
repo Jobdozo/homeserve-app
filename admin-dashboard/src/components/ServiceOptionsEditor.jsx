@@ -13,8 +13,10 @@ const blankGroup = () => ({ name: "", required: true, max: 1, choices: [blankCho
 // service → customer pays ₹9,000); the editor offers to turn them into extras.
 function looksLikeFullPrices(group, basePrice) {
   const prices = group.choices.filter((c) => String(c.name).trim()).map((c) => Number(c.price) || 0);
-  return Boolean(group.required && group.max === 1 && basePrice > 0 && prices.length && Math.min(...prices) >= basePrice);
+  return Boolean(!group.fullPrice && group.required && group.max === 1 && basePrice > 0 && prices.length && Math.min(...prices) >= basePrice);
 }
+// What the customer pays when only this choice is picked (server/src/serviceOptions.js prices it the same way).
+const pays = (group, choice, basePrice) => (group.fullPrice ? 0 : basePrice) + (Number(choice.price) || 0);
 
 export default function ServiceOptionsEditor({ service }) {
   const { showToast } = useApp();
@@ -62,7 +64,9 @@ export default function ServiceOptionsEditor({ service }) {
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-[12.5px] font-bold text-gray-900">Options customers choose</p>
-          <p className="text-[11px] text-gray-500">Each choice adds its price to ₹{service.price}. E.g. AC type, room size, extras.</p>
+          <p className="text-[11px] text-gray-500">
+            Each choice adds its price to ₹{service.price} (AC type, extras…), or — with "Choice price is the full price" — replaces it (1 BHK ₹4,500 / 2 BHK ₹6,500).
+          </p>
         </div>
       </div>
 
@@ -91,17 +95,17 @@ export default function ServiceOptionsEditor({ service }) {
                   className="w-12 rounded border border-gray-200 px-1.5 py-0.5 text-center"
                 />
               </label>
+              <label className="flex items-center gap-1.5" title={`On: the choice's price replaces ₹${service.price}. Off: it's added to ₹${service.price}.`}>
+                <input type="checkbox" checked={Boolean(g.fullPrice)} onChange={(e) => change((x) => ((x[gi].fullPrice = e.target.checked), x))} className="accent-brand" />
+                Choice price is the full price
+              </label>
             </div>
             {looksLikeFullPrices(g, service.price) && (
               <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-[11.5px] text-amber-800">
-                These look like full prices. Customers pay ₹{service.price} <b>plus</b> the choice, e.g. {g.choices[0]?.name || "choice 1"} = ₹
-                {(service.price + (Number(g.choices[0]?.price) || 0)).toLocaleString("en-IN")}.
-                <button
-                  type="button"
-                  onClick={() => change((x) => ((x[gi].choices = x[gi].choices.map((c) => ({ ...c, price: Math.max(0, (Number(c.price) || 0) - service.price) }))), x))}
-                  className="ml-1 font-semibold text-brand underline"
-                >
-                  Make them extras (subtract ₹{service.price})
+                These look like full prices. Right now customers pay ₹{service.price} <b>plus</b> the choice, e.g. {g.choices[0]?.name || "choice 1"} = ₹
+                {pays(g, g.choices[0] || {}, service.price).toLocaleString("en-IN")}.
+                <button type="button" onClick={() => change((x) => ((x[gi].fullPrice = true), x))} className="ml-1 font-semibold text-brand underline">
+                  Use them as full prices
                 </button>
               </div>
             )}
@@ -109,7 +113,7 @@ export default function ServiceOptionsEditor({ service }) {
               {g.choices.map((c, ci) => (
                 <div key={c.id || ci} className="flex items-center gap-1.5">
                   <input value={c.name} onChange={(e) => change((x) => ((x[gi].choices[ci].name = e.target.value), x))} placeholder={`Choice ${ci + 1}`} className={input} />
-                  <span className="text-[12px] text-gray-400">+₹</span>
+                  <span className="text-[12px] text-gray-400">{g.fullPrice ? "₹" : "+₹"}</span>
                   <input
                     type="number"
                     min="0"
@@ -119,7 +123,7 @@ export default function ServiceOptionsEditor({ service }) {
                     className="w-20 flex-shrink-0 rounded-lg border border-gray-200 px-2 py-1.5 text-[12.5px] outline-none focus:border-brand"
                   />
                   <span className="w-16 flex-shrink-0 text-right text-[11px] text-gray-400 tabular-nums" title="What the customer pays for this choice">
-                    = ₹{(service.price + (Number(c.price) || 0)).toLocaleString("en-IN")}
+                    = ₹{pays(g, c, service.price).toLocaleString("en-IN")}
                   </span>
                   <button type="button" aria-label="Remove choice" onClick={() => change((x) => ((x[gi].choices = x[gi].choices.filter((_, i) => i !== ci)), x))} className="px-1 text-[14px] text-gray-400 hover:text-red-500">
                     ×
