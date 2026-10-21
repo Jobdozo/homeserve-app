@@ -44,11 +44,19 @@ test("options: a full-price group's choice replaces the service price; extras st
   ]);
   assert.equal(size.fullPrice, true);
   assert.equal("fullPrice" in extras, false);
+  assert.equal(serviceOptions.normalizeGroups([{ name: "S", fullPrice: true, max: 3, choices: [{ name: "A" }, { name: "B" }] }])[0].max, 1);
   const one = serviceOptions.priceSelection(CLEAN, { [size.id]: [size.choices[0].id] });
   assert.equal(CLEAN.price + one.extra, 4500); // not 9,000
-  assert.deepEqual(one.lines, [{ group: "Home size", choice: "1 BHK", price: 4500, fullPrice: true }]);
+  assert.deepEqual(one.lines, [{ group: "Home size", choice: "1 BHK", price: 0 }]); // shown on the booking as the difference
   const two = serviceOptions.priceSelection(CLEAN, { [size.id]: [size.choices[1].id], [extras.id]: [extras.choices[0].id] });
   assert.equal(CLEAN.price + two.extra, 6800);
+});
+
+test("options: apps (old Android builds too) get full-price choices as the difference from the service price", async () => {
+  const store = require("../src/store");
+  const shaped = store._withOptions("svc-clean", 4500);
+  assert.deepEqual(shaped.options[0].choices.map((c) => c.price), [0, 2000]);
+  assert.deepEqual(shaped.options[1].choices.map((c) => c.price), [300]);
 });
 
 test("options: bad input is refused with a reason", () => {

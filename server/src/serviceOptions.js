@@ -52,7 +52,8 @@ function normalizeGroups(input) {
       if (price < 0 || price > MAX_PRICE) throw fail(`The price of "${cname}" must be between ₹0 and ₹${MAX_PRICE}`);
       return { id: /^[a-z0-9]{4,20}$/.test(String(c?.id || "")) ? c.id : newId(), name: cname, price };
     });
-    const max = Math.min(choices.length, Math.max(1, Math.round(Number(g?.max) || 1)));
+    // A full-price group is one pick (1 BHK or 2 BHK, never both).
+    const max = g?.fullPrice ? 1 : Math.min(choices.length, Math.max(1, Math.round(Number(g?.max) || 1)));
     return {
       id: /^[a-z0-9]{4,20}$/.test(String(g?.id || "")) ? g.id : newId(),
       name,
@@ -84,8 +85,6 @@ function priceSelection(service, selection) {
   const groups = getOptions(service.id);
   const lines = [];
   let extra = 0;
-  let full = 0;
-  let anyFull = false;
   const sel = selection && typeof selection === "object" ? selection : {};
   for (const g of groups) {
     const raw = Array.isArray(sel[g.id]) ? sel[g.id] : sel[g.id] ? [sel[g.id]] : [];
@@ -93,15 +92,14 @@ function priceSelection(service, selection) {
     if (g.required && picked.length === 0) throw fail(`Choose ${g.name.toLowerCase()} for ${service.name}`);
     if (picked.length > g.max) throw fail(`Choose at most ${g.max} for ${g.name.toLowerCase()} (${service.name})`);
     for (const c of picked) {
-      lines.push({ group: g.name, choice: c.name, price: c.price, ...(g.fullPrice ? { fullPrice: true } : {}) });
-      if (g.fullPrice) {
-        full += c.price;
-        anyFull = true;
-      } else extra += c.price;
+      // A full-price pick (one per group) counts as its difference from the service price,
+      // exactly as the apps receive it (store.js withOptions) and show it on the booking.
+      const price = g.fullPrice ? c.price - service.price : c.price;
+      lines.push({ group: g.name, choice: c.name, price });
+      extra += price;
     }
   }
-  // Callers price a line as service.price + extra, so a full-price pick takes the service's own price back out.
-  return { extra: anyFull ? full + extra - service.price : extra, lines };
+  return { extra, lines };
 }
 
 function saveBookingLines(bookingId, lines) {

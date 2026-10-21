@@ -475,11 +475,16 @@ function mapService(s) {
     includes: (s.serviceIncludes_on_service || []).map((i) => i.text),
     isAd: isServiceCurrentlyAdvertised(s.id),
     ...(s.status === "rejected" ? { approvalNote: getServiceReview(s.id)?.note || null } : {}),
-    ...withOptions(s.id),
+    ...withOptions(s.id, s.price),
   };
 }
-function withOptions(serviceId) {
-  const groups = serviceOptions.getOptions(serviceId);
+// Apps get a full-price choice as the difference from the service price (1 BHK ₹4,500 on a
+// ₹4,500 service → +₹0), so every app — including Android builds that predate full-price
+// groups and simply add choices to the price — shows and totals the same amount the server charges.
+function withOptions(serviceId, price) {
+  const groups = serviceOptions.getOptions(serviceId).map((g) =>
+    g.fullPrice ? { ...g, choices: g.choices.map((c) => ({ ...c, price: c.price - (Number(price) || 0) })) } : g
+  );
   return groups.length ? { options: groups } : {};
 }
 
@@ -5317,6 +5322,7 @@ async function listCustomersPage({ q, offset = 0, limit = 50 } = {}) {
 }
 
 module.exports = {
+  _withOptions: withOptions,
   markProviderLive,
   phoneKey,
   canonicalPhone,

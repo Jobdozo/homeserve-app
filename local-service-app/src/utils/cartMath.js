@@ -1,10 +1,9 @@
 // Price of one cart line. Kept in one place so the cart bar, cart screen and
-// checkout always agree (service options add to it — see ServiceOptionsSheet —
-// except a "full price" choice, which replaces the service's own price).
+// checkout always agree (service options add to it — see ServiceOptionsSheet; a
+// "full price" choice arrives as its difference from the service price, so it adds too).
 export function unitPrice(service, item) {
-  const lines = item?.optionLines || [];
-  const sum = lines.reduce((n, o) => n + (Number(o.price) || 0), 0);
-  return lines.some((o) => o.fullPrice) ? sum : (Number(service?.price) || 0) + sum;
+  const extra = (item?.optionLines || []).reduce((sum, o) => sum + (Number(o.price) || 0), 0);
+  return (Number(service?.price) || 0) + extra;
 }
 
 export function lineTotal(service, item) {

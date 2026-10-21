@@ -56,7 +56,7 @@ function OptionsSheet({ service, likeServiceId, onClose }) {
     (picked[g.id] || [])
       .map((id) => g.choices.find((c) => c.id === id))
       .filter(Boolean)
-      .map((c) => ({ group: g.name, choice: c.name, price: c.price, ...(g.fullPrice ? { fullPrice: true } : {}) }))
+      .map((c) => ({ group: g.name, choice: c.name, price: c.price }))
   );
   const unit = unitPrice(service, { optionLines: lines });
   const missing = groups.filter((g) => g.required && !(picked[g.id] || []).length);
@@ -110,7 +110,7 @@ function OptionsSheet({ service, likeServiceId, onClose }) {
                     <label key={c.id} className={`flex cursor-pointer items-center gap-3 border-t border-[#F0EEF7] py-2.5 ${full ? "opacity-45" : ""}`}>
                       <input type={single ? "radio" : "checkbox"} name={g.id} checked={on} disabled={full} onChange={() => toggle(g, c.id)} className="sr-only" />
                       <span className="flex-1 text-[14.5px] font-semibold text-ink">{c.name}</span>
-                      <span className="text-[14px] text-ink tabular">{g.fullPrice ? inr(c.price) : c.price ? `+${inr(c.price)}` : "Included"}</span>
+                      <span className="text-[14px] text-ink tabular">{g.fullPrice ? inr(service.price + c.price) : c.price ? `+${inr(c.price)}` : "Included"}</span>
                       {single ? (
                         <span className={`flex h-[22px] w-[22px] flex-shrink-0 items-center justify-center rounded-full border-2 ${on ? "border-brand" : "border-[#C9C4D9]"}`}>
                           {on && <span className="h-2.5 w-2.5 animate-pop rounded-full bg-brand" />}
