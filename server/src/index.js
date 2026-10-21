@@ -24,6 +24,7 @@ const auth = require("./auth");
 const agents = require("./agents");
 const inbox = require("./inbox");
 const backoffice = require("./backoffice");
+const gstPortal = require("./gstPortal");
 const office = require("./office");
 access.setAgentHooks({ resolve: agents.resolveAgent, policy: agents.policy });
 // Per-request permission checks for staff sign-ins (admin roles, provider staff).
@@ -3469,6 +3470,17 @@ app.post("/api/admin/ai/office/goals/:id/decide", adminOnly, crm(async (req, res
 // and Payments agents and shown to staff — see backoffice.js) ----
 app.get("/api/admin/verification/precheck", adminOnly, crm(async (req, res) => res.json(await backoffice.precheckPending())));
 app.get("/api/admin/payments/reconciliation", adminOnly, crm(async (req, res) => res.json(await backoffice.reconcile())));
+// GST portal check (API Setu, gstPortal.js) of a provider's GST number; ?refresh=1 asks again.
+app.get("/api/admin/providers/:id/gst-portal", adminOnly, crm(async (req, res) => {
+  const provider = await store.getProvider(req.params.id);
+  if (!provider) return res.status(404).json({ error: "Provider not found" });
+  if (!provider.gstNumber) return res.status(400).json({ error: "This provider has no GST number" });
+  try {
+    res.json(await gstPortal.lookup(provider.gstNumber, { refresh: req.query.refresh === "1" }));
+  } catch (e) {
+    res.status(e.status || 502).json({ error: e.message });
+  }
+}));
 
 // Provider Quality, Retention and Fraud agents (watchdogs.js): read-only lists.
 // Providers tagged "test" in Super Admin (staff test accounts) are left out.

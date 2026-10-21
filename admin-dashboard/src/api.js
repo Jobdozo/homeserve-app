@@ -402,6 +402,7 @@ export const api = {
   setInboxMode: (id, mode, reason) => request(`/admin/inbox/${encodeURIComponent(id)}/mode`, { method: "POST", body: JSON.stringify({ mode, reason }) }),
 
   getVerificationPrecheck: () => request("/admin/verification/precheck"),
+  getGstPortal: (providerId, refresh = false) => request(`/admin/providers/${encodeURIComponent(providerId)}/gst-portal${refresh ? "?refresh=1" : ""}`),
   getPaymentsReconciliation: () => request("/admin/payments/reconciliation"),
 
   listOfficeTasks: () => request("/admin/ai/office/tasks"),

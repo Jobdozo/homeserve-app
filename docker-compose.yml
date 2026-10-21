@@ -29,6 +29,10 @@ services:
       CF_AI_TOKEN: ${CF_AI_TOKEN:-}
       CF_AI_IMAGE_MODEL: ${CF_AI_IMAGE_MODEL:-}
       IMAGE_PROVIDER: ${IMAGE_PROVIDER:-auto}
+      # GST portal check of providers' GST numbers through API Setu (server/src/gstPortal.js; set with deploy/set-apisetu-gst.sh).
+      APISETU_CLIENT_ID: ${APISETU_CLIENT_ID:-}
+      APISETU_API_KEY: ${APISETU_API_KEY:-}
+      APISETU_GST_URL: ${APISETU_GST_URL:-}
       # Facebook Page + Instagram posting (server/src/social.js; set with deploy/set-meta.sh).
       META_PAGE_ID: ${META_PAGE_ID:-}
       META_PAGE_TOKEN: ${META_PAGE_TOKEN:-}

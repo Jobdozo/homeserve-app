@@ -19,6 +19,7 @@ const FRIENDLY = {
   agreement: "accepting the Tikdum provider agreement",
   gst_format: "a correct GST number (or remove it)",
   gst_doc: "your GST certificate",
+  gst_portal: "an active GST number (yours isn't active on the GST portal), or your Udyam number instead",
 };
 
 // Pure: who to nudge now. Exported for tests.

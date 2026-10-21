@@ -7,6 +7,7 @@
 // can be tested without the database.
 const jsonStore = require("./jsonStore");
 const store = require("./store");
+const gstPortal = require("./gstPortal");
 
 const GSTIN = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 const EMAIL = /^\S+@\S+\.\S+$/;
@@ -16,7 +17,8 @@ const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 // ---- provider application checklist ----
 // Each check: { key, label, ok, required, detail? }
-function providerChecklist(p, { docs = [], services = [], others = [] } = {}) {
+// gst: the GST portal's answer for p.gstNumber (gstPortal.js), when one was fetched.
+function providerChecklist(p, { docs = [], services = [], others = [], gst = null } = {}) {
   const checks = [];
   const add = (key, label, ok, required = true, detail) => checks.push({ key, label, ok: Boolean(ok), required, ...(detail ? { detail } : {}) });
 
@@ -32,6 +34,10 @@ function providerChecklist(p, { docs = [], services = [], others = [] } = {}) {
   if (p.gstNumber) {
     add("gst_format", "GST number format valid", GSTIN.test(String(p.gstNumber).toUpperCase().replace(/\s/g, "")), true);
     add("gst_doc", "GST certificate uploaded", docs.some((d) => d.docType === "gst_certificate"), true);
+    if (gst) {
+      const names = [gst.legalName, gst.tradeName && gst.tradeName !== gst.legalName ? gst.tradeName : ""].filter(Boolean).join(" / ");
+      add("gst_portal", "GST number active on the GST portal", gst.found && gst.active, true, gst.found ? `${names || "no name"} · ${gst.status}` : "Not found on the GST portal");
+    }
   }
   if (p.email) add("email", "Email looks valid", EMAIL.test(p.email), false);
   add("experience", "Experience filled in", Boolean(p.experience), false);
@@ -63,13 +69,15 @@ function providerChecklist(p, { docs = [], services = [], others = [] } = {}) {
 async function precheckPending() {
   const [providers, services] = await Promise.all([store.listProviders(), store.listServices()]);
   const docs = jsonStore.readAll("kycDocuments");
-  return providers
-    .filter((p) => (p.verificationStatus || "pending") === "pending")
+  const pending = providers.filter((p) => (p.verificationStatus || "pending") === "pending");
+  gstPortal.warm(pending.map((p) => p.gstNumber).filter(Boolean));
+  return pending
     .map((p) =>
       providerChecklist(p, {
         docs: docs.filter((d) => d.providerId === p.id),
         services: services.filter((s) => s.providerId === p.id),
         others: providers,
+        gst: p.gstNumber ? gstPortal.cached(p.gstNumber) : null,
       })
     )
     .sort((a, b) => Number(b.ready) - Number(a.ready) || (b.waitingDays || 0) - (a.waitingDays || 0));

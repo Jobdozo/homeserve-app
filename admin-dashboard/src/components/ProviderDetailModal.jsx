@@ -21,6 +21,44 @@ function TaxIdLine({ note }) {
   if (!note) return null;
   return <span className={`mt-1 block text-[11px] font-normal ${note.ok ? "text-green-700" : "text-red-600"}`}>{note.ok ? "✓ " : "⚠ "}{note.text}</span>;
 }
+
+// Government lookup of the GST number through API Setu (server/src/gstPortal.js): status and registered name.
+function GstPortalLine({ providerId, gstNumber }) {
+  const [state, setState] = useState({ busy: false, result: null, error: "" });
+  const check = (refresh) => {
+    setState((s) => ({ ...s, busy: true, error: "" }));
+    api
+      .getGstPortal(providerId, refresh)
+      .then((result) => setState({ busy: false, result, error: "" }))
+      .catch((e) => setState({ busy: false, result: null, error: e.message || "Check failed" }));
+  };
+  if (!gstNumber || taxIdNote("gstNumber", gstNumber)?.ok === false) return null;
+  const r = state.result;
+  return (
+    <span className="mt-1 block text-[11px] font-normal">
+      {r ? (
+        <span className={r.found && r.active ? "text-green-700" : "text-red-600"}>
+          {r.found && r.active ? "✓ " : "⚠ "}GST portal: {r.found ? r.status : "not found"}
+          {r.legalName && ` · ${r.legalName}`}
+          {r.tradeName && r.tradeName !== r.legalName && ` (${r.tradeName})`}
+          {r.registeredOn && ` · since ${r.registeredOn}`}
+          {r.address && <span className="block text-gray-500">{r.address}</span>}
+          <span className="block text-gray-400">
+            Checked {new Date(r.checkedAt).toLocaleString("en-IN")} ·{" "}
+            <button type="button" className="underline" disabled={state.busy} onClick={() => check(true)}>
+              {state.busy ? "Checking…" : "Check again"}
+            </button>
+          </span>
+        </span>
+      ) : (
+        <button type="button" className="font-semibold text-brand underline disabled:opacity-50" disabled={state.busy} onClick={() => check(false)}>
+          {state.busy ? "Checking GST portal…" : "Check on GST portal"}
+        </button>
+      )}
+      {state.error && <span className="block text-red-600">{state.error}</span>}
+    </span>
+  );
+}
 import ProviderOrdersTab from "./ProviderOrdersTab";
 import ProviderMoneyTab from "./ProviderMoneyTab";
 import ProviderKycReview from "./ProviderKycReview";
@@ -512,6 +550,7 @@ export default function ProviderDetailModal({ providerId, onClose, asPage = fals
                 <div>
                   <Field label="GST number" value={provider.gstNumber} />
                   <TaxIdLine note={taxIdNote("gstNumber", provider.gstNumber)} />
+                  <GstPortalLine key={provider.gstNumber} providerId={provider.id} gstNumber={provider.gstNumber} />
                 </div>
                 <div>
                   <Field label="Udyam number" value={provider.udyamNumber} />
