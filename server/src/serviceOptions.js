@@ -15,7 +15,7 @@
 const crypto = require("crypto");
 const jsonStore = require("./jsonStore");
 
-const MAX_GROUPS = 8;
+const MAX_GROUPS = 20; // waxing alone has a group per body area
 const MAX_CHOICES = 12;
 const MAX_PRICE = 100000;
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
