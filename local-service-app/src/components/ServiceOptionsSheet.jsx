@@ -76,7 +76,9 @@ function OptionsSheet({ service, likeServiceId, onClose }) {
       <button onClick={onClose} aria-label="Close" className="mx-auto mb-3 flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-ink text-white active:scale-95 lg:hidden">
         <XIcon width={20} height={20} />
       </button>
-      <div className="flex max-h-[86vh] w-full animate-slide-up flex-col overflow-hidden rounded-t-[26px] bg-mist lg:max-w-lg lg:rounded-[26px]">
+      {/* overflow-clip, not -hidden: a hidden box can still be scrolled by the browser (focusing a
+          choice deep in the list scrolled the whole panel away and left it blank); a clipped one can't. */}
+      <div className="flex max-h-[86vh] w-full animate-slide-up flex-col overflow-clip rounded-t-[26px] bg-mist lg:max-w-lg lg:rounded-[26px]">
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
           <div className="overflow-hidden rounded-[22px] bg-white">
             <div className="h-[170px]">
@@ -111,7 +113,7 @@ function OptionsSheet({ service, likeServiceId, onClose }) {
                   const on = cur.includes(c.id);
                   const full = !on && !single && cur.length >= g.max;
                   return (
-                    <label key={c.id} className={`flex cursor-pointer items-center gap-3 border-t border-[#F0EEF7] py-2.5 ${full ? "opacity-45" : ""}`}>
+                    <label key={c.id} className={`relative flex cursor-pointer items-center gap-3 border-t border-[#F0EEF7] py-2.5 ${full ? "opacity-45" : ""}`}>
                       <input type={single ? "radio" : "checkbox"} name={g.id} checked={on} disabled={full} onChange={() => toggle(g, c.id)} className="sr-only" />
                       <span className="flex-1 text-[14.5px] font-semibold text-ink">{c.name}</span>
                       <span className="text-[14px] text-ink tabular">{g.fullPrice ? inr(service.price + c.price) : c.price ? `+${inr(c.price)}` : "Included"}</span>

@@ -23,6 +23,27 @@ export async function clearCachesAndReload(path) {
   }
 }
 
+// The service worker serves the cached copy of the site on the first visit after a deploy;
+// the new version installs in the background and takes over (skipWaiting + clientsClaim in
+// sw.js) a few seconds later, while this tab is still running the old code. Reload onto the
+// new version then: straight away if the page has only just opened, otherwise the next time
+// the tab is hidden, so nobody loses what they're doing.
+export function reloadOnNewVersion() {
+  const sw = navigator.serviceWorker;
+  if (!sw || !sw.controller) return; // first visit: nothing old is running
+  const opened = Date.now();
+  let done = false;
+  const reload = () => {
+    if (done) return;
+    done = true;
+    window.location.reload();
+  };
+  sw.addEventListener("controllerchange", () => {
+    if (Date.now() - opened < 15000 || document.visibilityState === "hidden") return reload();
+    document.addEventListener("visibilitychange", () => document.visibilityState === "hidden" && reload());
+  });
+}
+
 // Returns true if a recovery reload was started.
 export function recoverFromStaleFiles() {
   try {
