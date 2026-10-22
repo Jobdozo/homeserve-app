@@ -5276,7 +5276,13 @@ async function listBookingsPage({ statuses, providerId, customerId, from, to, q,
     }
     conds.push(`_or: [${or.join(", ")}]`);
   }
-  const where = conds.length ? `where: { ${conds.join(", ")} }` : "";
+  // The database won't take _or next to plain fields ("cannot mix _and/_or/_not with specific
+  // fields"), so a search together with any other filter goes inside one _and.
+  const where = !conds.length
+    ? ""
+    : conds.length > 1 && conds.some((c) => c.startsWith("_or"))
+      ? `where: { _and: [${conds.map((c) => `{ ${c} }`).join(", ")}] }`
+      : `where: { ${conds.join(", ")} }`;
   const pageArgs = where ? `${where}, ` : "";
   const countArgs = where ? `(${where})` : "";
   const data = await query(
