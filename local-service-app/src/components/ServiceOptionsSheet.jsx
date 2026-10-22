@@ -78,7 +78,15 @@ function OptionsSheet({ service, likeServiceId, onClose }) {
       </button>
       {/* overflow-clip, not -hidden: a hidden box can still be scrolled by the browser (focusing a
           choice deep in the list scrolled the whole panel away and left it blank); a clipped one can't. */}
-      <div className="flex max-h-[86vh] w-full animate-slide-up flex-col overflow-clip rounded-t-[26px] bg-mist lg:max-w-lg lg:rounded-[26px]">
+      <div className="relative flex max-h-[86vh] w-full animate-slide-up flex-col overflow-clip rounded-t-[26px] bg-mist lg:max-w-lg lg:rounded-[26px]">
+        {/* On a phone the round button above the sheet closes it; on a computer it sits on the photo's corner. */}
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute right-6 top-6 z-10 hidden h-10 w-10 items-center justify-center rounded-full bg-ink/80 text-white shadow-lg hover:bg-ink active:scale-95 lg:flex"
+        >
+          <XIcon width={18} height={18} />
+        </button>
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
           <div className="overflow-hidden rounded-[22px] bg-white">
             <div className="h-[170px]">
