@@ -70,6 +70,28 @@ test("marketing agent: proposes one scheduled post on Wednesday, with the pictur
   assert.equal(writes(c, "/agents/actions").length, 1);
 });
 
+test("auto-post: slot times, one post per run, nothing proposed, a missed slot isn't made up", async () => {
+  const at = (h, m = 0) => Date.parse(`2026-10-21T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00+05:30`); // a Wednesday
+  assert.deepEqual(socialPosts.dueSlots(at(8, 59), 5), []);
+  assert.deepEqual(socialPosts.dueSlots(at(11, 5), 5, [9]), [11]);
+  assert.deepEqual(socialPosts.dueSlots(at(20), 3, []), [9, 13, 18]);
+
+  claudeAnswers(JSON.stringify({ caption: CAPTION, picture: 1 }));
+  const self = { kind: "specialist", template: "marketing", budgetRemainingUsd: 1, dailyBudgetUsd: 1, instructions: "x", socialAutoPost: true, socialPostsPerDay: 5 };
+  const published = { results: { facebook: { ok: true, link: "https://www.facebook.com/1" }, instagram: { ok: true, link: null } } };
+  const c = fake(routes({ "GET /agents/self": self, "GET /agents/office": { tasks: [] }, "POST /admin/social/posts": published }));
+  const out = await specialist.tick(c, silent, "specialist-6", { now: at(13, 10) }); // 9, 11 and 13 have come round
+  assert.match(out, /1 social post\(s\) posted/);
+  assert.equal(writes(c, "/admin/social/posts").length, 1);
+  assert.deepEqual(writes(c, "/admin/social/posts")[0][2], { caption: CAPTION, imageUrl: PICTURES[0].url, channels: ["facebook", "instagram"] });
+  assert.equal(writes(c, "/agents/actions").length, 0);
+  await specialist.tick(c, silent, "specialist-6", { now: at(14) });
+  assert.equal(writes(c, "/admin/social/posts").length, 1); // 9–13 used up
+  await specialist.tick(c, silent, "specialist-6", { now: at(16, 2) });
+  global.fetch = realFetch;
+  assert.equal(writes(c, "/admin/social/posts").length, 2);
+});
+
 test("marketing agent: a 'Post: …' task becomes a proposal and goes to Review; nothing when not connected", async () => {
   claudeAnswers(JSON.stringify({ caption: CAPTION, picture: 2 }));
   const task = { id: "t1", title: "Post: Diwali deep cleaning", status: "open", updatedAt: "u1", messages: [] };

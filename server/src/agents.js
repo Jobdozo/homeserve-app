@@ -44,12 +44,16 @@ const DENY_MODULES = ["users", "settings", "data", "ai", "accounting"];
 // Read-style actions an agent keeps from its role.
 const READ_ACTIONS = ["view", "export"];
 // The only writes an agent may make directly (if its role has them).
-const AGENT_WRITES = ["complaints.add", "complaints.edit", "notifications.add", "inbox.add"];
+// social.add only takes effect while Admin has "Auto-post" on (policy below); otherwise posts are proposed.
+const AGENT_WRITES = ["complaints.add", "complaints.edit", "notifications.add", "inbox.add", "social.add"];
 // Per-agent ceiling on direct notifications (in-app messages to one person).
 const NOTIFY_PER_HOUR = 30;
 // Per-agent ceiling on new WhatsApp messages started from Tikdum's number (/admin/inbox/send),
 // e.g. the Verification Agent's follow-ups: each one outside the 24-hour window is a paid template.
 const WHATSAPP_PER_HOUR = 20;
+// Facebook/Instagram posts the agents may publish by themselves in a day (Auto-post), at most.
+const SOCIAL_MAX_PER_DAY = 5;
+const clampPosts = (n) => Math.min(SOCIAL_MAX_PER_DAY, Math.max(1, Math.round(Number(n) || 1)));
 
 // What an agent may propose for a person to approve: [type, method, path regex].
 const PROPOSABLE = [
@@ -75,6 +79,10 @@ function getConfig() {
     // false = review mode: the support agent only drafts replies and a person
     // sends them. Off by default so nothing reaches customers unreviewed.
     supportAutoSend: row?.supportAutoSend === true,
+    // true: the Marketing Agent publishes its Facebook/Instagram posts itself (up to
+    // socialPostsPerDay a day). Off by default: posts wait in Approvals.
+    socialAutoPost: row?.socialAutoPost === true,
+    socialPostsPerDay: clampPosts(row?.socialPostsPerDay ?? SOCIAL_MAX_PER_DAY),
     updatedAt: row?.updatedAt || null,
     updatedBy: row?.updatedBy || null,
   };
@@ -85,6 +93,8 @@ function setConfig(patch, actor) {
   const row = { ...current, id: "config", updatedAt: nowIso(), updatedBy: actor };
   if (patch.enabled !== undefined) row.enabled = Boolean(patch.enabled);
   if (patch.supportAutoSend !== undefined) row.supportAutoSend = patch.supportAutoSend === true;
+  if (patch.socialAutoPost !== undefined) row.socialAutoPost = patch.socialAutoPost === true;
+  if (patch.socialPostsPerDay !== undefined) row.socialPostsPerDay = clampPosts(patch.socialPostsPerDay);
   if (patch.supportKnowledge !== undefined) {
     const text = String(patch.supportKnowledge || "");
     if (text.length > MAX_KNOWLEDGE) throw fail(400, `Support knowledge is limited to ${MAX_KNOWLEDGE} characters`);
@@ -302,6 +312,13 @@ function policy(req, admin, path) {
     if (recent.length >= WHATSAPP_PER_HOUR) return { status: 429, error: "Hourly WhatsApp limit reached for this agent" };
     recent.push(now);
     waLog.set(admin.agentId, recent);
+  }
+  if (req.method === "POST" && path === "/admin/social/posts") {
+    const cfg = getConfig();
+    if (!cfg.socialAutoPost) return { status: 403, error: "Auto-post is off — propose the post for approval instead" };
+    const today = istDay();
+    const byAgents = jsonStore.readAll("socialPosts").filter((p) => String(p.by || "").endsWith("[AI agent]") && istDay(Date.parse(p.at)) === today).length;
+    if (byAgents >= cfg.socialPostsPerDay) return { status: 429, error: `Today's ${cfg.socialPostsPerDay} automatic posts are done` };
   }
   if (req.method === "POST" && /^\/admin\/push-campaigns(\/|$)/.test(path)) {
     return { status: 403, error: "AI agents can't start or stop push campaigns — propose one for approval instead" };

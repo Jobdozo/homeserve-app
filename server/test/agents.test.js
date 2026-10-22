@@ -73,6 +73,26 @@ test("key -> token -> guarded requests, kill switch and deactivation", () => {
   assert.ok(agents.issueToken(rotated.apiKey).token);
 });
 
+test("social posts: agents propose unless Auto-post is on, then at most the day's number", () => {
+  const jsonStore = require("../src/jsonStore");
+  const { apiKey } = agents.createAgent({ name: "Marketing", roleId: "marketing" }, "test");
+  const { token } = agents.issueToken(apiKey);
+  const post = { caption: "x", imageUrl: "/a.jpg", channels: ["facebook"] };
+  assert.equal(agents.getConfig().socialAutoPost, false);
+  assert.match(call(token, "POST", "/admin/social/posts", post).denied.error, /Auto-post is off/);
+  agents.setConfig({ socialAutoPost: true, socialPostsPerDay: 9 }, "test");
+  assert.equal(agents.getConfig().socialPostsPerDay, 5); // never more than 5
+  agents.setConfig({ socialPostsPerDay: 2 }, "test");
+  assert.equal(call(token, "POST", "/admin/social/posts", post).denied, null);
+  const at = new Date().toISOString();
+  jsonStore.insert("socialPosts", { caption: "a", by: "Marketing [AI agent]", at });
+  jsonStore.insert("socialPosts", { caption: "b", by: "Owner (+91…)", at }); // a person's post doesn't count
+  assert.equal(call(token, "POST", "/admin/social/posts", post).denied, null);
+  jsonStore.insert("socialPosts", { caption: "c", by: "Marketing [AI agent]", at });
+  assert.equal(call(token, "POST", "/admin/social/posts", post).denied.status, 429);
+  agents.setConfig({ socialAutoPost: false }, "test");
+});
+
 test("complaint agent can't resolve/close directly but can move stages", () => {
   const { apiKey } = agents.createAgent({ name: "Complaints", roleId: "complaints" }, "test");
   const { token } = agents.issueToken(apiKey);

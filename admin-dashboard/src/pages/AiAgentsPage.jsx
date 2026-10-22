@@ -92,6 +92,7 @@ export default function AiAgentsPage() {
           </div>
         )}
       </div>
+      {tab === "approvals" && config && <SocialAutoPostPanel config={config} onSaved={setConfig} canEdit={can("ai.manage")} />}
       {tab === "approvals" && <ApprovalsPanel canDecide={can("ai.approve")} />}
       {tab === "tasks" && <TasksPanel canApprove={can("ai.approve")} canManage={can("ai.manage")} />}
       {tab === "ceo" && <CeoChatPanel hasCeo={hasCeo} />}
@@ -126,6 +127,55 @@ Booking protection (only for bookings made in the Tikdum app): genuine service g
 Become a provider: install "Tikdum Business" from the Play Store and sign up with your mobile number. Our team verifies new providers before they get jobs.
 Delete account: in the app, Profile -> Delete account.
 Other contact: email support@tikdum.com.`;
+
+// Marketing Agent's Facebook/Instagram posts: wait for approval (default), or post by itself up to N a day.
+function SocialAutoPostPanel({ config, onSaved, canEdit }) {
+  const run = useRun();
+  const save = async (patch, done) => {
+    const out = await run(() => api.setAiConfig(patch), done);
+    if (out) onSaved(out);
+  };
+  const turnOn = () => {
+    if (!window.confirm(`The Marketing Agent will publish up to ${config.socialPostsPerDay} posts a day on Facebook and Instagram by itself, without asking you. Turn on?`)) return;
+    save({ socialAutoPost: true }, `Auto-post on: up to ${config.socialPostsPerDay} posts a day`);
+  };
+  return (
+    <div className="mb-4 rounded-2xl bg-white p-4 shadow-card">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-[14px] font-bold text-gray-900">Facebook &amp; Instagram posts</h2>
+          <p className="text-[12px] text-gray-500">
+            {config.socialAutoPost
+              ? `Auto-post: the Marketing Agent publishes up to ${config.socialPostsPerDay} posts a day by itself, spread through the day. You'll find them in Activity and on the Page.`
+              : "Approval first: each post the Marketing Agent writes waits below until someone approves it."}
+          </p>
+        </div>
+        {canEdit && (
+          <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1.5 text-[12px] text-gray-600">
+              Posts a day
+              <select
+                value={config.socialPostsPerDay}
+                onChange={(e) => save({ socialPostsPerDay: Number(e.target.value) }, `${e.target.value} post(s) a day`)}
+                className="rounded-lg border border-gray-200 px-2 py-1 text-[12px]"
+              >
+                {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+            <div className="flex rounded-xl border border-gray-200 p-0.5">
+              <button className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold ${!config.socialAutoPost ? "bg-brand text-white" : "text-gray-500"}`} onClick={() => config.socialAutoPost && save({ socialAutoPost: false }, "Posts wait for approval again")}>
+                Approval first
+              </button>
+              <button className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold ${config.socialAutoPost ? "bg-brand text-white" : "text-gray-500"}`} onClick={() => !config.socialAutoPost && turnOn()}>
+                Auto-post
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function KnowledgePanel({ config, onSaved, canEdit }) {
   const [text, setText] = useState(config.supportKnowledge || "");

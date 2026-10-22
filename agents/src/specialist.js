@@ -59,7 +59,7 @@ async function tick(client, log, name = "specialist", { now = Date.now() } = {})
   const pushed = marketing ? await pushPlans.run(client, log, { st, office, now }) : 0;
   const mine = marketing ? office.tasks.filter((t) => !pushPlans.isPushTask(t) && !(st.socialConnected && socialPosts.isPostTask(t))) : office.tasks;
   const work = tasksToWork(mine, st.failed);
-  const proposals = [posted && `${posted} social post(s) proposed for approval`, pushed && `${pushed} push campaign(s) proposed for approval`];
+  const proposals = [posted && `${posted} social post(s) ${st.socialMode || "proposed for approval"}`, pushed && `${pushed} push campaign(s) proposed for approval`];
   if (!work.length) {
     state.save(`specialist-${name}`, st);
     const parts = proposals.filter(Boolean);

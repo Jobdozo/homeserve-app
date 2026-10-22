@@ -3160,6 +3160,8 @@ app.get("/api/agents/self", agentOnly, crm(async (req, res) => {
     ...agents.status(req.admin.agentId),
     supportKnowledge: agents.getConfig().supportKnowledge,
     supportAutoSend: agents.getConfig().supportAutoSend,
+    socialAutoPost: agents.getConfig().socialAutoPost,
+    socialPostsPerDay: agents.getConfig().socialPostsPerDay,
     kind: req.admin.kind,
     instructions: ["specialist", "engineer"].includes(req.admin.kind) ? req.admin.instructions : undefined,
     template: ["engineer", "specialist"].includes(req.admin.kind) ? req.admin.template : undefined,
@@ -3201,7 +3203,24 @@ app.post("/api/agents/notify-owner", agentOnly, crm(async (req, res) => {
 app.get("/api/admin/ai/config", adminOnly, crm(async (req, res) => res.json(agents.getConfig())));
 app.patch("/api/admin/ai/config", adminOnly, crm(async (req, res) => {
   const before = agents.getConfig();
-  const cfg = agents.setConfig({ enabled: req.body?.enabled, supportKnowledge: req.body?.supportKnowledge, supportAutoSend: req.body?.supportAutoSend }, actorOf(req));
+  const cfg = agents.setConfig(
+    {
+      enabled: req.body?.enabled,
+      supportKnowledge: req.body?.supportKnowledge,
+      supportAutoSend: req.body?.supportAutoSend,
+      socialAutoPost: req.body?.socialAutoPost,
+      socialPostsPerDay: req.body?.socialPostsPerDay,
+    },
+    actorOf(req)
+  );
+  if (before.socialAutoPost !== cfg.socialAutoPost || before.socialPostsPerDay !== cfg.socialPostsPerDay) {
+    audit(req, "ai.config", "ai", "config", "Social auto-post", [
+      { field: "socialAutoPost", from: `${before.socialAutoPost} (${before.socialPostsPerDay}/day)`, to: `${cfg.socialAutoPost} (${cfg.socialPostsPerDay}/day)` },
+    ]);
+    await store
+      .logActivity("ai", cfg.socialAutoPost ? `Marketing Agent now posts on Facebook/Instagram by itself, ${cfg.socialPostsPerDay} a day — by ${actorOf(req)}` : `Social posts back to approval first — by ${actorOf(req)}`)
+      .catch(() => {});
+  }
   if (before.enabled !== cfg.enabled) {
     audit(req, "ai.config", "ai", "config", "AI agents", [{ field: "enabled", from: before.enabled, to: cfg.enabled }]);
     await store.logActivity("ai", `All AI agents switched ${cfg.enabled ? "on" : "off"} by ${actorOf(req)}`).catch(() => {});
