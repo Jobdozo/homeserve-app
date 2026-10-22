@@ -34,4 +34,6 @@ test("call desk: looking up needs bookings.view, booking and closing need bookin
   assert.equal(access.requiredFor("POST", "/admin/call-desk/bookings", {}), "bookings.edit");
   assert.equal(access.requiredFor("POST", "/admin/call-desk/bookings/b1/reschedule", {}), "bookings.edit");
   assert.equal(access.requiredFor("POST", "/admin/call-desk/bookings/b1/close", {}), "bookings.edit");
+  assert.equal(access.requiredFor("GET", "/admin/call-desk/bookings/b1/providers"), "bookings.edit");
+  assert.equal(access.requiredFor("POST", "/admin/call-desk/bookings/b1/provider", {}), "bookings.edit");
 });

@@ -2786,6 +2786,23 @@ app.post("/api/admin/call-desk/bookings/:id/reschedule", auth.requireAuth("admin
   rt.activity((await store.listActivities(1))[0]);
   res.json(booking);
 }));
+// Who could take this booking instead (same list and order as the assignment desk), minus whoever has it.
+app.get("/api/admin/call-desk/bookings/:id/providers", auth.requireAuth("admin"), ah(async (req, res) => {
+  const booking = await store.getBooking(req.params.id);
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  res.json((await store.assignmentOptions(booking)).filter((o) => o.providerId !== booking.providerId));
+}));
+app.post("/api/admin/call-desk/bookings/:id/provider", auth.requireAuth("admin"), ah(async (req, res) => {
+  const providerId = typeof req.body?.providerId === "string" ? req.body.providerId : "";
+  if (!providerId) return res.status(400).json({ error: "Choose a provider" });
+  const { booking, previousProviderId } = await store.changeBookingProvider(req.params.id, providerId, actorOf(req));
+  rt.booking("booking:updated", booking, { previous: previousProviderId ? [previousProviderId] : [] });
+  rt.booking("booking:created", booking);
+  audit(req, "booking.change-provider", "booking", booking.id, booking.service?.name || "", [{ field: "provider", from: previousProviderId, to: booking.providerId }]);
+  rt.activity((await store.listActivities(1))[0]);
+  dispatchBooking(booking, [...new Set([previousProviderId, booking.providerId].filter(Boolean))]).catch((e) => console.error("dispatchBooking failed", e));
+  res.json(booking);
+}));
 app.post("/api/admin/call-desk/bookings/:id/close", auth.requireAuth("admin"), ah(async (req, res) => {
   const booking = await callDesk.close(req.params.id, req.body || {});
   rt.booking("booking:updated", booking);

@@ -338,14 +338,94 @@ function OpenBookings({ tick, onChanged, canEdit }) {
               <div className="flex flex-wrap gap-1.5">
                 {b.status !== "Pending" && <button onClick={() => setActing({ id: b.id, kind: "complete" })} className={`${ghostCls} py-1`}>Mark completed</button>}
                 {b.status !== "In Progress" && <button onClick={() => setActing({ id: b.id, kind: "reschedule" })} className={`${ghostCls} py-1`}>Reschedule</button>}
+                {b.status !== "In Progress" && <button onClick={() => setActing({ id: b.id, kind: "provider" })} className={`${ghostCls} py-1`}>Change provider</button>}
                 <button onClick={() => setActing({ id: b.id, kind: "cancel" })} className={`${ghostCls} py-1 text-red-600`}>Cancel</button>
               </div>
             )}
-            {acting?.id === b.id && <BookingAction booking={b} kind={acting.kind} onDone={() => { setActing(null); onChanged(); }} onClose={() => setActing(null)} />}
+            {acting?.id === b.id &&
+              (acting.kind === "provider" ? (
+                <ChangeProvider booking={b} currentName={providerName(b.providerId)} onDone={() => { setActing(null); onChanged(); }} onClose={() => setActing(null)} />
+              ) : (
+                <BookingAction booking={b} kind={acting.kind} onDone={() => { setActing(null); onChanged(); }} onClose={() => setActing(null)} />
+              ))}
           </li>
         ))}
       </ul>
     </section>
+  );
+}
+
+// Providers who could take the booking instead, ranked like the assignment desk. The chosen one
+// gets it as a new request to accept; the customer never pays more than agreed.
+function ChangeProvider({ booking, currentName, onDone, onClose }) {
+  const { showToast } = useApp();
+  const [options, setOptions] = useState(null);
+  const [picked, setPicked] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let off = false;
+    api
+      .callDeskProviders(booking.id)
+      .then((list) => !off && setOptions(list))
+      .catch((e) => !off && (setOptions([]), setError(e.message)));
+    return () => {
+      off = true;
+    };
+  }, [booking.id]);
+
+  const choice = options?.find((o) => o.providerId === picked);
+  const move = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await api.callDeskChangeProvider(booking.id, picked);
+      showToast(`#${booking.ref} sent to ${choice?.name || "the new provider"} — waiting for them to accept`);
+      onDone();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
+      <p className="text-[12px] text-gray-600">
+        Now with <b>{currentName}</b>. The provider you pick gets it as a new request to accept{booking.status === "Accepted" ? "; the customer is told a new professional is coming" : ""}.
+      </p>
+      {!options && <p className="text-[12px] text-gray-400">Finding providers…</p>}
+      {options?.length === 0 && !error && <p className="text-[12px] text-gray-500">No other provider offers this kind of service.</p>}
+      {options?.length > 0 && (
+        <ul className="max-h-64 space-y-1 overflow-y-auto">
+          {options.map((o) => (
+            <li key={o.providerId}>
+              <label className={`flex cursor-pointer items-start gap-2 rounded-lg border bg-white p-2 text-[12px] ${picked === o.providerId ? "border-brand" : "border-gray-100"}`}>
+                <input type="radio" name={`prov-${booking.id}`} checked={picked === o.providerId} onChange={() => setPicked(o.providerId)} className="mt-0.5 accent-brand" />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold text-gray-800">
+                    {o.name}
+                    {o.rating ? <span className="font-normal text-gray-400"> · ★ {o.rating.toFixed(1)}</span> : null}
+                    <span className="font-normal text-gray-400"> · {o.jobsDone} jobs</span>
+                  </span>
+                  <span className="block text-gray-500">
+                    {o.serviceName}{o.sameService ? "" : " (similar service)"} · their price {inr(o.price)} · customer pays {inr(o.customerPays)}
+                  </span>
+                  {!o.available && <span className="block text-amber-700">⚠ {o.issues.join(", ")}</span>}
+                  {o.passed && <span className="block text-gray-400">Already passed on this booking</span>}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <p className="text-[12px] text-red-600">{error}</p>}
+      <div className="flex gap-2">
+        <button onClick={move} disabled={busy || !picked} className={btnCls}>{busy ? "Moving…" : "Move to this provider"}</button>
+        <button onClick={onClose} className={ghostCls}>Back</button>
+      </div>
+    </div>
   );
 }
 

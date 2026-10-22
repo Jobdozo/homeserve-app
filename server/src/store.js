@@ -2914,6 +2914,78 @@ async function assignBookingTo(bookingId, providerId, actor) {
   return { booking: updated, tried: assignments.queued(bookingId)?.tried || [] };
 }
 
+// Admin's call desk moves a Pending or Accepted booking to another provider (the customer asked,
+// or the provider can't make it). The new provider gets it as a fresh request to accept. The
+// customer never pays more than agreed, and nobody is charged a difference (Admin chose the move:
+// cover 0). No money moves: a fee already charged on acceptance stays charged, exactly as when a
+// provider swaps an order themselves, and the next acceptance isn't charged again (bookingFees).
+async function changeBookingProvider(bookingId, providerId, actor) {
+  const fail = (status, message) => Object.assign(new Error(message), { status });
+  const booking = await fetchBookingWithRelations(bookingId);
+  if (!booking) throw fail(404, "Booking not found");
+  if (!["Pending", "Accepted"].includes(booking.status)) throw fail(409, `A ${String(booking.status).toLowerCase()} booking can't be moved to another provider`);
+  if (booking.providerId === providerId) throw fail(400, "That provider already has this booking");
+  const option = (await assignmentOptions(booking)).find((o) => o.providerId === providerId);
+  if (!option) throw fail(404, "That provider doesn't offer a service in this category");
+  const { amount } = assignments.priceForMove(booking, option.price, providerId, { chargedProviderId: providerId });
+  const now = new Date().toISOString();
+  await mutate(
+    `mutation($id: UUID!, $serviceId: UUID!, $providerId: UUID!, $status: String!, $amount: Int!) {
+      booking_update(id: $id, data: { serviceId: $serviceId, providerId: $providerId, status: $status, amount: $amount })
+    }`,
+    { id: bookingId, serviceId: option.serviceId, providerId, status: "Pending", amount }
+  );
+  await mutate(
+    `mutation($bookingId: UUID!, $status: String!, $at: Timestamp!) {
+      bookingStatusEvent_insert(data: { bookingId: $bookingId, status: $status, at: $at })
+    }`,
+    { bookingId, status: "Pending", at: now }
+  );
+  assignments.removeFromQueue(bookingId);
+  if (booking.status === "Accepted") {
+    // The new provider starts clean, as after a swap: fresh codes, earlier check-ins and photos set aside.
+    jsonStore.readAll("bookingOtps").filter((o) => o.bookingId === bookingId).forEach((o) => jsonStore.remove("bookingOtps", o.id));
+    for (const name of ["jobCheckpoints", "jobPhotos"]) {
+      jsonStore.readAll(name).filter((r) => r.bookingId === bookingId && !r.superseded).forEach((r) => jsonStore.update(name, r.id, { superseded: true }));
+    }
+  }
+  cacheClear("openBookings");
+  const ref = bookingRef(refBookingId(booking));
+  const serviceName = booking.service?.name || "Service";
+  await logActivity("booking", `Booking #${ref} (${serviceName}) moved to ${option.name} by ${actor || "Admin"}`);
+  const updated = await fetchBookingWithRelations(bookingId);
+  await addNotification({
+    recipientType: "provider",
+    recipientId: providerId,
+    type: "booking",
+    title: "Tikdum assigned you a booking",
+    message: `${updated.service?.name || "A service"} for ${updated.customer?.name || "a customer"} on ${updated.date} ${updated.time || ""}. Open the Business app to accept.`,
+    bookingId,
+    skipPush: true, // index.js rings them through dispatchBooking
+  });
+  if (booking.providerId) {
+    await addNotification({
+      recipientType: "provider",
+      recipientId: booking.providerId,
+      type: "booking",
+      title: "Booking moved",
+      message: `Tikdum moved ${serviceName} #${ref} to another provider. You don't need to go.`,
+      bookingId,
+    });
+  }
+  if (booking.status === "Accepted") {
+    await addNotification({
+      recipientType: "customer",
+      recipientId: booking.customerId,
+      type: "booking",
+      title: "New professional for your booking",
+      message: `Another professional will do your ${serviceName} booking #${ref}. You'll be told as soon as they confirm.`,
+      bookingId,
+    });
+  }
+  return { booking: updated, previousProviderId: booking.providerId };
+}
+
 // Nobody could be found (Admin gave up, or the deadline passed): the booking is
 // rejected and the customer gets an apology.
 async function giveUpBooking(bookingId, { byAdmin = false } = {}) {
@@ -5352,6 +5424,7 @@ async function listCustomersPage({ q, offset = 0, limit = 50 } = {}) {
 module.exports = {
   _withOptions: withOptions,
   rescheduleBooking,
+  changeBookingProvider,
   markProviderLive,
   phoneKey,
   canonicalPhone,
