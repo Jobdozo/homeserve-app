@@ -220,6 +220,11 @@ export const api = {
   // One page of bookings, newest first, filtered on the server: { items, total }.
   listBookingsPage: ({ status, provider, customer, from, to, q, offset = 0, limit = 50 } = {}) =>
     request(`/admin/bookings?${pageQuery({ status, provider, customer, from, to, q, offset, limit })}`),
+  // Call desk (Provider CRM → Call bookings): bookings for customers who phone in.
+  callDeskLookup: (phone) => request(`/admin/call-desk/lookup?phone=${encodeURIComponent(phone)}`),
+  callDeskBook: (body) => request("/admin/call-desk/bookings", { method: "POST", body: JSON.stringify(body) }),
+  callDeskReschedule: (id, body) => request(`/admin/call-desk/bookings/${encodeURIComponent(id)}/reschedule`, { method: "POST", body: JSON.stringify(body) }),
+  callDeskClose: (id, body) => request(`/admin/call-desk/bookings/${encodeURIComponent(id)}/close`, { method: "POST", body: JSON.stringify(body) }),
   getBookingMessages: (id) => request(`/messages/${id}`),
   getBookingPhotos: (id) => request(`/bookings/${id}/photos`),
   getBookingCheckpoints: (id) => request(`/bookings/${id}/checkpoints`),

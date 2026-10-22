@@ -25,6 +25,7 @@ const agents = require("./agents");
 const inbox = require("./inbox");
 const backoffice = require("./backoffice");
 const gstPortal = require("./gstPortal");
+const callDesk = require("./callDesk");
 const office = require("./office");
 access.setAgentHooks({ resolve: agents.resolveAgent, policy: agents.policy });
 // Per-request permission checks for staff sign-ins (admin roles, provider staff).
@@ -2760,6 +2761,37 @@ app.post("/api/admin/bookings/:id/give-up", auth.requireAuth("admin"), ah(async 
   if (!booking) return res.status(404).json({ error: "Booking not found" });
   rt.booking("booking:updated", unassignedView(booking));
   io.to("admin:bookings").emit("assignment:needed", { bookingId: booking.id });
+  rt.activity((await store.listActivities(1))[0]);
+  res.json(booking);
+}));
+
+// ---- call desk (callDesk.js): bookings for customers who phone in; close / reschedule / cancel ----
+app.get("/api/admin/call-desk/lookup", auth.requireAuth("admin"), ah(async (req, res) => res.json(await callDesk.lookup(req.query.phone))));
+app.post("/api/admin/call-desk/bookings", auth.requireAuth("admin"), ah(async (req, res) => {
+  const result = await callDesk.book(req.body || {}, { id: req.admin?.id, name: req.admin?.name });
+  result.bookings.forEach((b) => rt.booking("booking:created", b));
+  for (const group of groupByProvider(result.bookings)) {
+    dispatchBooking(group[0], [group[0].providerId], group).catch((e) => console.error("dispatchBooking failed", e));
+  }
+  audit(req, "booking.call-desk", "customer", result.customer.id, result.customer.name, [
+    { field: "booked on call", from: null, to: result.bookings.map((b) => `#${b.ref || b.id} ${b.service?.name || ""}`.trim()).join(", ") },
+  ]);
+  rt.activity((await store.listActivities(1))[0]);
+  res.status(201).json(result);
+}));
+app.post("/api/admin/call-desk/bookings/:id/reschedule", auth.requireAuth("admin"), ah(async (req, res) => {
+  const booking = await callDesk.reschedule(req.params.id, req.body || {});
+  rt.booking("booking:updated", booking);
+  audit(req, "booking.reschedule", "booking", booking.id, booking.service?.name || "", [{ field: "schedule", from: null, to: `${booking.date} ${booking.time}` }]);
+  rt.activity((await store.listActivities(1))[0]);
+  res.json(booking);
+}));
+app.post("/api/admin/call-desk/bookings/:id/close", auth.requireAuth("admin"), ah(async (req, res) => {
+  const booking = await callDesk.close(req.params.id, req.body || {});
+  rt.booking("booking:updated", booking);
+  audit(req, `booking.${req.body?.action === "complete" ? "complete" : "cancel"}`, "booking", booking.id, booking.service?.name || "", [
+    { field: "status", from: null, to: `${booking.status}${req.body?.reason ? ` — ${String(req.body.reason).slice(0, 200)}` : ""}` },
+  ]);
   rt.activity((await store.listActivities(1))[0]);
   res.json(booking);
 }));

@@ -2364,6 +2364,28 @@ async function createOrder({ items, address, customerId, offerCode, referralCode
   return created;
 }
 
+// Moves an open booking (Pending / Accepted) to a new day and time slot, and tells the
+// customer and the provider. Used by Admin's call desk (callDesk.js checks the input).
+async function rescheduleBooking(id, { date, time, reason }) {
+  const existing = await fetchBookingWithRelations(id);
+  if (!existing) return undefined;
+  if (!["Pending", "Accepted"].includes(existing.status)) {
+    throw Object.assign(new Error(`A ${existing.status.toLowerCase()} booking can't be rescheduled`), { status: 409 });
+  }
+  await mutate(`mutation($id: UUID!, $date: Date!, $time: String!) { booking_update(id: $id, data: { date: $date, time: $time }) }`, { id, date, time });
+  cacheClear("openBookings");
+  const serviceName = existing.service?.name || "Service";
+  const ref = bookingRef(refBookingId(existing));
+  const when = `${new Date(`${date}T00:00:00+05:30`).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" })}, ${time}`;
+  await logActivity("booking", `Booking #${ref} (${serviceName}) rescheduled to ${when}${reason ? ` — ${reason}` : ""}`);
+  const message = `Your ${serviceName} booking #${ref} is now on ${when}`;
+  await addNotification({ recipientType: "customer", recipientId: existing.customerId, type: "booking", title: "Booking rescheduled", message, bookingId: id });
+  if (existing.providerId) {
+    await addNotification({ recipientType: "provider", recipientId: existing.providerId, type: "booking", title: "Booking rescheduled", message: `${serviceName} #${ref} moved to ${when}`, bookingId: id });
+  }
+  return getBooking(id);
+}
+
 // opts.customerMessage: undefined = the usual message, a string = that message instead, null = tell the customer nothing
 // (used when several bookings of one order change together and the customer gets a single notice).
 async function updateBookingStatus(id, status, opts = {}) {
@@ -5323,6 +5345,7 @@ async function listCustomersPage({ q, offset = 0, limit = 50 } = {}) {
 
 module.exports = {
   _withOptions: withOptions,
+  rescheduleBooking,
   markProviderLive,
   phoneKey,
   canonicalPhone,

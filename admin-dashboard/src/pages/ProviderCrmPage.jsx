@@ -6,6 +6,7 @@ import {
   inputCls, labelCls, btnCls, ghostCls, Modal, DuePicker, QUICK_TIMES, dueLabel, telHref, waHref,
   LogContactModal, TaskModal, CrmDrawer,
 } from "../components/CrmKit";
+import CallBookings from "../components/CallBookings";
 
 // Provider CRM: every provider and would-be provider, the follow-ups due, and the pipeline.
 export default function ProviderCrmPage() {
@@ -45,14 +46,20 @@ export default function ProviderCrmPage() {
       </div>
 
       <div className="no-scrollbar flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-white p-1 shadow-card">
-        {[["followups", "Follow-ups"], ["pipeline", "Pipeline"]].map(([k, l]) => (
+        {[["followups", "Follow-ups"], ["pipeline", "Pipeline"], ["calls", "Call bookings"]].map(([k, l]) => (
           <button key={k} onClick={() => pick(k)} className={`rounded-lg px-4 py-1.5 text-[12.5px] font-semibold ${tab === k ? "bg-brand text-white" : "text-gray-500"}`}>
             {l}
           </button>
         ))}
       </div>
 
-      {tab === "followups" ? <FollowUps tick={tick} onOpen={setOpen} onChanged={refresh} /> : <Pipeline tick={tick} onOpen={setOpen} onChanged={refresh} />}
+      {tab === "followups" ? (
+        <FollowUps tick={tick} onOpen={setOpen} onChanged={refresh} />
+      ) : tab === "calls" ? (
+        <CallBookings />
+      ) : (
+        <Pipeline tick={tick} onOpen={setOpen} onChanged={refresh} />
+      )}
 
       {open && <CrmDrawer subject={open} onClose={() => setOpen(null)} onChanged={refresh} />}
       {modal === "lead" && <AddLeadModal onClose={() => setModal(null)} onSaved={(lead) => { refresh(); if (lead) setOpen(`lead:${lead.id}`); }} onOpenExisting={(s) => { setModal(null); setOpen(s); }} />}

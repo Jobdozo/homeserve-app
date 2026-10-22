@@ -388,6 +388,9 @@ const RULES = [
   [/^\/admin\/fcm-token(\/remove)?$/, () => "bookings.view"],
   [/^\/admin\/assignments$/, () => "bookings.view"],
   [/^\/admin\/bookings\/[^/]+\/(assign|give-up)$/, () => "bookings.edit"],
+  // Call desk (callDesk.js): looking a caller up shows their open bookings; booking / closing changes them.
+  [/^\/admin\/call-desk\/lookup$/, () => "bookings.view"],
+  [/^\/admin\/call-desk\//, () => "bookings.edit"],
   [/^\/admin\/bookings\//, () => "bookings.view"],
   [/^\/bookings$/, () => ["bookings.view", "reviews.view", "payments.view", "monitoring.view", "complaints.view", "customers.view", "dashboard.view", "reports.view"]],
   [/^\/bookings(\/|$)/, (m) => (m === "GET" ? "bookings.view" : "bookings.edit")],
