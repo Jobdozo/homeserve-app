@@ -52,14 +52,18 @@ function OptionsSheet({ service, likeServiceId, onClose }) {
       return { ...p, [g.id]: [...cur, choiceId] };
     });
 
+  // Full-price choices arrive as their difference from the service price: the first one picked
+  // takes the service price's place, further ones count in full (server/src/serviceOptions.js).
+  let fullPicks = 0;
   const lines = groups.flatMap((g) =>
     (picked[g.id] || [])
       .map((id) => g.choices.find((c) => c.id === id))
       .filter(Boolean)
-      .map((c) => ({ group: g.name, choice: c.name, price: c.price }))
+      .map((c) => ({ group: g.name, choice: c.name, price: g.fullPrice && fullPicks++ > 0 ? c.price + service.price : c.price }))
   );
   const unit = unitPrice(service, { optionLines: lines });
-  const missing = groups.filter((g) => g.required && !(picked[g.id] || []).length);
+  const needsPick = groups.some((g) => g.fullPrice) && !fullPicks ? [{ name: "an option" }] : [];
+  const missing = [...groups.filter((g) => g.required && !(picked[g.id] || []).length), ...needsPick];
 
   const add = () => {
     if (missing.length) return;

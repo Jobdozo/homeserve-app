@@ -44,12 +44,29 @@ test("options: a full-price group's choice replaces the service price; extras st
   ]);
   assert.equal(size.fullPrice, true);
   assert.equal("fullPrice" in extras, false);
-  assert.equal(serviceOptions.normalizeGroups([{ name: "S", fullPrice: true, max: 3, choices: [{ name: "A" }, { name: "B" }] }])[0].max, 1);
   const one = serviceOptions.priceSelection(CLEAN, { [size.id]: [size.choices[0].id] });
   assert.equal(CLEAN.price + one.extra, 4500); // not 9,000
   assert.deepEqual(one.lines, [{ group: "Home size", choice: "1 BHK", price: 0 }]); // shown on the booking as the difference
   const two = serviceOptions.priceSelection(CLEAN, { [size.id]: [size.choices[1].id], [extras.id]: [extras.choices[0].id] });
   assert.equal(CLEAN.price + two.extra, 6800);
+});
+
+test("options: several full-price picks (waxing areas) add up; the 'from' price alone can't be booked", () => {
+  const WAX = { id: "svc-wax", name: "Waxing", price: 80 };
+  const [under, arms] = serviceOptions.setOptions([WAX.id], [
+    { name: "Underarms", max: 5, fullPrice: true, choices: [{ name: "Honey", price: 80 }, { name: "Rica", price: 130 }] },
+    { name: "Full Arms", max: 5, fullPrice: true, choices: [{ name: "Honey", price: 200 }] },
+  ]);
+  assert.equal(under.max, 2); // more than one pick allowed (capped at the number of choices)
+  const pick = (sel) => {
+    const r = serviceOptions.priceSelection(WAX, sel);
+    assert.equal(r.lines.reduce((n, l) => n + l.price, WAX.price), WAX.price + r.extra); // lines add up to the price
+    return WAX.price + r.extra;
+  };
+  assert.equal(pick({ [under.id]: [under.choices[0].id] }), 80); // not 160
+  assert.equal(pick({ [under.id]: [under.choices[1].id], [arms.id]: [arms.choices[0].id] }), 330);
+  assert.equal(pick({ [under.id]: [under.choices[0].id, under.choices[1].id] }), 210);
+  assert.throws(() => serviceOptions.priceSelection(WAX, {}), /at least one option/);
 });
 
 test("options: apps (old Android builds too) get full-price choices as the difference from the service price", async () => {

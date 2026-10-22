@@ -2,8 +2,10 @@
 // price added to the service's own price. E.g. "AC type" (required, pick 1:
 // Split +₹50 / Window +₹0) and "Make it better" (up to 3: Jet-pump wash +₹299,
 // Outdoor unit wash +₹149). A group marked fullPrice is priced the other way:
-// its choices ARE the price ("Home size": 1 BHK ₹4,500 / 2 BHK ₹6,500), so a
-// picked choice replaces the service's own price instead of adding to it.
+// its choices ARE the price ("Home size": 1 BHK ₹4,500 / 2 BHK ₹6,500; waxing
+// "Underarms" ₹80 + "Full arms" ₹200), so the service's own price is only a
+// "from" price: the customer pays the full-price choices they pick (plus any
+// extras), and must pick at least one.
 // Set by Super Admin per service (optionally copied
 // to every service with the same name). The server prices every booking from
 // these, never from what the app sends.
@@ -52,8 +54,7 @@ function normalizeGroups(input) {
       if (price < 0 || price > MAX_PRICE) throw fail(`The price of "${cname}" must be between ₹0 and ₹${MAX_PRICE}`);
       return { id: /^[a-z0-9]{4,20}$/.test(String(c?.id || "")) ? c.id : newId(), name: cname, price };
     });
-    // A full-price group is one pick (1 BHK or 2 BHK, never both).
-    const max = g?.fullPrice ? 1 : Math.min(choices.length, Math.max(1, Math.round(Number(g?.max) || 1)));
+    const max = Math.min(choices.length, Math.max(1, Math.round(Number(g?.max) || 1)));
     return {
       id: /^[a-z0-9]{4,20}$/.test(String(g?.id || "")) ? g.id : newId(),
       name,
@@ -85,6 +86,7 @@ function priceSelection(service, selection) {
   const groups = getOptions(service.id);
   const lines = [];
   let extra = 0;
+  let fullPicks = 0;
   const sel = selection && typeof selection === "object" ? selection : {};
   for (const g of groups) {
     const raw = Array.isArray(sel[g.id]) ? sel[g.id] : sel[g.id] ? [sel[g.id]] : [];
@@ -92,13 +94,16 @@ function priceSelection(service, selection) {
     if (g.required && picked.length === 0) throw fail(`Choose ${g.name.toLowerCase()} for ${service.name}`);
     if (picked.length > g.max) throw fail(`Choose at most ${g.max} for ${g.name.toLowerCase()} (${service.name})`);
     for (const c of picked) {
-      // A full-price pick (one per group) counts as its difference from the service price,
-      // exactly as the apps receive it (store.js withOptions) and show it on the booking.
-      const price = g.fullPrice ? c.price - service.price : c.price;
+      // Callers price a line as service.price + extra, and apps receive full-price choices as
+      // their difference from the service price (store.js withOptions). So the first full-price
+      // pick counts as that difference (it takes the service price's place) and any further
+      // ones at their own price; the lines always add up to what the customer pays.
+      const price = g.fullPrice && fullPicks++ === 0 ? c.price - service.price : c.price;
       lines.push({ group: g.name, choice: c.name, price });
       extra += price;
     }
   }
+  if (!fullPicks && groups.some((g) => g.fullPrice)) throw fail(`Choose at least one option for ${service.name}`);
   return { extra, lines };
 }
 

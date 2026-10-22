@@ -14,12 +14,17 @@ const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString("en-IN")}`;
 const istToday = () => new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
 const dayLabel = (d) => (d ? new Date(`${d}T00:00:00+05:30`).toLocaleDateString("en-IN", { day: "numeric", month: "short", weekday: "short" }) : "");
 
-// Price of one line, the way the server works it out (apps get full-price choices as the difference).
+// Price of one line, the way the server works it out: apps get full-price choices as the
+// difference from the service price; the first one picked replaces it, further ones count in full.
 function linePrice(service, picked, qty) {
-  const extra = (service.options || []).reduce(
-    (sum, g) => sum + (picked[g.id] || []).reduce((s, id) => s + (g.choices.find((c) => c.id === id)?.price || 0), 0),
-    0
-  );
+  let extra = 0;
+  let fullPicks = 0;
+  for (const g of service.options || []) {
+    for (const id of picked[g.id] || []) {
+      const c = g.choices.find((x) => x.id === id);
+      if (c) extra += g.fullPrice && fullPicks++ > 0 ? c.price + service.price : c.price;
+    }
+  }
   return (service.price + extra) * qty;
 }
 const startPicks = (service) =>
