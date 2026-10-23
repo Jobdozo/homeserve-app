@@ -2683,6 +2683,8 @@ app.get("/api/admin/live-trips", auth.requireAuth("admin"), ah(async (req, res) 
       address: booking.address || null,
       startedAt: t.startedAt,
       position: liveLocation.getLocation("provider", t.providerId) || null,
+      // the customer's own position only while they're sharing it on this booking
+      customerPosition: liveLocation.getShare(t.bookingId) ? liveLocation.getLocation("customer", t.customerId) || null : null,
     });
   }
   res.json(out);

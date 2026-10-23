@@ -3,6 +3,7 @@ import { api } from "../api";
 import { socket } from "../socket";
 import { useApp } from "../context/AppContext";
 import { columnsFromRows, downloadCsv, toCsv } from "../utils/csv";
+import { loadGoogleMaps, onMapsRefused } from "../utils/googleMaps";
 
 const inputCls =
   "w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-[12.5px] text-gray-800 outline-none focus:border-brand";
@@ -15,6 +16,107 @@ function kmBetween(a, b) {
   const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2;
   return 6371 * 2 * Math.asin(Math.sqrt(h));
 }
+// Every trip on one Google map: the provider (green, moving), the booked address (purple) and, if
+// the customer is sharing, the customer (blue), with a line from provider to address.
+const DOT = { provider: "#16A34A", home: "#5B3FE0", customer: "#2563EB" };
+function LiveTripsMap({ trips }) {
+  const el = useRef(null);
+  const gRef = useRef(null);
+  const mapRef = useRef(null);
+  const drawn = useRef(new Map()); // bookingId -> { provider, home, customer, line }
+  const fittedFor = useRef("");
+  const [error, setError] = useState("");
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let gone = false;
+    const stop = onMapsRefused(() => setError("Google refused the Maps key for admin.tikdum.com — add https://admin.tikdum.com/* to the key's websites in Google Cloud."));
+    loadGoogleMaps()
+      .then(async (g) => {
+        if (gone) return;
+        const { Map } = await g.maps.importLibrary("maps");
+        await g.maps.importLibrary("marker");
+        gRef.current = g;
+        mapRef.current = new Map(el.current, { center: { lat: 32.7266, lng: 74.857 }, zoom: 12, disableDefaultUI: true, zoomControl: true, fullscreenControl: true, clickableIcons: false });
+        setReady(true);
+      })
+      .catch((e) => !gone && setError(e.message));
+    return () => {
+      gone = true;
+      stop();
+    };
+  }, []);
+
+  useEffect(() => {
+    const g = gRef.current;
+    const map = mapRef.current;
+    if (!ready || !g || !map) return;
+    const dot = (fill, scale) => ({ path: g.maps.SymbolPath.CIRCLE, scale, fillColor: fill, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3 });
+    const point = (p) => (p && typeof p.lat === "number" && typeof p.lng === "number" ? { lat: p.lat, lng: p.lng } : null);
+    const marker = (old, at, fill, scale, title) => {
+      if (!at) {
+        old?.setMap(null);
+        return null;
+      }
+      const m = old || new g.maps.Marker({ map, icon: dot(fill, scale), title });
+      m.setPosition(at);
+      m.setTitle(title);
+      return m;
+    };
+    const live = new Set();
+    const bounds = new g.maps.LatLngBounds();
+    let points = 0;
+    for (const t of trips) {
+      live.add(t.bookingId);
+      const d = drawn.current.get(t.bookingId) || {};
+      const pro = point(t.position);
+      const home = point(t.address);
+      const cust = point(t.customerPosition);
+      d.provider = marker(d.provider, pro, DOT.provider, 10, `${t.provider} (on the way) · #${t.ref}`);
+      d.home = marker(d.home, home, DOT.home, 8, `${t.customer}'s address · #${t.ref}`);
+      d.customer = marker(d.customer, cust, DOT.customer, 7, `${t.customer} (sharing live) · #${t.ref}`);
+      if (pro && home) {
+        d.line = d.line || new g.maps.Polyline({ map, strokeColor: DOT.provider, strokeOpacity: 0, icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 0.8, scale: 3 }, offset: "0", repeat: "12px" }] });
+        d.line.setPath([pro, home]);
+      } else if (d.line) {
+        d.line.setMap(null);
+        d.line = null;
+      }
+      drawn.current.set(t.bookingId, d);
+      for (const p of [pro, home, cust]) if (p) (bounds.extend(p), points++);
+    }
+    for (const [id, d] of drawn.current) {
+      if (live.has(id)) continue;
+      for (const k of ["provider", "home", "customer", "line"]) d[k]?.setMap(null);
+      drawn.current.delete(id);
+    }
+    // Fit once per set of trips (not on every move, so a manual zoom stays).
+    const key = trips.map((t) => t.bookingId).sort().join(",");
+    if (points && fittedFor.current !== key) {
+      fittedFor.current = key;
+      if (points === 1) {
+        map.setCenter(bounds.getCenter());
+        map.setZoom(15);
+      } else map.fitBounds(bounds, 60);
+    }
+  }, [trips, ready]);
+
+  return (
+    <div className="mt-3">
+      {error ? (
+        <p className="rounded-xl bg-amber-50 p-3 text-[12px] text-amber-800">Map unavailable: {error}</p>
+      ) : (
+        <div ref={el} className="h-[360px] w-full overflow-hidden rounded-xl bg-gray-100" />
+      )}
+      <p className="mt-1.5 flex flex-wrap gap-3 text-[11px] text-gray-500">
+        <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: DOT.provider }} /> Provider</span>
+        <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: DOT.home }} /> Booked address</span>
+        <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: DOT.customer }} /> Customer (when sharing)</span>
+      </p>
+    </div>
+  );
+}
+
 function LiveTrips() {
   const [trips, setTrips] = useState(null);
   const [, tick] = useState(0);
@@ -24,8 +126,10 @@ function LiveTrips() {
     load();
     const t = setInterval(load, 20000);
     const clock = setInterval(() => tick((n) => n + 1), 10000);
-    const onLocation = (u) =>
-      u.who === "provider" && setTrips((list) => (list || []).map((x) => (x.bookingId === u.bookingId ? { ...x, position: { lat: u.lat, lng: u.lng, accuracy: u.accuracy, updatedAt: u.updatedAt } } : x)));
+    const onLocation = (u) => {
+      const at = { lat: u.lat, lng: u.lng, accuracy: u.accuracy, updatedAt: u.updatedAt };
+      setTrips((list) => (list || []).map((x) => (x.bookingId !== u.bookingId ? x : u.who === "provider" ? { ...x, position: at } : { ...x, customerPosition: at })));
+    };
     const onTrip = (u) => u.kind === "trip" && load();
     socket.on("location:update", onLocation);
     socket.on("trip:updated", onTrip);
@@ -42,6 +146,7 @@ function LiveTrips() {
     <div className="rounded-2xl bg-white p-4 shadow-card">
       <p className="text-[14px] font-bold text-gray-900">On the way now ({trips.length})</p>
       <p className="text-[12px] text-gray-500">Providers who started the trip to a customer. Positions update live while their app is open.</p>
+      <LiveTripsMap trips={trips} />
       <div className="mt-3 divide-y divide-gray-50">
         {trips.map((t) => {
           const p = t.position;
