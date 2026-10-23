@@ -2163,6 +2163,13 @@ app.post("/api/orders", auth.requireAuth("customer"), ah(async (req, res) =>
   })
 ));
 
+// The Google Maps browser key for the location picker (public by design: Google only accepts it
+// from tikdum.com pages, set in Google Cloud). null = the picker uses OpenStreetMap.
+app.get("/api/maps/config", (req, res) => {
+  res.set("Cache-Control", "public, max-age=300");
+  res.json({ googleMapsKey: String(process.env.GOOGLE_MAPS_BROWSER_KEY || "").trim() || null });
+});
+
 // The website's Meta Pixel id (public anyway: it's in every page's source once loaded). null = off.
 app.get("/api/meta/pixel", (req, res) => res.json({ pixelId: metaEvents.pixelId() }));
 app.get("/api/admin/meta/status", auth.requireAuth("admin"), (req, res) =>

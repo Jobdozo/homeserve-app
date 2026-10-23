@@ -2,13 +2,83 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { detectPreciseLocation, reverseGeocode, searchPlaces, APPROXIMATE_OVER_METERS } from "../utils/geolocation";
+import { mapsKey, loadGoogleMaps, onGoogleAuthFailure, googleSearch, googlePlaceLocation, googleReverse } from "../utils/googleMaps";
 import { useApp } from "../context/AppContext";
 import { XIcon } from "./icons";
 
 // Jammu — only used as a starting view when nothing better is known.
 const DEFAULT_CENTER = [32.7266, 74.857];
+const PIN_COLOUR = "#5B3FE0";
 
 const isNum = (n) => typeof n === "number" && Number.isFinite(n);
+
+// The two maps behind the picker share one small interface, so the rest of it doesn't care
+// which one is showing: setView, getZoom, showAccuracy (the GPS ± circle) and destroy.
+function osmMap(el, center, zoom, onMove) {
+  const map = L.map(el, { zoomControl: false, attributionControl: true }).setView([center.lat, center.lng], zoom);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
+  }).addTo(map);
+  L.control.zoom({ position: "topright" }).addTo(map);
+  map.on("moveend", () => {
+    const c = map.getCenter();
+    onMove({ lat: c.lat, lng: c.lng });
+  });
+  // The container is laid out after mount (modal) — tell Leaflet its real size.
+  const raf = requestAnimationFrame(() => map.invalidateSize());
+  let circle = null;
+  return {
+    kind: "osm",
+    setView: (lat, lng, z, animate = true) => map.setView([lat, lng], z ?? map.getZoom(), { animate }),
+    getZoom: () => map.getZoom(),
+    showAccuracy: (lat, lng, radius) => {
+      circle?.remove();
+      circle = L.circle([lat, lng], { radius, color: PIN_COLOUR, weight: 1, fillColor: PIN_COLOUR, fillOpacity: 0.12 }).addTo(map);
+    },
+    destroy: () => {
+      cancelAnimationFrame(raf);
+      map.remove();
+    },
+  };
+}
+
+async function googleMap(g, el, center, zoom, onMove) {
+  const { Map, Circle } = await g.maps.importLibrary("maps");
+  // Zoom buttons top-right (beside the search box), clear of the "My location" button.
+  const map = new Map(el, {
+    center,
+    zoom,
+    disableDefaultUI: true,
+    zoomControl: true,
+    zoomControlOptions: { position: g.maps.ControlPosition.RIGHT_TOP },
+    gestureHandling: "greedy",
+    clickableIcons: false,
+  });
+  map.addListener("idle", () => {
+    const c = map.getCenter();
+    onMove({ lat: c.lat(), lng: c.lng() });
+  });
+  let circle = null;
+  return {
+    kind: "google",
+    setView: (lat, lng, z) => {
+      map.panTo({ lat, lng });
+      if (z) map.setZoom(z);
+    },
+    getZoom: () => map.getZoom(),
+    showAccuracy: (lat, lng, radius) => {
+      if (!circle) circle = new Circle({ map, strokeColor: PIN_COLOUR, strokeWeight: 1, fillColor: PIN_COLOUR, fillOpacity: 0.12, clickable: false });
+      circle.setCenter({ lat, lng });
+      circle.setRadius(radius);
+    },
+    destroy: () => {
+      circle?.setMap(null);
+      g.maps.event.clearInstanceListeners(map);
+      el.innerHTML = "";
+    },
+  };
+}
 
 // Pick an exact spot: the map moves under a fixed centre pin (like food-delivery
 // apps), "My location" asks the GPS for its best fix, and the address + PIN are
@@ -17,9 +87,11 @@ const isNum = (n) => typeof n === "number" && Number.isFinite(n);
 export default function LocationPicker({ initial, onConfirm, onClose, title = "Pin your exact location" }) {
   const { location: lastKnown } = useApp();
   const mapEl = useRef(null);
-  const mapRef = useRef(null);
-  const circleRef = useRef(null);
+  const mapRef = useRef(null); // osmMap / googleMap
+  const googleRef = useRef(null); // window.google while the Google map is showing
+  const sessionRef = useRef(null); // Places session: one per search-and-pick, for Google's billing
   const locateAbort = useRef(null);
+  const [engine, setEngine] = useState(null); // "google" | "osm" once the map is up
 
   const start = isNum(initial?.lat) && isNum(initial?.lng) ? initial : isNum(lastKnown?.lat) && isNum(lastKnown?.lng) ? lastKnown : null;
 
@@ -34,28 +106,48 @@ export default function LocationPicker({ initial, onConfirm, onClose, title = "P
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
 
-  // ---- map setup (once) ----
+  // ---- map setup (once): Google Maps when the server has a key that works, else OpenStreetMap ----
+  const centerRef = useRef(center);
+  centerRef.current = center;
   useEffect(() => {
-    const map = L.map(mapEl.current, { zoomControl: false, attributionControl: true }).setView(
-      [center.lat, center.lng],
-      initial && isNum(initial.lat) ? 18 : start ? 17 : 13
-    );
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
-    }).addTo(map);
-    L.control.zoom({ position: "topright" }).addTo(map);
-    map.on("moveend", () => {
-      const c = map.getCenter();
-      setCenter({ lat: c.lat, lng: c.lng });
+    let gone = false;
+    const zoom = initial && isNum(initial.lat) ? 18 : start ? 17 : 13;
+    const useOsm = () => {
+      googleRef.current = null;
+      mapRef.current = osmMap(mapEl.current, centerRef.current, mapRef.current?.getZoom() || zoom, setCenter);
+      setEngine("osm");
+    };
+    (async () => {
+      try {
+        const key = await mapsKey();
+        if (key && !gone) {
+          const g = await loadGoogleMaps(key);
+          if (!gone) {
+            mapRef.current = await googleMap(g, mapEl.current, centerRef.current, zoom, setCenter);
+            googleRef.current = g;
+            setEngine("google");
+          }
+        }
+      } catch {
+        // fall through to OpenStreetMap
+      }
+      if (gone) return;
+      if (!mapRef.current) useOsm();
+      // Unless we're adjusting a spot they already chose, snap to where they are right away.
+      if (!isNum(initial?.lat)) locate();
+    })();
+    // Google can refuse the key after the map has appeared: switch to OpenStreetMap where we are.
+    const stop = onGoogleAuthFailure(() => {
+      if (gone || mapRef.current?.kind !== "google") return;
+      mapRef.current.destroy();
+      mapRef.current = null;
+      useOsm();
     });
-    mapRef.current = map;
-    // The container is laid out after mount (modal) — tell Leaflet its real size.
-    const raf = requestAnimationFrame(() => map.invalidateSize());
     return () => {
-      cancelAnimationFrame(raf);
+      gone = true;
+      stop();
       locateAbort.current?.abort();
-      map.remove();
+      mapRef.current?.destroy();
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -63,11 +155,17 @@ export default function LocationPicker({ initial, onConfirm, onClose, title = "P
 
   // ---- look up the address for wherever the pin is (debounced) ----
   useEffect(() => {
+    if (!engine) return undefined;
     const controller = new AbortController();
     setGeocoding(true);
     const timer = setTimeout(async () => {
       try {
-        const p = await reverseGeocode(center.lat, center.lng, controller.signal);
+        const g = googleRef.current;
+        // Google's address when the Google map is showing (its rules: Google results on a Google
+        // map); if that lookup fails, OpenStreetMap's.
+        const p = g
+          ? await googleReverse(g, center.lat, center.lng).catch(() => reverseGeocode(center.lat, center.lng, controller.signal))
+          : await reverseGeocode(center.lat, center.lng, controller.signal);
         if (controller.signal.aborted) return;
         setPlace(p);
         if (p.pincode) setPin(p.pincode);
@@ -84,7 +182,7 @@ export default function LocationPicker({ initial, onConfirm, onClose, title = "P
       clearTimeout(timer);
       controller.abort();
     };
-  }, [center.lat, center.lng]);
+  }, [center.lat, center.lng, engine]);
 
   // ---- search a place by name (most computers have no GPS) ----
   useEffect(() => {
@@ -98,7 +196,15 @@ export default function LocationPicker({ initial, onConfirm, onClose, title = "P
     setSearching(true);
     const timer = setTimeout(async () => {
       try {
-        const found = await searchPlaces(q, controller.signal);
+        const g = googleRef.current;
+        let found;
+        if (g) {
+          const { AutocompleteSessionToken } = await g.maps.importLibrary("places");
+          sessionRef.current = sessionRef.current || new AutocompleteSessionToken();
+          found = await googleSearch(g, q, centerRef.current, sessionRef.current);
+        } else {
+          found = await searchPlaces(q, controller.signal);
+        }
         if (!controller.signal.aborted) setResults(found);
       } catch (e) {
         if (!controller.signal.aborted) setResults([]);
@@ -112,11 +218,18 @@ export default function LocationPicker({ initial, onConfirm, onClose, title = "P
     };
   }, [query]);
 
-  const goTo = (r) => {
-    mapRef.current?.setView([r.lat, r.lng], 18, { animate: true });
+  const goTo = async (r) => {
     setQuery("");
     setResults([]);
     setNotice("");
+    try {
+      // A Google suggestion has no coordinates until it's picked (that ends the search session).
+      const at = r.prediction ? await googlePlaceLocation(r.prediction) : r;
+      sessionRef.current = null;
+      mapRef.current?.setView(at.lat, at.lng, 18);
+    } catch {
+      setNotice("Couldn't open that place — try another result or drag the map.");
+    }
   };
 
   // ---- "My location": the device's best GPS fix ----
@@ -134,9 +247,10 @@ export default function LocationPicker({ initial, onConfirm, onClose, title = "P
         maxWaitMs: 20000,
         signal: controller.signal,
         onProgress: (b) => {
-          map.setView([b.lat, b.lng], Math.max(map.getZoom(), 18), { animate: false });
-          if (circleRef.current) circleRef.current.remove();
-          circleRef.current = L.circle([b.lat, b.lng], { radius: b.accuracy, color: "#5B3FE0", weight: 1, fillColor: "#5B3FE0", fillOpacity: 0.12 }).addTo(map);
+          // The map may have been swapped (Google refused the key) since this started.
+          const m = mapRef.current || map;
+          m.setView(b.lat, b.lng, Math.max(m.getZoom() || 0, 18), false);
+          m.showAccuracy(b.lat, b.lng, b.accuracy);
           setAccuracy(b.accuracy);
         },
       });
@@ -154,12 +268,6 @@ export default function LocationPicker({ initial, onConfirm, onClose, title = "P
     } finally {
       if (locateAbort.current === controller) setLocating(false);
     }
-  }, []);
-
-  // Unless we're adjusting a spot they already chose, snap to where they are right away.
-  useEffect(() => {
-    if (!isNum(initial?.lat)) locate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

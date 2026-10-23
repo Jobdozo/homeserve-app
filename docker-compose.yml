@@ -29,6 +29,8 @@ services:
       CF_AI_TOKEN: ${CF_AI_TOKEN:-}
       CF_AI_IMAGE_MODEL: ${CF_AI_IMAGE_MODEL:-}
       IMAGE_PROVIDER: ${IMAGE_PROVIDER:-auto}
+      # Google Maps browser key for the location picker (website-restricted to tikdum.com; set with deploy/set-maps-key.sh).
+      GOOGLE_MAPS_BROWSER_KEY: ${GOOGLE_MAPS_BROWSER_KEY:-}
       # GST portal check of providers' GST numbers through API Setu (server/src/gstPortal.js; set with deploy/set-apisetu-gst.sh).
       APISETU_CLIENT_ID: ${APISETU_CLIENT_ID:-}
       APISETU_API_KEY: ${APISETU_API_KEY:-}
