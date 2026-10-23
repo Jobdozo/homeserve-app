@@ -55,6 +55,7 @@ const catalogView = require("./catalogView");
 const jsonStore = require("./jsonStore");
 auth.setBlockCheck(blockedPhones.isBlocked);
 const liveLocation = require("./liveLocation");
+const tripRoutes = require("./tripRoutes");
 const push = require("./push");
 const fcm = require("./fcm");
 const uploads = require("./uploads");
@@ -2634,9 +2635,17 @@ app.post("/api/location", auth.requireAuth("customer", "provider"), ah(async (re
   // Live tracking: a provider on a trip, or a customer sharing, reaches the other side at once.
   const pushTo = req.user.role === "provider" ? liveLocation.tripsOf(req.user.id) : liveLocation.sharesOf(req.user.id);
   for (const t of pushTo) {
-    rt.live({ id: t.bookingId, customerId: t.customerId, providerId: t.providerId }, "location:update", { bookingId: t.bookingId, who: req.user.role, ...entry }, {
+    const b = { id: t.bookingId, customerId: t.customerId, providerId: t.providerId };
+    rt.live(b, "location:update", { bookingId: t.bookingId, who: req.user.role, ...entry }, {
       who: req.user.role === "provider" ? "customer" : "provider",
     });
+    // The road route to the address, redrawn now and then as they go (tripRoutes.js) — to both sides.
+    if (req.user.role === "provider" && t.to) {
+      tripRoutes
+        .routeFor(t.bookingId, { lat, lng }, t.to)
+        .then((r) => r?.fresh && rt.live(b, "route:update", { bookingId: t.bookingId, ...tripRoutes.view(r.route) }))
+        .catch(() => {});
+    }
   }
   res.json(entry);
 }));
@@ -2650,6 +2659,7 @@ app.post("/api/bookings/:id/trip", auth.requireAuth("provider"), ah(async (req, 
   const active = req.body?.active !== false;
   if (active && booking.status !== "Accepted") return res.status(409).json({ error: "A trip can only start once the booking is accepted and before the job starts" });
   const trip = active ? liveLocation.startTrip(booking) : (liveLocation.stopTrip(booking.id), null);
+  if (!active) tripRoutes.forget(booking.id);
   rt.live(booking, "trip:updated", { bookingId: booking.id, kind: "trip", active, startedAt: trip?.startedAt || null });
   res.json({ active, startedAt: trip?.startedAt || null });
 }));
@@ -2685,6 +2695,7 @@ app.get("/api/admin/live-trips", auth.requireAuth("admin"), ah(async (req, res) 
       position: liveLocation.getLocation("provider", t.providerId) || null,
       // the customer's own position only while they're sharing it on this booking
       customerPosition: liveLocation.getShare(t.bookingId) ? liveLocation.getLocation("customer", t.customerId) || null : null,
+      route: tripRoutes.view(tripRoutes.cached(t.bookingId)),
     });
   }
   res.json(out);
@@ -2708,7 +2719,11 @@ app.get("/api/bookings/:id/live-location", auth.requireAuth("customer", "provide
   const trip = liveLocation.getTrip(booking.id);
   const share = liveLocation.getShare(booking.id);
   // trip / share say whether live tracking is on for this booking (newer apps show a map then).
-  const live = { trip: trip ? { startedAt: trip.startedAt } : null, share: share ? { startedAt: share.startedAt } : null };
+  const live = {
+    trip: trip ? { startedAt: trip.startedAt } : null,
+    share: share ? { startedAt: share.startedAt } : null,
+    route: trip ? tripRoutes.view(tripRoutes.cached(booking.id)) : null,
+  };
   if (!entry) return res.status(404).json({ error: "Live location not available yet", ...live });
   res.json({ ...entry, ...live });
 }));

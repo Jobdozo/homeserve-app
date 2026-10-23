@@ -5,31 +5,21 @@ import { api } from "../api";
 import { socket } from "../socket";
 import { useApp } from "../context/AppContext";
 import { mapsKey, loadGoogleMaps } from "../utils/googleMaps";
+import { bearing, decodePolyline, km, remaining, QUIET_MAP_STYLE, VEHICLE_PATH, PIN_PATH } from "../utils/tripMath";
 import { MapPinIcon } from "./icons";
 
-// Live tracking on a booking (server: liveLocation.js). Once the professional taps "Start trip",
-// their position arrives every few seconds over the live connection and moves on the map
-// towards the booked address, with the distance and a rough arrival time. The customer can
-// also share their own live location with the professional (e.g. they're not at home).
+// Live tracking on a booking (server: liveLocation.js, tripRoutes.js). Once the professional starts
+// the trip, their position arrives every few seconds over the live connection: a vehicle that
+// turns the way they're riding moves along the road route to the booked address (pin), with
+// Google's distance and travel time. The customer can also share their own live location.
 
-const HOME = "#5B3FE0";
-const PRO = "#16A34A";
+const ROUTE = "#1B1530";
+const PIN = "#16A34A";
 const isNum = (n) => typeof n === "number" && Number.isFinite(n);
 
-// Straight-line distance in km.
-function km(a, b) {
-  const r = (d) => (d * Math.PI) / 180;
-  const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2;
-  return 6371 * 2 * Math.asin(Math.sqrt(h));
-}
-// Roads wind (×1.3) and city traffic averages ~20 km/h: an honest "about", not a promise.
-export function etaMinutes(distanceKm) {
-  return Math.max(1, Math.round(((distanceKm * 1.3) / 20) * 60));
-}
-
-function LiveMap({ home, pro }) {
+function LiveMap({ home, pro, heading, route }) {
   const el = useRef(null);
-  const map = useRef(null); // { setPro, setHome, destroy }
+  const map = useRef(null); // { setHome, setPro, setRoute, destroy }
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -40,28 +30,45 @@ function LiveMap({ home, pro }) {
         const key = await mapsKey();
         const g = key ? await loadGoogleMaps(key) : null;
         if (g && !gone) {
-          const { Map } = await g.maps.importLibrary("maps");
+          const { Map, Polyline } = await g.maps.importLibrary("maps");
           const { Marker } = await g.maps.importLibrary("marker");
-          const m = new Map(el.current, { center: start, zoom: 15, disableDefaultUI: true, zoomControl: true, gestureHandling: "cooperative", clickableIcons: false });
-          const dot = (fill, scale) => ({ path: g.maps.SymbolPath.CIRCLE, scale, fillColor: fill, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3 });
-          const markers = {};
-          const place = (k, at, fill, scale) => {
-            if (!at) return;
-            if (!markers[k]) markers[k] = new Marker({ map: m, icon: dot(fill, scale), zIndex: k === "pro" ? 2 : 1 });
-            markers[k].setPosition(at);
-          };
+          const m = new Map(el.current, { center: start, zoom: 15, disableDefaultUI: true, zoomControl: true, gestureHandling: "cooperative", clickableIcons: false, styles: QUIET_MAP_STYLE });
+          let homeM = null;
+          let proM = null;
+          const line = new Polyline({ map: m, strokeColor: ROUTE, strokeOpacity: 0.9, strokeWeight: 5 });
           let fitted = false;
           const fit = () => {
-            if (fitted || !markers.pro || !markers.home) return;
+            if (fitted || !proM || !homeM) return;
             const b = new g.maps.LatLngBounds();
-            b.extend(markers.pro.getPosition());
-            b.extend(markers.home.getPosition());
-            m.fitBounds(b, 48);
+            b.extend(proM.getPosition());
+            b.extend(homeM.getPosition());
+            line.getPath().forEach((p) => b.extend(p));
+            const ne = b.getNorthEast().toJSON();
+            const sw = b.getSouthWest().toJSON();
+            // Already there (or nearly): a street-level view, not the closest zoom Google allows.
+            if (km(ne, sw) < 0.15) {
+              m.setCenter(b.getCenter());
+              m.setZoom(16);
+            } else m.fitBounds(b, 56);
             fitted = true;
           };
           map.current = {
-            setHome: (at) => (place("home", at, HOME, 8), fit()),
-            setPro: (at) => (place("pro", at, PRO, 10), fit()),
+            setHome: (at) => {
+              homeM = homeM || new Marker({ map: m, zIndex: 1, icon: { path: PIN_PATH, fillColor: PIN, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2, scale: 1, anchor: new g.maps.Point(0, 0) } });
+              homeM.setPosition(at);
+              fit();
+            },
+            setPro: (at, deg) => {
+              proM = proM || new Marker({ map: m, zIndex: 2 });
+              proM.setIcon({ path: VEHICLE_PATH, rotation: deg || 0, fillColor: ROUTE, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2.5, scale: 1.15, anchor: new g.maps.Point(0, 0) });
+              proM.setPosition(at);
+              fit();
+            },
+            setRoute: (points) => {
+              line.setPath(points);
+              if (fitted) return;
+              fit();
+            },
             destroy: () => g.maps.event.clearInstanceListeners(m),
           };
         }
@@ -72,22 +79,40 @@ function LiveMap({ home, pro }) {
       if (!map.current) {
         const m = L.map(el.current, { zoomControl: true, attributionControl: true }).setView([start.lat, start.lng], 15);
         L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(m);
-        const markers = {};
-        const place = (k, at, color, radius) => {
-          if (!at) return;
-          if (!markers[k]) markers[k] = L.circleMarker([at.lat, at.lng], { radius, color: "#fff", weight: 3, fillColor: color, fillOpacity: 1 }).addTo(m);
-          markers[k].setLatLng([at.lat, at.lng]);
-        };
+        const line = L.polyline([], { color: ROUTE, weight: 5, opacity: 0.9 }).addTo(m);
+        const vehicle = (deg) =>
+          L.divIcon({
+            className: "",
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+            html: `<svg width="28" height="28" viewBox="-14 -14 28 28" style="transform:rotate(${deg || 0}deg)"><path d="${VEHICLE_PATH}" fill="${ROUTE}" stroke="#fff" stroke-width="2.5"/></svg>`,
+          });
+        const pinIcon = L.divIcon({ className: "", iconSize: [26, 40], iconAnchor: [13, 40], html: `<svg width="26" height="40" viewBox="-13 -40 26 40"><path d="${PIN_PATH}" fill="${PIN}" stroke="#fff" stroke-width="2"/></svg>` });
+        let homeM = null;
+        let proM = null;
         let fitted = false;
         const fit = () => {
-          if (fitted || !markers.pro || !markers.home) return;
-          m.fitBounds(L.latLngBounds([markers.pro.getLatLng(), markers.home.getLatLng()]), { padding: [40, 40] });
+          if (fitted || !proM || !homeM) return;
+          m.fitBounds(L.latLngBounds([proM.getLatLng(), homeM.getLatLng(), ...line.getLatLngs()]), { padding: [40, 40], maxZoom: 16 });
           fitted = true;
         };
         requestAnimationFrame(() => m.invalidateSize());
         map.current = {
-          setHome: (at) => (place("home", at, HOME, 8), fit()),
-          setPro: (at) => (place("pro", at, PRO, 10), fit()),
+          setHome: (at) => {
+            homeM = homeM || L.marker([at.lat, at.lng], { icon: pinIcon }).addTo(m);
+            homeM.setLatLng([at.lat, at.lng]);
+            fit();
+          },
+          setPro: (at, deg) => {
+            proM = proM || L.marker([at.lat, at.lng], { icon: vehicle(deg), zIndexOffset: 100 }).addTo(m);
+            proM.setLatLng([at.lat, at.lng]);
+            proM.setIcon(vehicle(deg));
+            fit();
+          },
+          setRoute: (points) => {
+            line.setLatLngs(points.map((p) => [p.lat, p.lng]));
+            fit();
+          },
           destroy: () => m.remove(),
         };
       }
@@ -105,23 +130,49 @@ function LiveMap({ home, pro }) {
     if (ready && home) map.current?.setHome(home);
   }, [ready, home?.lat, home?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (ready && pro) map.current?.setPro(pro);
-  }, [ready, pro?.lat, pro?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (ready && pro) map.current?.setPro(pro, heading);
+  }, [ready, pro?.lat, pro?.lng, heading]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!ready) return;
+    // The road route from where it was drawn; until then, a straight line so there's always a line.
+    let points = route?.polyline ? decodePolyline(route.polyline) : pro && home ? [pro, home] : [];
+    // Start the line at the vehicle and drop the part already ridden (up to the nearest point).
+    if (pro && points.length > 1) {
+      let nearest = 0;
+      points.forEach((p, i) => {
+        if (km(p, pro) < km(points[nearest], pro)) nearest = i;
+      });
+      points = [pro, ...points.slice(Math.min(nearest + 1, points.length - 1))];
+    }
+    map.current?.setRoute(points);
+  }, [ready, route?.polyline, pro?.lat, pro?.lng, home?.lat, home?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <div ref={el} className="h-[220px] w-full overflow-hidden rounded-2xl bg-mist" />;
+  return <div ref={el} className="h-[260px] w-full overflow-hidden rounded-2xl bg-mist" />;
 }
 
 export default function LiveTracking({ booking, who = "Your professional" }) {
   const { sharing, markSharing, setShareLocation, showToast } = useApp();
   const [pro, setPro] = useState(null); // { lat, lng, accuracy, updatedAt }
+  const [heading, setHeading] = useState(0);
+  const [route, setRoute] = useState(null); // { polyline, distanceMeters, durationSeconds, from }
   const [trip, setTrip] = useState(null); // { startedAt } while on the way
   const [busy, setBusy] = useState(false);
   const [, tick] = useState(0);
   const sharingThis = sharing.includes(booking.id);
   const home = isNum(booking.address?.lat) && isNum(booking.address?.lng) ? { lat: booking.address.lat, lng: booking.address.lng } : null;
 
-  // The latest position and whether a trip / share is on (also after a reload), every 30 s as a
-  // safety net; live updates arrive over the socket in between.
+  // A new position: turn the vehicle the way it moved (ignoring GPS jitter of a few metres).
+  const lastPos = useRef(null);
+  const takePosition = (p) => {
+    if (!isNum(p?.lat)) return;
+    const prev = lastPos.current;
+    if (prev && km(prev, p) > 0.008) setHeading(bearing(prev, p));
+    if (!prev || km(prev, p) > 0.008) lastPos.current = p;
+    setPro(p);
+  };
+
+  // The latest position, route and whether a trip / share is on (also after a reload), every 30 s
+  // as a safety net; live updates arrive over the socket in between.
   useEffect(() => {
     let off = false;
     const poll = () =>
@@ -129,8 +180,9 @@ export default function LiveTracking({ booking, who = "Your professional" }) {
         .getBookingLiveLocation(booking.id)
         .then((r) => {
           if (off) return;
-          if (isNum(r.lat)) setPro(r);
+          takePosition(r);
           setTrip(r.trip || null);
+          if (r.route) setRoute(r.route);
           markSharing(booking.id, Boolean(r.share));
         })
         .catch((e) => {
@@ -140,13 +192,18 @@ export default function LiveTracking({ booking, who = "Your professional" }) {
         });
     poll();
     const t = setInterval(poll, 30000);
-    const onLocation = (u) => u.bookingId === booking.id && u.who === "provider" && setPro(u);
+    const onLocation = (u) => u.bookingId === booking.id && u.who === "provider" && takePosition(u);
+    const onRoute = (u) => u.bookingId === booking.id && setRoute(u);
     const onTrip = (u) => {
       if (u.bookingId !== booking.id) return;
-      if (u.kind === "trip") setTrip(u.active ? { startedAt: u.startedAt } : null);
+      if (u.kind === "trip") {
+        setTrip(u.active ? { startedAt: u.startedAt } : null);
+        if (!u.active) setRoute(null);
+      }
       if (u.kind === "share") markSharing(booking.id, u.active);
     };
     socket.on("location:update", onLocation);
+    socket.on("route:update", onRoute);
     socket.on("trip:updated", onTrip);
     const clock = setInterval(() => tick((n) => n + 1), 15000); // "updated 20 s ago"
     return () => {
@@ -154,8 +211,10 @@ export default function LiveTracking({ booking, who = "Your professional" }) {
       clearInterval(t);
       clearInterval(clock);
       socket.off("location:update", onLocation);
+      socket.off("route:update", onRoute);
       socket.off("trip:updated", onTrip);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [booking.id, markSharing]);
 
   const toggleShare = async () => {
@@ -170,7 +229,7 @@ export default function LiveTracking({ booking, who = "Your professional" }) {
   };
 
   const onTheWay = booking.status === "Accepted" && trip;
-  const distance = onTheWay && pro && home ? km(pro, home) : null;
+  const left = onTheWay && pro && home ? remaining(pro, home, route) : null;
   const ago = pro?.updatedAt ? Math.max(0, Math.round((Date.now() - Date.parse(pro.updatedAt)) / 1000)) : null;
   const stale = ago != null && ago > 120;
 
@@ -182,22 +241,22 @@ export default function LiveTracking({ booking, who = "Your professional" }) {
             <div>
               <p className="text-[11.5px] font-extrabold uppercase tracking-[0.12em] text-trust-dark">On the way</p>
               <p className="text-[16px] font-extrabold text-ink">
-                {distance == null ? "Finding their location…" : distance < 0.15 ? "Arriving now" : `About ${etaMinutes(distance)} min away`}
+                {left == null ? "Finding their location…" : left.km < 0.15 ? "Arriving now" : `Arriving in about ${left.minutes} min`}
               </p>
             </div>
-            {distance != null && distance >= 0.15 && <span className="text-[13px] font-bold text-ink-muted tabular">{distance.toFixed(1)} km</span>}
+            {left != null && left.km >= 0.15 && <span className="text-[13px] font-bold text-ink-muted tabular">{left.km.toFixed(1)} km</span>}
           </div>
-          <LiveMap home={home} pro={pro && isNum(pro.lat) ? { lat: pro.lat, lng: pro.lng } : null} />
+          <LiveMap home={home} pro={pro && isNum(pro.lat) ? { lat: pro.lat, lng: pro.lng } : null} heading={heading} route={route} />
           <p className="text-[11.5px] text-ink-muted">
             {stale
               ? `Last seen ${Math.round(ago / 60)} min ago — their phone may have the Tikdum app closed.`
               : ago != null
-                ? `Updated ${ago < 10 ? "just now" : `${ago} s ago`} · arrival time is an estimate`
+                ? `Updated ${ago < 10 ? "just now" : `${ago} s ago`} · ${left?.byRoad ? "time by road from Google, may change with traffic" : "arrival time is an estimate"}`
                 : "The map updates as they move"}
           </p>
         </>
       ) : pro && isNum(pro.lat) ? (
-        // An older Business app (no "Start trip") still reports every 30 s: offer that as before.
+        // An older Business app (no trips) still reports every 30 s: offer that as before.
         <a
           href={`https://www.google.com/maps/dir/?api=1&destination=${pro.lat},${pro.lng}`}
           target="_blank"

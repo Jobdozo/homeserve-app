@@ -16,6 +16,7 @@ export default function RequestDetailsScreen() {
   const { getRequest, requests, acceptRequest, rejectRequest, swapRequest, showToast, can, staff, setRequestAssignee, markTrip } = useApp();
   const request = getRequest(requestId);
   const [liveLocation, setLiveLocation] = useState(null);
+  const [route, setRoute] = useState(null); // road route of this job's trip (server tripRoutes.js)
   const [swapOpen, setSwapOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const canAct = can("orders.act");
@@ -40,19 +41,25 @@ export default function RequestDetailsScreen() {
           if (cancelled) return;
           setLiveLocation(loc);
           markTrip(request.id, Boolean(loc.trip));
+          if (loc.route) setRoute(loc.route);
         })
         .catch((e) => {
-          if (!cancelled) markTrip(request.id, Boolean(e?.data?.trip));
+          if (cancelled) return;
+          markTrip(request.id, Boolean(e?.data?.trip));
+          if (e?.data?.route) setRoute(e.data.route);
         });
     };
     const onLocation = (u) => u.bookingId === request.id && u.who === "customer" && setLiveLocation((prev) => ({ ...prev, ...u }));
+    const onRoute = (u) => u.bookingId === request.id && setRoute(u);
     socket.on("location:update", onLocation);
+    socket.on("route:update", onRoute);
     poll();
     const interval = setInterval(poll, 30000);
     return () => {
       cancelled = true;
       clearInterval(interval);
       socket.off("location:update", onLocation);
+      socket.off("route:update", onRoute);
     };
   }, [request?.id, request?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -127,7 +134,7 @@ export default function RequestDetailsScreen() {
         )}
 
         {request.status === "Accepted" && canAct && (
-          <TripCard request={request} destination={lat && lng ? { lat, lng } : null} mapsUrl={mapsUrl} customerSharing={Boolean(liveLocation?.share)} />
+          <TripCard request={request} destination={lat && lng ? { lat, lng } : null} mapsUrl={mapsUrl} customerSharing={Boolean(liveLocation?.share)} route={route} />
         )}
 
         {/* customer */}

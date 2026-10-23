@@ -4,26 +4,23 @@ import { socket } from "../socket";
 import { useApp } from "../context/AppContext";
 import { columnsFromRows, downloadCsv, toCsv } from "../utils/csv";
 import { loadGoogleMaps, onMapsRefused } from "../utils/googleMaps";
+import { bearing, decodePolyline, km, QUIET_MAP_STYLE, VEHICLE_PATH, PIN_PATH } from "../utils/tripMath";
 
 const inputCls =
   "w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-[12.5px] text-gray-800 outline-none focus:border-brand";
 const labelCls = "mb-1 block text-[11px] font-semibold uppercase tracking-wide text-gray-400";
 
 // Providers on the way to a customer right now ("Start trip" in the Business app; server
-// liveLocation.js). Positions move live over the socket; the list itself refreshes every 20 s.
-function kmBetween(a, b) {
-  const r = (d) => (d * Math.PI) / 180;
-  const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2;
-  return 6371 * 2 * Math.asin(Math.sqrt(h));
-}
+// liveLocation.js, tripRoutes.js). Positions and routes move live over the socket; the list itself
+// refreshes every 20 s.
 // Every trip on one Google map: the provider (green, moving), the booked address (purple) and, if
-// the customer is sharing, the customer (blue), with a line from provider to address.
-const DOT = { provider: "#16A34A", home: "#5B3FE0", customer: "#2563EB" };
+// the customer is sharing, the customer (blue), with the road route from provider to address.
+const DOT = { provider: "#1B1530", home: "#16A34A", customer: "#2563EB" };
 function LiveTripsMap({ trips }) {
   const el = useRef(null);
   const gRef = useRef(null);
   const mapRef = useRef(null);
-  const drawn = useRef(new Map()); // bookingId -> { provider, home, customer, line }
+  const drawn = useRef(new Map()); // bookingId -> { provider, home, customer, line, last, heading }
   const fittedFor = useRef("");
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
@@ -37,7 +34,7 @@ function LiveTripsMap({ trips }) {
         const { Map } = await g.maps.importLibrary("maps");
         await g.maps.importLibrary("marker");
         gRef.current = g;
-        mapRef.current = new Map(el.current, { center: { lat: 32.7266, lng: 74.857 }, zoom: 12, disableDefaultUI: true, zoomControl: true, fullscreenControl: true, clickableIcons: false });
+        mapRef.current = new Map(el.current, { center: { lat: 32.7266, lng: 74.857 }, zoom: 12, disableDefaultUI: true, zoomControl: true, fullscreenControl: true, clickableIcons: false, styles: QUIET_MAP_STYLE });
         setReady(true);
       })
       .catch((e) => !gone && setError(e.message));
@@ -52,13 +49,15 @@ function LiveTripsMap({ trips }) {
     const map = mapRef.current;
     if (!ready || !g || !map) return;
     const dot = (fill, scale) => ({ path: g.maps.SymbolPath.CIRCLE, scale, fillColor: fill, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3 });
+    const symbol = (path, fill, rotation = 0) => ({ path, rotation, fillColor: fill, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2.2, scale: 1, anchor: new g.maps.Point(0, 0) });
     const point = (p) => (p && typeof p.lat === "number" && typeof p.lng === "number" ? { lat: p.lat, lng: p.lng } : null);
-    const marker = (old, at, fill, scale, title) => {
+    const marker = (old, at, icon, title) => {
       if (!at) {
         old?.setMap(null);
         return null;
       }
-      const m = old || new g.maps.Marker({ map, icon: dot(fill, scale), title });
+      const m = old || new g.maps.Marker({ map });
+      m.setIcon(icon);
       m.setPosition(at);
       m.setTitle(title);
       return m;
@@ -72,12 +71,22 @@ function LiveTripsMap({ trips }) {
       const pro = point(t.position);
       const home = point(t.address);
       const cust = point(t.customerPosition);
-      d.provider = marker(d.provider, pro, DOT.provider, 10, `${t.provider} (on the way) · #${t.ref}`);
-      d.home = marker(d.home, home, DOT.home, 8, `${t.customer}'s address · #${t.ref}`);
-      d.customer = marker(d.customer, cust, DOT.customer, 7, `${t.customer} (sharing live) · #${t.ref}`);
+      // Turn the vehicle the way it moved (ignoring a few metres of GPS jitter).
+      if (pro && d.last && km(d.last, pro) > 0.008) d.heading = bearing(d.last, pro);
+      if (pro && (!d.last || km(d.last, pro) > 0.008)) d.last = pro;
+      d.provider = marker(d.provider, pro, symbol(VEHICLE_PATH, DOT.provider, d.heading), `${t.provider} (on the way) · #${t.ref}`);
+      d.home = marker(d.home, home, symbol(PIN_PATH, DOT.home), `${t.customer}'s address · #${t.ref}`);
+      d.customer = marker(d.customer, cust, dot(DOT.customer, 7), `${t.customer} (sharing live) · #${t.ref}`);
       if (pro && home) {
-        d.line = d.line || new g.maps.Polyline({ map, strokeColor: DOT.provider, strokeOpacity: 0, icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 0.8, scale: 3 }, offset: "0", repeat: "12px" }] });
-        d.line.setPath([pro, home]);
+        // The road route (server tripRoutes.js) from the vehicle on; a straight line until it's drawn.
+        let path = t.route?.polyline ? decodePolyline(t.route.polyline) : [pro, home];
+        let nearest = 0;
+        path.forEach((p, i) => {
+          if (km(p, pro) < km(path[nearest], pro)) nearest = i;
+        });
+        path = [pro, ...path.slice(Math.min(nearest + 1, path.length - 1))];
+        d.line = d.line || new g.maps.Polyline({ map, strokeColor: DOT.provider, strokeOpacity: 0.85, strokeWeight: 4 });
+        d.line.setPath(path);
       } else if (d.line) {
         d.line.setMap(null);
         d.line = null;
@@ -94,9 +103,11 @@ function LiveTripsMap({ trips }) {
     const key = trips.map((t) => t.bookingId).sort().join(",");
     if (points && fittedFor.current !== key) {
       fittedFor.current = key;
-      if (points === 1) {
+      // One point, or all within ~150 m (provider already at the door): a street-level view rather
+      // than the closest zoom Google allows.
+      if (points === 1 || km(bounds.getNorthEast().toJSON(), bounds.getSouthWest().toJSON()) < 0.15) {
         map.setCenter(bounds.getCenter());
-        map.setZoom(15);
+        map.setZoom(16);
       } else map.fitBounds(bounds, 60);
     }
   }, [trips, ready]);
@@ -131,14 +142,17 @@ function LiveTrips() {
       setTrips((list) => (list || []).map((x) => (x.bookingId !== u.bookingId ? x : u.who === "provider" ? { ...x, position: at } : { ...x, customerPosition: at })));
     };
     const onTrip = (u) => u.kind === "trip" && load();
+    const onRoute = (u) => setTrips((list) => (list || []).map((x) => (x.bookingId === u.bookingId ? { ...x, route: u } : x)));
     socket.on("location:update", onLocation);
     socket.on("trip:updated", onTrip);
+    socket.on("route:update", onRoute);
     return () => {
       off = true;
       clearInterval(t);
       clearInterval(clock);
       socket.off("location:update", onLocation);
       socket.off("trip:updated", onTrip);
+      socket.off("route:update", onRoute);
     };
   }, []);
   if (!trips?.length) return null;
@@ -151,7 +165,7 @@ function LiveTrips() {
         {trips.map((t) => {
           const p = t.position;
           const dest = typeof t.address?.lat === "number" && typeof t.address?.lng === "number" ? t.address : null;
-          const away = p && dest ? kmBetween(p, dest) : null;
+          const away = p && dest ? km(p, dest) : null;
           const ago = p?.updatedAt ? Math.round((Date.now() - Date.parse(p.updatedAt)) / 1000) : null;
           return (
             <div key={t.bookingId} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-[12.5px]">
