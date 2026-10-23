@@ -474,45 +474,47 @@ export function AppProvider({ children }) {
   // Only staff who can both see all orders and act on them get the ringing overlay.
   const effectiveRinging = staffSession && !(can("orders.act") && staffSession.permissions.includes("orders.view_all")) ? null : ringingRequest;
 
-  const hasActiveJob = useMemo(
-    () => requests.some((r) => ["Pending", "Accepted", "In Progress"].includes(r.status)),
-    [requests]
+  // Live tracking: the provider's position is shared only during a trip ("Start trip" on an
+  // Accepted job, RequestDetails → TripCard) — every ~6 s while the app is open, straight to that
+  // customer. The server ends a trip by itself once the start code is entered or the job moves
+  // on (trip:updated). Starting it is also when Android first asks for location, so it can't
+  // collide with the notification-permission prompt at sign-in.
+  const [trips, setTrips] = useState([]); // bookingIds on the way
+  const [myFix, setMyFix] = useState(null); // { lat, lng, accuracy } during a trip
+  const markTrip = useCallback((bookingId, on) => {
+    setTrips((prev) => (on ? (prev.includes(bookingId) ? prev : [...prev, bookingId]) : prev.filter((x) => x !== bookingId)));
+  }, []);
+  const setTrip = useCallback(
+    async (bookingId, on) => {
+      await api.setTrip(bookingId, on);
+      markTrip(bookingId, on);
+    },
+    [markTrip]
   );
-
-  // While a job is in flight, share this provider's real-time position every
-  // 30s so the customer can see where they actually are, not just their
-  // profile's service area.
+  const tripsNow = useMemo(() => trips.filter((id) => requests.some((r) => r.id === id && r.status === "Accepted")), [trips, requests]);
   useEffect(() => {
-    if (!provider || !hasActiveJob || !navigator.geolocation) return;
-    let cancelled = false;
-    const report = () => {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (cancelled) return;
-          api.reportLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy).catch(() => {});
-        },
-        () => {},
-        // maximumAge: 0 forces a fresh GPS fix each time instead of reusing a
-        // cached (often lower-accuracy, wifi/cell-based) position.
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-      );
-    };
-    // A fresh login can hit this at the same moment as the notification
-    // permission prompt in ensurePushSubscribed() — confirmed on-device that
-    // when both land together, Android's location dialog wins and the
-    // notification permission request never resolves or rejects at all, just
-    // hangs forever (so the app never registers for FCM). Giving the
-    // notification prompt a few seconds' head start avoids the collision;
-    // location reporting can afford a short delay, notification permission
-    // can't.
-    const initialDelay = setTimeout(report, 5000);
-    const interval = setInterval(report, 30000);
-    return () => {
-      cancelled = true;
-      clearTimeout(initialDelay);
-      clearInterval(interval);
-    };
-  }, [provider, hasActiveJob]);
+    if (!provider || tripsNow.length === 0 || !navigator.geolocation) return undefined;
+    let last = 0;
+    const watch = navigator.geolocation.watchPosition(
+      (pos) => {
+        const fix = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
+        setMyFix(fix);
+        const now = Date.now();
+        if (now - last < 6000) return;
+        last = now;
+        api.reportLocation(fix.lat, fix.lng, fix.accuracy).catch(() => {});
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 }
+    );
+    return () => navigator.geolocation.clearWatch(watch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider?.id, tripsNow.length > 0]);
+  useEffect(() => {
+    const onTrip = (u) => u.kind === "trip" && markTrip(u.bookingId, u.active);
+    socket.on("trip:updated", onTrip);
+    return () => socket.off("trip:updated", onTrip);
+  }, [markTrip]);
 
   const showToast = useCallback((message) => setToast(message), []);
 
@@ -752,6 +754,10 @@ export function AppProvider({ children }) {
   const value = useMemo(
     () => ({
       provider,
+      trips,
+      setTrip,
+      markTrip,
+      myFix,
       authLoading,
       login,
       logout,
@@ -848,6 +854,10 @@ export function AppProvider({ children }) {
       dismissRinging,
       markNotificationRead,
       markAllNotificationsRead,
+      trips,
+      setTrip,
+      markTrip,
+      myFix,
     ]
   );
 

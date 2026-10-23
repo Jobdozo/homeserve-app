@@ -387,6 +387,8 @@ const RULES = [
   // Assignment desk: anyone who sees bookings sees the waiting ones; assigning (or giving up) changes them.
   [/^\/admin\/fcm-token(\/remove)?$/, () => "bookings.view"],
   [/^\/admin\/assignments$/, () => "bookings.view"],
+  // Providers on the way right now (live tracking) — who's where is for monitoring staff.
+  [/^\/admin\/live-trips$/, () => ["monitoring.view", "bookings.view"]],
   [/^\/admin\/bookings\/[^/]+\/(assign|give-up)$/, () => "bookings.edit"],
   // Call desk (callDesk.js): looking a caller up shows their open bookings; booking / closing changes them.
   [/^\/admin\/call-desk\/lookup$/, () => "bookings.view"],

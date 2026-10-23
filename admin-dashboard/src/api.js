@@ -386,6 +386,7 @@ export const api = {
   getBusinessRules: () => request("/admin/business-rules"),
   getBookingSwaps: (id) => request(`/admin/bookings/${id}/swaps`),
   getMonitoring: (params) => request(`/admin/monitoring?${new URLSearchParams(params)}`),
+  listLiveTrips: () => request("/admin/live-trips"),
   getMonitoringReport: (type, params) => request(`/admin/monitoring/report?${new URLSearchParams({ ...params, type })}`),
 
   getCommunicationFees: () => request("/admin/communication-fees"),

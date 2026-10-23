@@ -8,6 +8,76 @@ const inputCls =
   "w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-[12.5px] text-gray-800 outline-none focus:border-brand";
 const labelCls = "mb-1 block text-[11px] font-semibold uppercase tracking-wide text-gray-400";
 
+// Providers on the way to a customer right now ("Start trip" in the Business app; server
+// liveLocation.js). Positions move live over the socket; the list itself refreshes every 20 s.
+function kmBetween(a, b) {
+  const r = (d) => (d * Math.PI) / 180;
+  const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(h));
+}
+function LiveTrips() {
+  const [trips, setTrips] = useState(null);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    let off = false;
+    const load = () => api.listLiveTrips().then((t) => !off && setTrips(t)).catch(() => !off && setTrips([]));
+    load();
+    const t = setInterval(load, 20000);
+    const clock = setInterval(() => tick((n) => n + 1), 10000);
+    const onLocation = (u) =>
+      u.who === "provider" && setTrips((list) => (list || []).map((x) => (x.bookingId === u.bookingId ? { ...x, position: { lat: u.lat, lng: u.lng, accuracy: u.accuracy, updatedAt: u.updatedAt } } : x)));
+    const onTrip = (u) => u.kind === "trip" && load();
+    socket.on("location:update", onLocation);
+    socket.on("trip:updated", onTrip);
+    return () => {
+      off = true;
+      clearInterval(t);
+      clearInterval(clock);
+      socket.off("location:update", onLocation);
+      socket.off("trip:updated", onTrip);
+    };
+  }, []);
+  if (!trips?.length) return null;
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-card">
+      <p className="text-[14px] font-bold text-gray-900">On the way now ({trips.length})</p>
+      <p className="text-[12px] text-gray-500">Providers who started the trip to a customer. Positions update live while their app is open.</p>
+      <div className="mt-3 divide-y divide-gray-50">
+        {trips.map((t) => {
+          const p = t.position;
+          const dest = typeof t.address?.lat === "number" && typeof t.address?.lng === "number" ? t.address : null;
+          const away = p && dest ? kmBetween(p, dest) : null;
+          const ago = p?.updatedAt ? Math.round((Date.now() - Date.parse(p.updatedAt)) / 1000) : null;
+          return (
+            <div key={t.bookingId} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-[12.5px]">
+              <div className="min-w-0">
+                <p className="font-semibold text-gray-900">
+                  {t.provider} → {t.customer} · #{t.ref}
+                </p>
+                <p className="text-gray-500">
+                  {t.service} · since {new Date(t.startedAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}
+                  {away != null ? ` · ${away.toFixed(1)} km away` : ""}
+                  {ago != null ? ` · ${ago > 120 ? `last seen ${Math.round(ago / 60)} min ago` : `updated ${ago} s ago`}` : " · no position yet"}
+                </p>
+              </div>
+              {p && (
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&origin=${p.lat},${p.lng}${dest ? `&destination=${dest.lat},${dest.lng}` : ""}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  View on map
+                </a>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const STATUSES = [
   { key: "online", label: "Online", dot: "bg-emerald-500" },
   { key: "offline", label: "Offline", dot: "bg-gray-400" },
@@ -143,6 +213,7 @@ export default function MonitoringPage() {
 
   return (
     <div className="space-y-4">
+      <LiveTrips />
       {/* Live bar */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-[12px] text-gray-500">

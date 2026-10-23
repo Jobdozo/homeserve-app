@@ -191,37 +191,40 @@ export function AppProvider({ children }) {
   useEffect(() => onNativeNotificationTap(setPendingNotificationBookingId), []);
   const clearPendingNotification = useCallback(() => setPendingNotificationBookingId(null), []);
 
-  const hasActiveBooking = useMemo(
-    () => bookings.some((b) => ["Pending", "Accepted", "In Progress"].includes(b.status)),
-    [bookings]
+  // "Share my live location" (BookingDetails → LiveTracking): only while the customer has it on
+  // for a booking that's Accepted or In Progress, their position goes to that booking's provider
+  // every ~8 s. Nothing is shared otherwise — the provider navigates to the booked address.
+  const [sharing, setSharing] = useState([]); // bookingIds
+  const markSharing = useCallback((bookingId, on) => {
+    setSharing((prev) => (on ? (prev.includes(bookingId) ? prev : [...prev, bookingId]) : prev.filter((x) => x !== bookingId)));
+  }, []);
+  const setShareLocation = useCallback(
+    async (bookingId, on) => {
+      await api.shareLocation(bookingId, on);
+      markSharing(bookingId, on);
+    },
+    [markSharing]
   );
-
-  // While a booking is in flight, share this customer's real-time position
-  // every 30s so the provider's "Get Directions" can target where they
-  // actually are instead of the address captured when the booking was made.
+  const sharingNow = useMemo(
+    () => sharing.filter((id) => bookings.some((b) => b.id === id && ["Accepted", "In Progress"].includes(b.status))),
+    [sharing, bookings]
+  );
   useEffect(() => {
-    if (!customer || !hasActiveBooking || !navigator.geolocation) return;
-    let cancelled = false;
-    const report = () => {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (cancelled) return;
-          api.reportLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy).catch(() => {});
-        },
-        () => {},
-        // maximumAge: 0 forces a fresh GPS fix each time instead of reusing a
-        // cached (often lower-accuracy, wifi/cell-based) position.
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-      );
-    };
-    report();
-    const interval = setInterval(report, 30000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    if (!customer || sharingNow.length === 0 || !navigator.geolocation) return undefined;
+    let last = 0;
+    const watch = navigator.geolocation.watchPosition(
+      (pos) => {
+        const now = Date.now();
+        if (now - last < 8000) return;
+        last = now;
+        api.reportLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy).catch(() => {});
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+    );
+    return () => navigator.geolocation.clearWatch(watch);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customer?.id, hasActiveBooking]);
+  }, [customer?.id, sharingNow.length > 0]);
 
   const login = useCallback((token, user) => {
     setAuthToken(token);
@@ -843,6 +846,9 @@ export function AppProvider({ children }) {
   const value = useMemo(
     () => ({
       customer,
+      sharing,
+      markSharing,
+      setShareLocation,
       authLoading,
       login,
       logout,
@@ -966,6 +972,9 @@ export function AppProvider({ children }) {
       locationApproximate,
       pendingNotificationBookingId,
       clearPendingNotification,
+      sharing,
+      markSharing,
+      setShareLocation,
     ]
   );
 

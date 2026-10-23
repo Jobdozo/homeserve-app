@@ -42,6 +42,7 @@ async function request(path, options) {
     const body = await res.json().catch(() => ({}));
     const err = new Error(body.error || `Request failed: ${res.status}`);
     err.status = res.status;
+    err.data = body;
     throw err;
   }
   if (res.status === 204) return null;
@@ -128,6 +129,7 @@ export const api = {
   reportLocation: (lat, lng, accuracy) =>
     request("/location", { method: "POST", body: JSON.stringify({ lat, lng, accuracy }) }),
   getBookingLiveLocation: (bookingId) => request(`/bookings/${bookingId}/live-location`),
+  setTrip: (bookingId, active) => request(`/bookings/${bookingId}/trip`, { method: "POST", body: JSON.stringify({ active }) }),
   getVapidPublicKey: () => request("/push/vapid-public-key"),
   subscribePush: (subscription) =>
     request("/push/subscribe", { method: "POST", body: JSON.stringify({ subscription }) }),

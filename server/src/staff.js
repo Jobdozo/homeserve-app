@@ -383,6 +383,9 @@ function ruleFor(method, path) {
   if (/^\/messages\/[^/]+$/.test(path)) return { needs: "messages.use", scope: true };
   if (/^\/bookings\/[^/]+\/(photos|checkpoints)$/.test(path)) return { needs: write ? "orders.act" : ["orders.view_all", "orders.view_assigned"], scope: true };
   if (/^\/orders\/[^/]+\/respond$/.test(path)) return { needs: "orders.act", scope: false };
+  // Live tracking: starting a trip is acting on the order; seeing where the customer is, viewing it.
+  if (/^\/bookings\/[^/]+\/trip$/.test(path)) return { needs: "orders.act", scope: true };
+  if (/^\/bookings\/[^/]+\/live-location$/.test(path)) return { needs: ["orders.view_all", "orders.view_assigned"], scope: true };
   if (ACTING.test(path)) return { needs: "orders.act", scope: true };
   if (/^\/bookings\/[^/]+$/.test(path)) return { needs: write ? "orders.act" : ["orders.view_all", "orders.view_assigned"], scope: true };
   // Any other provider-account route stays with the owner.
@@ -396,6 +399,7 @@ function describeAction(method, path, body) {
   if (/\/otp\/verify$/.test(path)) return body?.type === "complete" ? "Verified the completion code" : "Verified the start code";
   if (/\/checkpoints$/.test(path)) return `Checked in: ${String(body?.type || "").replace(/_/g, " ")}`;
   if (/\/photos$/.test(path)) return "Uploaded a job photo";
+  if (/\/trip$/.test(path)) return body?.active === false ? "Stopped sharing the trip" : "Started the trip to the customer";
   if (/^\/messages\//.test(path) && method === "POST") return "Messaged the customer";
   if (/^\/providers\/[^/]+\/services/.test(path)) return method === "POST" ? "Added a service" : "Edited a service";
   if (/^\/providers\/[^/]+\/(coverage|profile)$/.test(path)) return "Updated the business profile / service area";
@@ -454,4 +458,5 @@ module.exports = {
   assignments, assignmentFor, assignedBookingIds, assignOrder, clearAssignment,
   eligibleForNewBookingPing,
   log, listActivity, loginProfile, recordLogin, guard, ordersScope, emptyEarnings,
+  _ruleFor: ruleFor,
 };

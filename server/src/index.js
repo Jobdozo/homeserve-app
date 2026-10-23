@@ -2630,7 +2630,62 @@ app.post("/api/location", auth.requireAuth("customer", "provider"), ah(async (re
   if (typeof lat !== "number" || typeof lng !== "number") {
     return res.status(400).json({ error: "lat and lng (numbers) are required" });
   }
-  res.json(liveLocation.setLocation(req.user.role, req.user.id, lat, lng, accuracy));
+  const entry = liveLocation.setLocation(req.user.role, req.user.id, lat, lng, accuracy);
+  // Live tracking: a provider on a trip, or a customer sharing, reaches the other side at once.
+  const pushTo = req.user.role === "provider" ? liveLocation.tripsOf(req.user.id) : liveLocation.sharesOf(req.user.id);
+  for (const t of pushTo) {
+    rt.live({ id: t.bookingId, customerId: t.customerId, providerId: t.providerId }, "location:update", { bookingId: t.bookingId, who: req.user.role, ...entry }, {
+      who: req.user.role === "provider" ? "customer" : "provider",
+    });
+  }
+  res.json(entry);
+}));
+
+// "Start trip" (provider, on an Accepted booking): their position goes to the customer live
+// until they stop it or enter the start code. body: { active: true|false }
+app.post("/api/bookings/:id/trip", auth.requireAuth("provider"), ah(async (req, res) => {
+  const booking = await store.getBooking(req.params.id);
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  if (booking.providerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
+  const active = req.body?.active !== false;
+  if (active && booking.status !== "Accepted") return res.status(409).json({ error: "A trip can only start once the booking is accepted and before the job starts" });
+  const trip = active ? liveLocation.startTrip(booking) : (liveLocation.stopTrip(booking.id), null);
+  rt.live(booking, "trip:updated", { bookingId: booking.id, kind: "trip", active, startedAt: trip?.startedAt || null });
+  res.json({ active, startedAt: trip?.startedAt || null });
+}));
+
+// "Share my live location" (customer): their position goes to the provider until they stop it
+// or the job ends. body: { active: true|false }
+app.post("/api/bookings/:id/share-location", auth.requireAuth("customer"), ah(async (req, res) => {
+  const booking = await store.getBooking(req.params.id);
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  if (booking.customerId !== req.user.id) return res.status(403).json({ error: "Not your booking" });
+  const active = req.body?.active !== false;
+  if (active && !["Accepted", "In Progress"].includes(booking.status)) return res.status(409).json({ error: "You can share your location once a professional has accepted" });
+  const share = active ? liveLocation.startShare(booking) : (liveLocation.stopShare(booking.id), null);
+  rt.live(booking, "trip:updated", { bookingId: booking.id, kind: "share", active, startedAt: share?.startedAt || null });
+  res.json({ active, startedAt: share?.startedAt || null });
+}));
+
+// Admin → Live Provider Monitoring: providers on the way right now.
+app.get("/api/admin/live-trips", auth.requireAuth("admin"), ah(async (req, res) => {
+  const out = [];
+  for (const t of liveLocation.allTrips()) {
+    const booking = await store.getBooking(t.bookingId);
+    if (!booking) continue;
+    const provider = await store.getProvider(t.providerId).catch(() => null);
+    out.push({
+      bookingId: t.bookingId,
+      ref: booking.ref,
+      service: booking.service?.name || "",
+      provider: provider?.name || "",
+      customer: booking.customer?.name || "",
+      address: booking.address || null,
+      startedAt: t.startedAt,
+      position: liveLocation.getLocation("provider", t.providerId) || null,
+    });
+  }
+  res.json(out);
 }));
 
 // Scoped to a specific booking (not a free lookup by id) so a provider can
@@ -2648,8 +2703,12 @@ app.get("/api/bookings/:id/live-location", auth.requireAuth("customer", "provide
     ? { role: "customer", id: booking.customerId }
     : { role: "provider", id: booking.providerId };
   const entry = liveLocation.getLocation(counterpart.role, counterpart.id);
-  if (!entry) return res.status(404).json({ error: "Live location not available yet" });
-  res.json(entry);
+  const trip = liveLocation.getTrip(booking.id);
+  const share = liveLocation.getShare(booking.id);
+  // trip / share say whether live tracking is on for this booking (newer apps show a map then).
+  const live = { trip: trip ? { startedAt: trip.startedAt } : null, share: share ? { startedAt: share.startedAt } : null };
+  if (!entry) return res.status(404).json({ error: "Live location not available yet", ...live });
+  res.json({ ...entry, ...live });
 }));
 
 // ---- messages ----

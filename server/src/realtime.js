@@ -12,6 +12,7 @@
 // only, so nobody receives another customer's booking, address or chat.
 const auth = require("./auth");
 const access = require("./access");
+const liveLocation = require("./liveLocation");
 const staff = require("./staff");
 const accountDeletion = require("./accountDeletion");
 const store = require("./store");
@@ -67,6 +68,10 @@ const to = (rooms) => io.to(rooms);
 // the order (reassigned/swapped away) — they're told so it leaves their list.
 function booking(event, b, { previous = [] } = {}) {
   if (!b) return;
+  // A trip/share ends by itself once the booking moves on (job started, cancelled, reassigned).
+  for (const what of liveLocation.bookingChanged(b)) {
+    live(b, "trip:updated", { bookingId: b.id, kind: what, active: false });
+  }
   to("admin:bookings").emit(event, b);
   if (b.customerId) to(`customer:${b.customerId}`).emit(event, mask.forCustomer(b));
   const providerView = mask.forProvider(b);
@@ -77,6 +82,19 @@ function booking(event, b, { previous = [] } = {}) {
 
 // A job just given to one staff member: their own phones show the "assigned to you"
 // popup (every socket of theirs is in staff:<id>, whatever orders they can see).
+// Live tracking events for one booking, to its customer, its provider (and the staff member it's
+// assigned to) and admins. who: "customer" | "provider" = only that side (plus admins).
+function live(b, event, payload, { who } = {}) {
+  if (!io || !b) return;
+  to("admin:bookings").emit(event, payload);
+  if (who !== "provider" && b.customerId) to(`customer:${b.customerId}`).emit(event, payload);
+  if (who !== "customer" && b.providerId) {
+    to(`provider:${b.providerId}`).emit(event, payload);
+    const assigned = staff.assignmentFor(b.id || b.bookingId);
+    if (assigned) to(`staff-limited:${assigned.staffId}`).emit(event, payload);
+  }
+}
+
 function jobAssigned(b, staffId) {
   if (!b || !staffId) return;
   to(`staff:${staffId}`).emit("job:assigned", mask.forProvider(b));
@@ -128,4 +146,4 @@ function kick(room) {
   if (io) io.in(room).disconnectSockets(true);
 }
 
-module.exports = { attach, booking, jobAssigned, checkpoint, message, notification, activity, service, kick };
+module.exports = { attach, booking, live, jobAssigned, checkpoint, message, notification, activity, service, kick };

@@ -6,6 +6,7 @@ import { callProvider } from "../utils/callProvider";
 import { STATUS_STEPS } from "../data/mockData";
 import { BackIcon, ChatIcon, PhoneIcon, CheckIcon, MapPinIcon, UserPlusIcon } from "../components/icons";
 import CategoryPhoto from "../components/CategoryPhoto";
+import LiveTracking from "../components/LiveTracking";
 import { ProviderMark, RatingPill, VerifiedBadge, SectionLabel, inr } from "../components/ui";
 
 const LOCATION_TRACKED_STATUSES = ["Accepted", "In Progress"];
@@ -38,30 +39,7 @@ export default function BookingDetailsScreen() {
   const { getBooking, getService, getProvider, cancelBooking, advanceBookingStatus, showToast, bookings } = useApp();
 
   const booking = getBooking(bookingId);
-  const [liveLocation, setLiveLocation] = useState(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
-
-  // Poll the provider's real-time position every 30s (matching how often
-  // they report it) so directions target where they actually are.
-  useEffect(() => {
-    setLiveLocation(null);
-    if (!booking || !LOCATION_TRACKED_STATUSES.includes(booking.status)) return;
-    let cancelled = false;
-    const poll = () => {
-      api
-        .getBookingLiveLocation(booking.id)
-        .then((loc) => {
-          if (!cancelled) setLiveLocation(loc);
-        })
-        .catch(() => {});
-    };
-    poll();
-    const interval = setInterval(poll, 30000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [booking?.id, booking?.status]);
 
   if (!booking) {
     return (
@@ -204,18 +182,8 @@ export default function BookingDetailsScreen() {
                 </button>
               )}
             </div>
-            {liveLocation && (
-              <a
-                href={`https://www.google.com/maps/dir/?api=1&destination=${liveLocation.lat},${liveLocation.lng}`}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-3 flex items-center justify-between rounded-2xl bg-mist px-3 py-2.5 text-[13px] font-bold text-brand"
-              >
-                <span className="flex items-center gap-1.5">
-                  <MapPinIcon width={15} height={15} /> See where they are
-                </span>
-                {typeof liveLocation.accuracy === "number" && <span className="text-[11.5px] font-medium text-ink-muted">±{Math.round(liveLocation.accuracy)} m</span>}
-              </a>
+            {LOCATION_TRACKED_STATUSES.includes(booking.status) && (
+              <LiveTracking booking={booking} who={provider?.name && provider.name.length <= 22 ? provider.name : "Your professional"} />
             )}
           </div>
         )}

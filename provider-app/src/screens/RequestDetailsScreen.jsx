@@ -5,13 +5,15 @@ import { api, SERVER_URL } from "../api";
 import { MapPinIcon, PhoneIcon, CameraIcon, CheckIcon, BackIcon, ChatIcon, NavigateIcon } from "../components/icons";
 import { Card, inr, initials, whenLabel, JOB_STATUS } from "../components/biz";
 import { compressImage } from "../utils/imageCompress";
+import { socket } from "../socket";
+import TripCard from "../components/TripCard";
 
 const LOCATION_TRACKED_STATUSES = ["Pending", "Accepted", "In Progress"];
 
 export default function RequestDetailsScreen() {
   const { requestId } = useParams();
   const navigate = useNavigate();
-  const { getRequest, requests, acceptRequest, rejectRequest, swapRequest, showToast, can, staff, setRequestAssignee } = useApp();
+  const { getRequest, requests, acceptRequest, rejectRequest, swapRequest, showToast, can, staff, setRequestAssignee, markTrip } = useApp();
   const request = getRequest(requestId);
   const [liveLocation, setLiveLocation] = useState(null);
   const [swapOpen, setSwapOpen] = useState(false);
@@ -25,8 +27,8 @@ export default function RequestDetailsScreen() {
     if (request?.status === "Accepted") api.getSwapRules().then(setSwapRules).catch(() => {});
   }, [request?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Poll the customer's real-time position every 30s (matching how often
-  // they report it) so directions target where they actually are.
+  // Poll the customer's position (only there if they chose to share it) and whether this job's
+  // trip is on — a trip started before a reload carries on. Live fixes also arrive by socket.
   useEffect(() => {
     setLiveLocation(null);
     if (!request || !LOCATION_TRACKED_STATUSES.includes(request.status)) return;
@@ -35,17 +37,24 @@ export default function RequestDetailsScreen() {
       api
         .getBookingLiveLocation(request.id)
         .then((loc) => {
-          if (!cancelled) setLiveLocation(loc);
+          if (cancelled) return;
+          setLiveLocation(loc);
+          markTrip(request.id, Boolean(loc.trip));
         })
-        .catch(() => {});
+        .catch((e) => {
+          if (!cancelled) markTrip(request.id, Boolean(e?.data?.trip));
+        });
     };
+    const onLocation = (u) => u.bookingId === request.id && u.who === "customer" && setLiveLocation((prev) => ({ ...prev, ...u }));
+    socket.on("location:update", onLocation);
     poll();
     const interval = setInterval(poll, 30000);
     return () => {
       cancelled = true;
       clearInterval(interval);
+      socket.off("location:update", onLocation);
     };
-  }, [request?.id, request?.status]);
+  }, [request?.id, request?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!request) {
     return (
@@ -115,6 +124,10 @@ export default function RequestDetailsScreen() {
 
         {!["Pending", "Rejected", "Cancelled", "Swapped", "Completed"].includes(request.status) && canAct && (
           <OtpVerifyCard bookingId={request.id} type={request.status === "Accepted" ? "start" : "complete"} />
+        )}
+
+        {request.status === "Accepted" && canAct && (
+          <TripCard request={request} destination={lat && lng ? { lat, lng } : null} mapsUrl={mapsUrl} customerSharing={Boolean(liveLocation?.share)} />
         )}
 
         {/* customer */}

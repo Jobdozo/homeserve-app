@@ -85,6 +85,7 @@ export const api = {
   reportLocation: (lat, lng, accuracy) =>
     request("/location", { method: "POST", body: JSON.stringify({ lat, lng, accuracy }) }),
   getBookingLiveLocation: (bookingId) => request(`/bookings/${bookingId}/live-location`),
+  shareLocation: (bookingId, active) => request(`/bookings/${bookingId}/share-location`, { method: "POST", body: JSON.stringify({ active }) }),
   getProviderContact: (bookingId) => request(`/bookings/${bookingId}/provider-contact`),
   getBookingOtp: (bookingId) => request(`/bookings/${bookingId}/otp`),
   listBanners: () => request("/banners"),
