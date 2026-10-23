@@ -2,10 +2,13 @@
 // Google Gemini, in Tikdum's look, and lets a person approve each one before it is used.
 //
 // What it does, in order, for one target:
+//   0. index.js looks the target up in Tikdum's own records first (name, category, type, what's
+//      included) — the server never draws from names a browser sent, and skips anything not found;
 //   1. works out who (if anyone) should be in the picture — women for women's grooming, men for
 //      men's, and NO people at all for intimate services (waxing, massage, body polishing):
 //      those get a product still life instead;
-//   2. writes the picture brief from Tikdum's style guide (brand purple, clean, no text/logos);
+//   2. writes the picture brief from Tikdum's style guide (clean, no text/logos) with the
+//      category's colour as an accent (imageStyle.js);
 //   3. asks the Gemini image model for the picture;
 //   4. has a Gemini text model look at the result (text/watermark? wrong gender? people where
 //      there should be none?) and tries again, up to MAX_TRIES;
@@ -18,6 +21,7 @@ const path = require("path");
 const crypto = require("crypto");
 const jsonStore = require("./jsonStore");
 const { UPLOADS_DIR, removeFile } = require("./uploads");
+const imageStyle = require("./imageStyle");
 
 const CANDIDATES = "imageCandidates";
 const USAGE = "imageStudioUsage";
@@ -62,7 +66,6 @@ function audienceFor({ name = "", category = "", type = "", override = "auto" })
 // ---------------- the brief ----------------
 const STYLE =
   "Photorealistic, bright, clean commercial photograph for a home-services app in India. Soft natural light, shallow depth of field, warm and trustworthy mood. " +
-  "Use soft purple (#5B3FE0) and white as accent colours in the props or background. " +
   "Absolutely no text, no letters, no numbers, no logos, no brand names, no watermarks, no borders. Natural proportions, correct hands, no distortion.";
 
 function personLine(audience) {
@@ -169,13 +172,18 @@ async function sceneFor(t) {
   );
 }
 
-function buildBrief({ kind, name, category, type, tagline, audience, people, show, scene: sceneText }) {
+function buildBrief({ kind, name, category, type, tagline, audience, people, show, scene: sceneText, includes, colour }) {
   const subject = [name, type && type !== name ? `(${type})` : "", category ? `in ${category}` : ""].filter(Boolean).join(" ");
+  // What the customer actually books (Tikdum's own "what's included"), so the picture shows that job.
+  const facts = Array.isArray(includes) && includes.length ? ` The job includes: ${includes.slice(0, 4).join("; ")}.` : "";
+  // A colour name only (picture makers draw hex codes as text): small details, the rest natural.
+  const details = (show || (people ? "person" : "products")) === "person" ? "towels, cloths, the uniform's trim or a backdrop" : "towels, cloths, a bottle or a backdrop";
+  const accent = ` Accent colour ${colour?.name || "soft purple"} with white: use it in a few small details such as ${details}; everything else in natural colours.`;
   const what = show || (people ? "person" : "products");
   const serviceScene = `The service itself, not a person: ${sceneText || builtInScene(`${name} ${type || ""}`) || builtInScene(category) || `the room, items and tools involved in ${name}, shown clean and finished`}, in a bright, tidy Indian home. No people and no body parts.`;
   const scene = what === "person" ? personLine(audience) : what === "service" ? serviceScene : PRODUCTS_SCENE;
   const wide = KINDS[kind]?.ratio === "16:9" ? " Wide composition with calm space on the left for a heading." : " Square composition, subject centred with breathing room.";
-  return `${STYLE} Subject — ${KINDS[kind]?.label || "a service"}: ${subject}${tagline ? `. ${tagline}` : ""}. ${scene}${wide}`;
+  return `${STYLE} Subject — ${KINDS[kind]?.label || "a service"}: ${subject}${tagline ? `. ${tagline}` : ""}.${facts} ${scene}${accent}${wide}`;
 }
 
 // ---------------- talking to Gemini ----------------
@@ -295,9 +303,11 @@ async function drawWithCloudflare(prompt, ratio) {
 // the height, not in the corner: the apps show square pictures cut to 4:3 or 16:9 from the middle,
 // which removes up to 22% at the top and bottom.
 // IMAGE_STUDIO_LOGO=off leaves pictures as drawn. Without the image library, pictures stay as drawn.
-const BADGE = path.join(__dirname, "assets", "tikdum-badge.png");
-async function stampLogo(image) {
-  if (!sharp || String(process.env.IMAGE_STUDIO_LOGO || "on").toLowerCase() === "off" || !fs.existsSync(BADGE)) return image;
+// The logo file is the one uploaded in Admin, else the built-in badge (imageStyle.logoFile); with a
+// category colour it sits on a rounded band of that colour, so it stands out on any photo.
+async function stampLogo(image, colour) {
+  const logo = imageStyle.logoFile();
+  if (!sharp || String(process.env.IMAGE_STUDIO_LOGO || "on").toLowerCase() === "off" || !fs.existsSync(logo)) return image;
   try {
     const base = sharp(image.data, { failOn: "none" });
     const { width, height } = await base.metadata();
@@ -306,14 +316,22 @@ async function stampLogo(image) {
     // 14% in from the left and is sized by the height, so it stays whole.
     const wide = width / height > 1.3;
     const badgeW = Math.round(wide ? height * 0.42 : width * 0.27);
-    const badge = await sharp(BADGE).resize({ width: badgeW }).png().toBuffer();
+    const badge = await sharp(logo).resize({ width: badgeW }).png().toBuffer();
     const badgeH = (await sharp(badge).metadata()).height;
     const margin = Math.round(width * 0.025);
-    const data = await base
-      .composite([{ input: badge, left: wide ? Math.round(width * 0.14) : margin, top: Math.min(Math.round(height * 0.66), Math.max(0, height - badgeH - margin)) }])
-      .jpeg({ quality: 90 })
-      .toBuffer();
-    return { mime: "image/jpeg", data, logo: true };
+    const left = wide ? Math.round(width * 0.14) : margin;
+    const top = Math.min(Math.round(height * 0.66), Math.max(0, height - badgeH - margin));
+    const layers = [];
+    if (/^#[0-9a-f]{6}$/i.test(colour?.hex || "")) {
+      const pad = Math.max(3, Math.round(badgeH * 0.09));
+      const w = badgeW + pad * 2;
+      const h = badgeH + pad * 2;
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" rx="${Math.round(h / 2)}" fill="${colour.hex}"/></svg>`;
+      layers.push({ input: Buffer.from(svg), left: Math.max(0, left - pad), top: Math.max(0, top - pad) });
+    }
+    layers.push({ input: badge, left, top });
+    const data = await base.composite(layers).jpeg({ quality: 90 }).toBuffer();
+    return { mime: "image/jpeg", data, logo: true, width, height };
   } catch (e) {
     console.error("Image studio: couldn't add the logo", e.message);
     return image;
@@ -452,16 +470,19 @@ async function processJob(job) {
       : { ok: true, issues: [], checked: false };
     if (last) deleteFile(last.url);
     // The check looks at the picture as drawn; the logo goes on the copy that is kept.
-    const kept = await stampLogo(image);
+    const kept = await stampLogo(image, job.colour);
     const file = `${crypto.randomBytes(16).toString("hex")}${extFor(kept.mime)}`;
     fs.writeFileSync(path.join(UPLOADS_DIR, file), kept.data);
-    last = { url: `/uploads/${file}` };
+    last = { url: `/uploads/${file}`, logo: Boolean(kept.logo), size: kept.width ? `${kept.width}×${kept.height}` : null };
     if (qc.ok) break;
   }
-  jsonStore.update(CANDIDATES, job.id, { status: "pending", url: last.url, qc, imageModel: used.name === "cloudflare" ? `cloudflare:${used.imageModel}` : used.imageModel, tries: MAX_TRIES });
+  // The checklist shown with the preview: what Tikdum knew, and what was done to the picture.
+  const checks = { ...(job.checks || {}), logo: last.logo, size: last.size, autoChecked: qc.checked !== false, autoOk: qc.ok };
+  jsonStore.update(CANDIDATES, job.id, { status: "pending", url: last.url, qc, checks, imageModel: used.name === "cloudflare" ? `cloudflare:${used.imageModel}` : used.imageModel, tries: MAX_TRIES });
 }
 
-// targets: [{ targetType, targetId, name, category, type, tagline, audience? }]
+// targets: [{ targetType, targetId, name, category, type, tagline, includes?, colour?, audience?, show? }],
+// as looked up from Tikdum's records by index.js (imageTarget) — never as sent by a browser.
 function enqueue(targets, actor) {
   if (!configured()) throw fail(400, NOT_SET_UP);
   const list = Array.isArray(targets) ? targets : [];
@@ -477,7 +498,11 @@ function enqueue(targets, actor) {
     // t.show: "service" (no people — Admin's default) or "person"; body services are always products.
     const show = !found.people ? "products" : t.show === "service" ? "service" : "person";
     const who = { audience: found.audience, people: show === "person" };
-    const prompt = buildBrief({ kind: t.targetType, name: t.name, category: t.category, type: t.type, tagline: t.tagline, ...who, show });
+    const includes = Array.isArray(t.includes) ? t.includes.map((x) => String(x).slice(0, 80)).slice(0, 6) : [];
+    const colour = t.colour?.hex ? { hex: String(t.colour.hex), name: String(t.colour.name || "").slice(0, 30) } : null;
+    const facts = { includes, colour };
+    const prompt = buildBrief({ kind: t.targetType, name: t.name, category: t.category, type: t.type, tagline: t.tagline, ...who, show, ...facts });
+    const checks = { record: true, category: String(t.category || "").slice(0, 80), type: String(t.type || "").slice(0, 80), includes: includes.length, colour };
     const row = jsonStore.insert(CANDIDATES, {
       targetType: t.targetType,
       targetId: String(t.targetId),
@@ -489,13 +514,14 @@ function enqueue(targets, actor) {
       people: who.people,
       show,
       prompt,
+      checks,
       status: "generating",
       createdAt: new Date().toISOString(),
       requestedBy: actor || null,
     });
     // A "service" picture gets its own scene (sceneFor) when it's drawn: that can call a text model.
-    const brief = { kind: t.targetType, name: t.name, category: t.category, type: t.type, tagline: t.tagline, ...who, show };
-    queue.push({ id: row.id, prompt, ratio: KINDS[t.targetType].ratio, expect: who, brief: show === "service" ? brief : null });
+    const brief = { kind: t.targetType, name: t.name, category: t.category, type: t.type, tagline: t.tagline, ...who, show, ...facts };
+    queue.push({ id: row.id, prompt, ratio: KINDS[t.targetType].ratio, expect: who, brief: show === "service" ? brief : null, colour, checks });
     made.push(row);
     open.add(k);
   }

@@ -66,6 +66,20 @@ async function uploadPushPicture(file) {
   return data;
 }
 
+// Image Studio: the logo stamped on AI pictures (a PNG).
+async function uploadImageLogo(file) {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(`${API_BASE}/admin/images/logo`, {
+    method: "POST",
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    body,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Upload failed: ${res.status}`);
+  return data;
+}
+
 // Category banners and tile photos go up as multipart too.
 async function uploadCategoryBanner(id, file, kind = "banner") {
   const body = new FormData();
@@ -179,6 +193,14 @@ export const api = {
   listImageCandidates: () => request("/admin/images/candidates"),
   generateImages: (targets) => request("/admin/images/generate", { method: "POST", body: JSON.stringify({ targets }) }),
   settleImage: (id, status) => request(`/admin/images/candidates/${id}/settle`, { method: "POST", body: JSON.stringify({ status }) }),
+  keepImage: (id) => request(`/admin/images/candidates/${id}/keep`, { method: "POST" }),
+  listKeptImages: () => request("/admin/images/kept"),
+  restoreKeptImage: (id) => request(`/admin/images/kept/${id}/restore`, { method: "POST" }),
+  getImageColours: () => request("/admin/images/colours"),
+  setImageColour: (slug, hex, name) => request(`/admin/images/colours/${encodeURIComponent(slug)}`, { method: "PUT", body: JSON.stringify({ hex, name }) }),
+  getImageLogo: () => request("/admin/images/logo"),
+  uploadImageLogo,
+  clearImageLogo: () => request("/admin/images/logo", { method: "DELETE" }),
   syncServiceCatalog: () => request("/admin/service-catalog/sync", { method: "POST" }),
   applyManyServiceCatalog: (itemIds, providerId) => request("/admin/service-catalog/apply-many", { method: "POST", body: JSON.stringify({ itemIds, providerId }) }),
   listSubcategories: () => request("/subcategories"),

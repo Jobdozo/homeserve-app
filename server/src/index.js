@@ -39,6 +39,13 @@ const blockedPhones = require("./blockedPhones");
 const accounting = require("./accounting");
 const subcategories = require("./subcategories");
 const imageStudio = require("./imageStudio");
+const imageStyle = require("./imageStyle");
+let sharp = null; // checks an uploaded picture logo; optional like elsewhere
+try {
+  sharp = require("sharp");
+} catch {
+  sharp = null;
+}
 const { groupByProvider, describeGroup } = require("./orderGroups");
 const providerAdmin = require("./providerAdmin");
 const partnerHub = require("./partnerHub");
@@ -1173,13 +1180,120 @@ app.get("/api/admin/images/candidates", auth.requireAuth("admin"), (req, res) =>
   res.json(imageStudio.listCandidates({ status: req.query.status, targetType: req.query.targetType, targetId: req.query.targetId }));
 });
 
+// What Image Studio may draw, looked up in Tikdum's own records — the server never draws from
+// names a browser sent. null when the record doesn't exist (any more).
+async function imageTarget(targetType, id) {
+  const cats = await store.listCategories();
+  const catName = (slug) => cats.find((c) => c.id === slug)?.name || "";
+  const typeName = (sid) => (sid && subcategories.get(sid)?.name) || "";
+  let t = null;
+  if (targetType === "service") {
+    const s = await store.getService(id);
+    if (s) t = { name: s.name, slug: s.categoryId, type: typeName(s.subcategoryId), tagline: s.tagline, includes: s.includes, currentUrl: s.imageFromCatalog ? null : s.imageUrl };
+  } else if (targetType === "catalog") {
+    const i = serviceCatalog.list().find((x) => x.id === id);
+    if (i) t = { name: i.name, slug: i.categorySlug, type: typeName(i.subcategoryId), tagline: i.tagline, includes: i.includes, currentUrl: i.imageUrl };
+  } else if (targetType === "subcategory") {
+    const s = subcategories.get(id);
+    if (s) t = { name: s.name, slug: s.categoryId, type: "", shade: true, currentUrl: s.imageUrl };
+  } else if (targetType === "category") {
+    const c = cats.find((x) => x.id === id);
+    if (c) t = { name: c.name, slug: c.id, type: "", currentUrl: c.bannerUrl };
+  }
+  if (!t) return null;
+  return {
+    ...t,
+    category: targetType === "category" ? "" : catName(t.slug),
+    colour: imageStyle.colourFor(t.slug, cats.map((c) => c.id), { shade: t.shade }),
+  };
+}
+
 app.post("/api/admin/images/generate", auth.requireAuth("admin"), ah(async (req, res) => {
   try {
-    const made = imageStudio.enqueue(req.body?.targets, actorOf(req));
-    res.status(202).json({ queued: made.length, candidates: made });
+    const asked = Array.isArray(req.body?.targets) ? req.body.targets.slice(0, imageStudio.MAX_QUEUE) : [];
+    const found = [];
+    const missing = [];
+    for (const a of asked) {
+      const t = a?.targetType && a?.targetId ? await imageTarget(a.targetType, String(a.targetId)) : null;
+      if (!t) {
+        missing.push(String(a?.name || a?.targetId || "?").slice(0, 80));
+        continue;
+      }
+      // From the browser only the choices about the picture itself: who appears and what it shows.
+      found.push({ targetType: a.targetType, targetId: String(a.targetId), name: t.name, category: t.category, type: t.type, tagline: t.tagline, includes: t.includes, colour: t.colour, audience: a.audience, show: a.show });
+    }
+    if (!found.length) return res.status(404).json({ error: missing.length ? `Not found in Tikdum: ${missing.join(", ")}` : "Choose at least one item" });
+    const made = imageStudio.enqueue(found, actorOf(req));
+    res.status(202).json({ queued: made.length, candidates: made, missing });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
+}));
+
+// Category colours and the logo stamped on pictures (imageStyle.js).
+app.get("/api/admin/images/colours", auth.requireAuth("admin"), ah(async (req, res) => res.json(imageStyle.list(await store.listCategories()))));
+app.put("/api/admin/images/colours/:slug", auth.requireAuth("admin"), ah(async (req, res) => {
+  const cats = await store.listCategories();
+  const cat = cats.find((c) => c.id === req.params.slug);
+  if (!cat) return res.status(404).json({ error: "Category not found" });
+  const before = imageStyle.colourFor(cat.id, cats.map((c) => c.id));
+  const row = imageStyle.setColour(cat.id, req.body || {}, cats.map((c) => c.id), actorOf(req));
+  audit(req, "image.colour", "category", cat.id, cat.name, [{ field: "picture colour", from: `${before.name} ${before.hex}`, to: `${row.name} ${row.hex}` }]);
+  res.json(imageStyle.list(cats));
+}));
+app.get("/api/admin/images/logo", auth.requireAuth("admin"), (req, res) => res.json(imageStyle.logoInfo()));
+app.post("/api/admin/images/logo", auth.requireAuth("admin"), uploads.uploadAsIs.single("file"), ah(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Choose a PNG file" });
+  const drop = () => require("fs").unlink(req.file.path, () => {});
+  let meta = null;
+  try {
+    meta = sharp ? await sharp(req.file.path).metadata() : null;
+  } catch {
+    meta = null;
+  }
+  if (!meta || meta.format !== "png") {
+    drop();
+    return res.status(400).json({ error: "The logo must be a PNG file (ideally with a transparent background)" });
+  }
+  if ((meta.width || 0) < 200) {
+    drop();
+    return res.status(400).json({ error: "The logo is too small — use one at least 200 pixels wide" });
+  }
+  const info = imageStyle.setLogo(`/uploads/${req.file.filename}`, actorOf(req));
+  audit(req, "image.logo", "brand", "logo", "Picture logo", [{ field: "logo", from: null, to: "uploaded" }]);
+  res.json(info);
+}));
+app.delete("/api/admin/images/logo", auth.requireAuth("admin"), (req, res) => {
+  const info = imageStyle.clearLogo();
+  audit(req, "image.logo", "brand", "logo", "Picture logo", [{ field: "logo", from: "uploaded", to: "built-in" }]);
+  res.json(info);
+});
+
+// Before an approved picture replaces one, keep a copy of the old one so it can be put back.
+app.post("/api/admin/images/candidates/:id/keep", auth.requireAuth("admin"), ah(async (req, res) => {
+  const c = imageStudio.listCandidates().find((x) => x.id === req.params.id);
+  if (!c) return res.status(404).json({ error: "Picture not found" });
+  const t = await imageTarget(c.targetType, c.targetId);
+  if (!t) return res.status(404).json({ error: "That item no longer exists" });
+  res.json({ kept: imageStyle.keep({ targetType: c.targetType, targetId: c.targetId, name: t.name, currentUrl: t.currentUrl }, actorOf(req)) });
+}));
+app.get("/api/admin/images/kept", auth.requireAuth("admin"), (req, res) => res.json(imageStyle.listKept()));
+app.post("/api/admin/images/kept/:id/restore", auth.requireAuth("admin"), ah(async (req, res) => {
+  const { row, url } = imageStyle.restoreCopy(req.params.id);
+  const actor = actorOf(req);
+  let done = null;
+  if (row.targetType === "service") {
+    done = await store.setServiceImage(row.targetId, url, actor);
+    if (done) rt.service("service:updated", done);
+  } else if (row.targetType === "category") done = await store.setCategoryBanner(row.targetId, url, actor);
+  else if (row.targetType === "catalog") done = serviceCatalog.setImage(row.targetId, url, actor);
+  else if (row.targetType === "subcategory") done = subcategories.setImage(row.targetId, url);
+  if (!done) {
+    uploads.removeFile(url);
+    return res.status(404).json({ error: "That item no longer exists" });
+  }
+  audit(req, "image.restore", row.targetType, row.targetId, row.name, [{ field: "picture", from: "AI picture", to: "restored previous" }]);
+  res.json(imageStyle.markRestored(row.id, actor));
 }));
 
 app.post("/api/admin/images/candidates/:id/settle", auth.requireAuth("admin"), ah(async (req, res) => {

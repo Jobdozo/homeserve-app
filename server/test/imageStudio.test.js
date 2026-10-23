@@ -73,7 +73,7 @@ test("who is in the picture: women's grooming -> women, men's -> men, trades -> 
 test("the brief carries the brand style, the right person, and never brand names or text", () => {
   const person = studio.buildBrief({ kind: "service", name: "Facial", category: "Salon & Spa", audience: "female", people: true });
   assert.match(person, /Indian woman professional/);
-  assert.match(person, /#5B3FE0/);
+  assert.match(person, /Accent colour soft purple with white/); // no category colour given: Tikdum purple
   assert.match(person, /no text/i);
   assert.match(person, /no logos, no brand names, no watermarks/i);
   const male = studio.buildBrief({ kind: "service", name: "Haircut", category: "Salon & Spa", audience: "male", people: true });
@@ -248,6 +248,28 @@ try {
 } catch {
   sharpAvailable = false;
 }
+test("brief: Tikdum's facts and the category colour (a name, never a code)", () => {
+  const b = studio.buildBrief({
+    kind: "service", name: "Single Door Fridge Cleaning", category: "Appliance Repair", show: "service", people: false,
+    includes: ["Inside shelves and trays", "Door gasket", "Outside body"], colour: { hex: "#8E44AD", name: "purple" },
+  });
+  assert.match(b, /The job includes: Inside shelves and trays; Door gasket; Outside body\./);
+  assert.match(b, /Accent colour purple with white: use it in a few small details such as towels, cloths, a bottle or a backdrop/);
+  assert.doesNotMatch(b, /#8E44AD|uniform/);
+});
+
+test("stampLogo: with a category colour the logo sits on a band of that colour", { skip: !sharpAvailable && "sharp isn't installed here" }, async () => {
+  const sharp = require("sharp");
+  const plain = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: { r: 30, g: 30, b: 30 } } }).jpeg().toBuffer();
+  process.env.IMAGE_STUDIO_LOGO = "on";
+  const out = await studio._stampLogo({ mime: "image/jpeg", data: plain }, { hex: "#27AE60", name: "green" });
+  process.env.IMAGE_STUDIO_LOGO = "off";
+  assert.equal(out.logo, true);
+  assert.equal(`${out.width}×${out.height}`, "1024×1024");
+  const [r, g, b] = [...(await sharp(out.data).extract({ left: 140, top: 678 - 4, width: 1, height: 1 }).raw().toBuffer())];
+  assert.ok(g > 140 && r < 90 && b < 130, `green band just above the badge: ${[r, g, b]}`);
+});
+
 test("stampLogo: the Tikdum logo goes in the bottom-left corner", { skip: !sharpAvailable && "sharp isn't installed here" }, async () => {
   const sharp = require("sharp");
   const plain = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: { r: 30, g: 30, b: 30 } } }).jpeg().toBuffer();
@@ -274,7 +296,7 @@ test("FLUX prompt: only what should be in the picture — no 'no logos', no pric
   assert.doesNotMatch(flux, /logo|lettering|badge|text|watermark|₹|\d|#5B3FE0/i);
   assert.match(flux, /plain black polo T-shirt uniform and a plain black cap, the fabric completely blank and solid/);
   assert.match(flux, /Ant Control in Pest Control/);
-  assert.match(flux, /soft purple and white as accent colours/);
+  assert.match(flux, /Accent colour soft purple with white/);
   const still = studio._forFlux(studio.buildBrief({ kind: "subcategory", name: "Waxing", category: "Salon & Spa", audience: "female", people: false }));
   assert.match(still, /Only objects in the scene\./);
   assert.doesNotMatch(still, /unbranded|people/i);

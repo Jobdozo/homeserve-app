@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, SERVER_URL } from "../api";
 import { useApp } from "../context/AppContext";
 import useSubcategories, { reloadSubcategories } from "../utils/useSubcategories";
+import { Checklist, BrandPanel, KeptPictures } from "../components/ImageStudioBrand";
 
 // Same browser-side shrink the other photo uploads use, so an AI picture is saved at a normal size.
 async function shrink(file, maxSide) {
@@ -99,22 +100,20 @@ export default function ImageStudioPanel() {
     if (list.length === 0) return;
     setBusy(true);
     try {
+      // The server looks each one up in Tikdum's records (name, category, what's included) itself;
+      // the name here is only for the "not found" message.
+      const missing = [];
       for (let i = 0; i < list.length; i += 10) {
-        const batch = list.slice(i, i + 10).map((r) => ({
-          targetType: kind,
-          targetId: r.id,
-          name: r.name,
-          category: r.category,
-          type: r.type,
-          tagline: r.tagline,
-          audience: audience[r.id] || "auto",
-          show,
-        }));
-        await api.generateImages(batch);
+        const batch = list.slice(i, i + 10).map((r) => ({ targetType: kind, targetId: r.id, name: r.name, audience: audience[r.id] || "auto", show }));
+        const out = await api.generateImages(batch);
+        missing.push(...(out.missing || []));
       }
       setSelected(new Set());
       await loadCandidates();
-      showToast(`Drawing ${list.length} picture${list.length === 1 ? "" : "s"} — they appear below as they finish`);
+      showToast(
+        `Drawing ${list.length - missing.length} picture${list.length - missing.length === 1 ? "" : "s"} — they appear below as they finish` +
+          (missing.length ? `. Not found in Tikdum: ${missing.join(", ")}` : "")
+      );
     } catch (e) {
       showToast(e.message || "Couldn't start");
       await loadCandidates();
@@ -126,6 +125,8 @@ export default function ImageStudioPanel() {
   const approve = async (c) => {
     setWorking(c.id);
     try {
+      // Keep a copy of the picture this one replaces, so it can be restored ("Replaced pictures").
+      await api.keepImage(c.id);
       const blob = await (await fetch(SERVER_URL + c.url)).blob();
       const file = await shrink(new File([blob], "ai.png", { type: blob.type || "image/png" }), c.targetType === "category" ? 1800 : 1000);
       if (c.targetType === "service") await setServiceImage(c.targetId, file);
@@ -155,9 +156,6 @@ export default function ImageStudioPanel() {
             targetType: c.targetType,
             targetId: c.targetId,
             name: c.name,
-            category: c.category,
-            type: c.type,
-            tagline: c.tagline,
             audience: c.audience === "female" || c.audience === "male" ? c.audience : "auto",
             show: c.show === "person" || c.people ? "person" : "service",
           },
@@ -294,6 +292,9 @@ export default function ImageStudioPanel() {
         ))}
       </div>
 
+      <BrandPanel />
+      <KeptPictures />
+
       {waiting.length > 0 && (
         <div>
           <p className="mb-2 text-[13px] font-bold text-gray-900">Waiting for your decision ({waiting.length})</p>
@@ -321,6 +322,7 @@ export default function ImageStudioPanel() {
                         ? "The service (no people)"
                         : "Products only (no people)"}
                   </p>
+                  {c.checks && <Checklist checks={c.checks} drawn={Boolean(c.url)} />}
                   {c.qc && (
                     <p
                       className={
