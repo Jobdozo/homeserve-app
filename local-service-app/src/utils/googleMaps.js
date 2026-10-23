@@ -92,15 +92,22 @@ export async function googlePlaceLocation(prediction) {
 // Coordinates -> { label, line, pincode }, the same shape as geolocation.reverseGeocode.
 export async function googleReverse(g, lat, lng) {
   const { Geocoder } = await g.maps.importLibrary("geocoding");
-  const { results } = await new Geocoder().geocode({ location: { lat, lng } });
-  const best = results?.[0];
-  if (!best) throw new Error("No address here");
-  const part = (type) => results.flatMap((r) => r.address_components).find((c) => c.types.includes(type))?.long_name || "";
+  const { results = [] } = await new Geocoder().geocode({ location: { lat, lng } });
+  if (!results.length) throw new Error("No address here");
+  const postal = (r) => r.address_components.find((c) => c.types.includes("postal_code"))?.long_name || "";
+  // Google's first answer can be a wrong user-added address (central Jammu came back as
+  // "Loran Mandi, Poonch 185102"); its own postal-code area for the spot is reliable. Trust that
+  // PIN, and only use addresses that agree with it.
+  const pincode = postal(results.find((r) => r.types.includes("postal_code")) || {}) || postal(results.find((r) => postal(r)) || {});
+  const agrees = results.filter((r) => !r.types.includes("plus_code") && (!pincode || !postal(r) || postal(r) === pincode));
+  const best = agrees[0] || results[0];
+  const part = (type) => agrees.flatMap((r) => r.address_components).find((c) => c.types.includes(type))?.long_name || "";
   const area = part("sublocality_level_1") || part("sublocality") || part("neighborhood");
   const city = part("locality") || part("administrative_area_level_3") || part("administrative_area_level_2");
   return {
     label: [area, city].filter(Boolean).join(", ") || "Pinned location",
-    line: String(best.formatted_address || "").replace(/,\s*India$/, ""),
-    pincode: part("postal_code"),
+    // without ", India" and without a leading plus code ("MRXM+R6, Raipur Satwari, …")
+    line: String(best.formatted_address || "").replace(/,\s*India$/, "").replace(/^[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3},\s*/, ""),
+    pincode,
   };
 }
