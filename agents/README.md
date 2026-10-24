@@ -136,6 +136,17 @@ With **Auto-post** on (AI Agents → Approvals) it publishes up to 5 a day by it
 The day's first post from 16:00 IST is also shared as a **Story** (switch in Approvals; max 2 a day, not counted
 in the daily posts). Mondays from 11:00 IST it posts a **results report** to Alerts & reports.
 
+**Threads.** Once `bash deploy/set-threads.sh` has saved a Threads token, every post also goes to Threads, with a
+shorter text the writer makes for it (500 characters, one tag; `server/src/socialThreads.js`). The server renews the
+60-day token by itself every week. Stories stay on Facebook and Instagram.
+
+**Blog (SEO Agent).** Give the SEO Agent the **Reporting / Management Team** role (template `seo`). Every Tuesday and
+Friday from 10:00 IST (`BLOG_DAYS_IST`, `BLOG_HOUR_IST`) and for every task titled **"Blog: …"** it writes a
+700–1,000-word article from the marketing calendar and the categories, with an Image Studio cover
+(`agents/src/blogPosts.js`). The article is saved as a **draft** in Admin → **Blog** and the agent proposes publishing
+it; approving puts it live at tikdum.com/blog/<slug> (server-rendered for search engines, in the sitemap). The
+Marketing Agent then shares each new article once, with its link, at its next scheduled post.
+
 Not built yet (shown as "Not built yet"): the Google side of Reviews (needs Google Business Profile access), and the Engineering team (needs GitHub branch protection + a repo-only token first).
 
 ## Engineering team (GitHub): Bug Triage, Developer, Code Reviewer, Tester

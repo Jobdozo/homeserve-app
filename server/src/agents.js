@@ -45,7 +45,8 @@ const DENY_MODULES = ["users", "settings", "data", "ai", "accounting"];
 const READ_ACTIONS = ["view", "export"];
 // The only writes an agent may make directly (if its role has them).
 // social.add only takes effect while Admin has "Auto-post" on (policy below); otherwise posts are proposed.
-const AGENT_WRITES = ["complaints.add", "complaints.edit", "notifications.add", "inbox.add", "social.add"];
+// blog.add: drafts only (blog.js keeps an agent's article a draft until a person publishes it).
+const AGENT_WRITES = ["complaints.add", "complaints.edit", "notifications.add", "inbox.add", "social.add", "blog.add"];
 // Per-agent ceiling on direct notifications (in-app messages to one person).
 const NOTIFY_PER_HOUR = 30;
 // Per-agent ceiling on new WhatsApp messages started from Tikdum's number (/admin/inbox/send),
@@ -66,6 +67,7 @@ const PROPOSABLE = [
   ["notification.broadcast", "POST", /^\/admin\/notifications\/broadcast$/],
   ["booking.assign", "POST", /^\/admin\/bookings\/[A-Za-z0-9_-]+\/assign$/],
   ["social.post", "POST", /^\/admin\/social\/posts$/],
+  ["blog.publish", "POST", /^\/admin\/blog\/[A-Za-z0-9_-]+\/publish$/],
   ["push.campaign", "POST", /^\/admin\/push-campaigns$/],
 ];
 

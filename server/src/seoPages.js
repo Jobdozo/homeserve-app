@@ -312,6 +312,52 @@ function pageFor(rawPath, data = {}) {
     });
   }
 
+  if (path === "/blog") {
+    const list = data.blog || [];
+    return page({
+      title: titleOf("Home Care Tips & Guides"),
+      description: "Tips and guides for your home in Jammu & Kashmir — seasonal maintenance, cleaning checklists, repairs and what to ask before you book — from Tikdum.",
+      canonical: "/blog",
+      jsonLd: [
+        breadcrumbs([["Home", "/home"], ["Blog", "/blog"]]),
+        { "@context": "https://schema.org", "@type": "Blog", name: "Tikdum Blog", url: `${SITE}/blog`, publisher: { "@id": ORG_ID }, blogPost: list.slice(0, 20).map((a) => ({ "@type": "BlogPosting", headline: a.title, url: `${SITE}/blog/${encodeURIComponent(a.slug)}`, datePublished: a.publishedAt })) },
+      ],
+      bodyHtml: `<main><h1>Tikdum Blog — home care tips &amp; guides</h1><ul>${list.map((a) => `<li><a href="/blog/${esc(a.slug)}">${esc(a.title)}</a> — ${esc(a.description || "")}</li>`).join("")}</ul></main>`,
+    });
+  }
+  m = /^\/blog\/([^/]+)$/.exec(path);
+  if (m) {
+    const a = (data.blog || []).find((x) => x.slug === m[1]);
+    if (!a) return notFound(path);
+    const cat = categories.find((c) => c.id === a.category || String(c.name).toLowerCase() === String(a.category || "").toLowerCase());
+    return page({
+      title: titleOf(a.title),
+      description: a.description,
+      canonical: `/blog/${a.slug}`,
+      image: abs(a.coverUrl),
+      ogType: "article",
+      jsonLd: [
+        breadcrumbs([["Home", "/home"], ["Blog", "/blog"], [a.title, `/blog/${a.slug}`]]),
+        {
+          "@context": "https://schema.org",
+          "@type": "BlogPosting",
+          headline: a.title,
+          description: a.description,
+          image: abs(a.coverUrl),
+          datePublished: a.publishedAt,
+          dateModified: a.updatedAt || a.publishedAt,
+          author: { "@type": "Organization", name: SITE_NAME, url: SITE },
+          publisher: { "@id": ORG_ID },
+          mainEntityOfPage: `${SITE}/blog/${a.slug}`,
+          inLanguage: "en-IN",
+          ...(cat ? { about: { "@type": "Service", name: cat.name, url: `${SITE}/category/${encodeURIComponent(cat.id)}` } } : {}),
+        },
+        ...(a.faqs?.length ? [faqLd(a.faqs)] : []),
+      ],
+      bodyHtml: `<main><article><h1>${esc(a.title)}</h1>${require("./blog").render(a.body)}${(a.faqs || []).map((f) => `<h3>${esc(f.q)}</h3><p>${esc(f.a)}</p>`).join("")}${cat ? `<p><a href="/category/${esc(cat.id)}">Book ${esc(cat.name)} on Tikdum</a></p>` : ""}</article></main>`,
+    });
+  }
+
   if (PRIVATE.some((re) => re.test(path))) return page({ title: DEFAULT_TITLE, canonical: null, noindex: true });
 
   // City pages: /jammu and /jammu/ac-repair (cityPages.js), only where providers really serve.
@@ -397,6 +443,7 @@ async function loadSearchData(store) {
   return {
     ...searchCatalog({ categories, services, providers, hidden }),
     tree: require("./locations").tree(),
+    blog: require("./blog").listPublished(),
     reviews: (reviews || []).filter((r) => !hidden.has(r.providerId)),
   };
 }
@@ -413,7 +460,7 @@ function headFor(p) {
     `<meta data-static-seo name="description" content="${esc(p.description)}" />`,
     url ? `<link data-static-seo rel="canonical" href="${esc(url)}" />` : "",
     p.noindex ? `<meta data-static-seo name="robots" content="noindex, nofollow" />` : "",
-    `<meta data-static-seo property="og:type" content="website" />`,
+    `<meta data-static-seo property="og:type" content="${p.ogType || "website"}" />`,
     `<meta data-static-seo property="og:site_name" content="${SITE_NAME}" />`,
     `<meta data-static-seo property="og:locale" content="en_IN" />`,
     `<meta data-static-seo property="og:title" content="${esc(p.title)}" />`,
@@ -435,7 +482,11 @@ function injectHead(shell, p) {
   html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${esc(p.title)}</title>`);
   html = html.replace(/\s*<meta\s+data-static-seo[\s\S]*?\/?>/gi, "");
   html = html.replace(/\s*<link\s+data-static-seo[\s\S]*?\/?>/gi, "");
-  return html.replace(/<\/head>/i, `    ${headFor(p)}\n  </head>`);
+  html = html.replace(/<\/head>/i, `    ${headFor(p)}\n  </head>`);
+  // A page whose words matter to search engines (the blog) also carries them in the body, under
+  // the loading screen; the app replaces it all when it starts.
+  if (p.bodyHtml) html = html.replace(/(<div id="root">)/i, `$1\n      ${p.bodyHtml}`);
+  return html;
 }
 
 // ---------------------------------------------------------------- serving

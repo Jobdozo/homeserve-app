@@ -35,6 +35,7 @@ export default function ProfileScreen() {
     { icon: "🎁", Icon: TagIcon, label: "Refer & Earn", desc: "Invite friends and earn credit", path: "/refer", tone: "marigold" },
     { icon: "🛡️", Icon: UmbrellaIcon, label: "Booking Protection", desc: "How your bookings are covered", path: "/booking-protection", tone: "trust" },
     { icon: "❓", Icon: ChatIcon, label: "Help & Support", desc: "Get help with a booking", path: "/profile/help" },
+    { icon: "📝", Icon: NoteIcon, label: "Home care tips", desc: "Guides and seasonal checklists", path: "/blog" },
     { icon: "ℹ️", Icon: ShieldCheckIcon, label: "About Tikdum", desc: "Who we are and how it works", href: "/about.html" },
     { icon: "📄", Icon: NoteIcon, label: "Terms & Conditions", desc: "The rules for using Tikdum", href: "/terms.html" },
     { icon: "🔒", Icon: LockIcon, label: "Privacy Policy", desc: "How we handle your information", href: "/privacy.html" },

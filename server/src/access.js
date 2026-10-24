@@ -38,6 +38,7 @@ const MODULES = [
   { key: "inbox", label: "WhatsApp inbox (customer chats)", actions: ["view", "add", "manage"] },
   { key: "accounting", label: "Accounting & GST (invoices, credit notes, returns)", actions: ["view", "export", "manage"] },
   { key: "social", label: "Social media posts (Facebook, Instagram)", actions: ["view", "add", "manage"] },
+  { key: "blog", label: "Blog articles (tikdum.com/blog)", actions: ["view", "add", "edit", "delete", "approve", "manage"] },
 ];
 
 // One-time grants for permissions added after roles were first saved (saved
@@ -58,6 +59,12 @@ const ROLE_MIGRATIONS = [
   { id: "2026-10-social", create: ["marketing"], grant: { admin: ["social.view", "social.add"] } },
   // Marketing proposes scheduled push campaigns (an agent can only propose them: agents.policy).
   { id: "2026-10-push", grant: { marketing: ["notifications.view", "notifications.add"] } },
+  // The blog: the SEO Agent (management role) writes drafts and proposes publishing them (an agent
+  // can't publish itself — "approve" isn't an agent write); Marketing shares published articles.
+  {
+    id: "2026-10-blog",
+    grant: { admin: ["blog.view", "blog.add", "blog.edit", "blog.delete", "blog.approve"], management: ["blog.view", "blog.add", "blog.approve"], marketing: ["blog.view"] },
+  },
 ];
 function runRoleMigrations(roles) {
   const done = new Set(jsonStore.readAll("accessMigrations").map((m) => m.id));
@@ -318,6 +325,11 @@ const RULES = [
   [/^\/admin\/verification\/precheck$/, () => "providers.view"],
   [/^\/admin\/watch\/provider-quality$/, () => "providers.view"],
   [/^\/admin\/watch\/(retention|fraud|reviews)$/, () => "customers.view"],
+  // The blog (blog.js): publishing is "approve" — a person, or a person approving the SEO Agent.
+  [/^\/admin\/blog\/[^/]+\/publish$/, () => "blog.approve"],
+  [/^\/admin\/blog\/[^/]+\/unpublish$/, () => "blog.edit"],
+  [/^\/admin\/blog\/picture$/, () => "blog.add"],
+  [/^\/admin\/blog(\/|$)/, (m) => `blog.${byMethod(m)}`],
   // The Renewals Bot reads renewal dates; the list itself (/admin/paid-services) stays Super Admin only.
   [/^\/admin\/watch\/renewals$/, () => "reports.view"],
   [/^\/admin\/meta\/(status|exclusion-check)$/, () => "reports.view"],
@@ -325,7 +337,8 @@ const RULES = [
   [/^\/admin\/social\/posts$/, (m) => (m === "GET" ? "social.view" : "social.add")],
   // A fresh picture for a post (Image Studio) and reading results back are part of posting.
   [/^\/admin\/social\/(picture|metrics\/refresh)$/, () => "social.add"],
-  [/^\/admin\/social\/calendar(\/|$)/, (m) => (m === "GET" ? "social.view" : "social.add")],
+  // Read by the Marketing Agent and, for blog articles, the SEO Agent.
+  [/^\/admin\/social\/calendar(\/|$)/, (m) => (m === "GET" ? ["social.view", "blog.view"] : "social.add")],
   [/^\/admin\/social(\/|$)/, () => "social.view"],
   [/^\/admin\/crm\/settings$/, (m) => (m === "GET" ? "crm.view" : "crm.manage")],
   [/^\/admin\/crm(\/|$)/, (m) => `crm.${byMethod(m)}`],

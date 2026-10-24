@@ -11,11 +11,13 @@
 // draft and marks the task done.
 // The Marketing Agent (role template "marketing") also proposes Facebook/Instagram
 // posts: on schedule and for tasks titled "Post: …" (socialPosts.js), and scheduled
-// push notification campaigns for tasks titled "Push: …" (pushPlans.js).
+// push notification campaigns for tasks titled "Push: …" (pushPlans.js). The SEO Agent (template
+// "seo") writes tikdum.com blog articles twice a week and for tasks titled "Blog: …" (blogPosts.js).
 const state = require("./state");
 const { complete, untrusted, BudgetExceeded } = require("./claude");
 const socialPosts = require("./socialPosts");
 const pushPlans = require("./pushPlans");
+const blogPosts = require("./blogPosts");
 
 const MAX_PER_RUN = 2;
 // Room for the draft (~1,000 words) on top of Claude's thinking room (config.anthropic.thinkingRoom).
@@ -57,9 +59,15 @@ async function tick(client, log, name = "specialist", { now = Date.now() } = {})
   const marketing = st.template === "marketing";
   const posted = marketing ? await socialPosts.run(client, log, { st, office, now }) : 0;
   const pushed = marketing ? await pushPlans.run(client, log, { st, office, now }) : 0;
-  const mine = marketing ? office.tasks.filter((t) => !pushPlans.isPushTask(t) && !(st.socialConnected && socialPosts.isPostTask(t))) : office.tasks;
+  const seo = st.template === "seo";
+  const drafted = seo ? await blogPosts.run(client, log, { st, office, now }) : 0;
+  const mine = marketing
+    ? office.tasks.filter((t) => !pushPlans.isPushTask(t) && !(st.socialConnected && socialPosts.isPostTask(t)))
+    : seo
+      ? office.tasks.filter((t) => !blogPosts.isBlogTask(t))
+      : office.tasks;
   const work = tasksToWork(mine, st.failed);
-  const proposals = [posted && `${posted} social post(s) ${st.socialMode || "proposed for approval"}`, pushed && `${pushed} push campaign(s) proposed for approval`];
+  const proposals = [posted && `${posted} social post(s) ${st.socialMode || "proposed for approval"}`, pushed && `${pushed} push campaign(s) proposed for approval`, drafted && `${drafted} blog article(s) drafted for approval`];
   if (!work.length) {
     state.save(`specialist-${name}`, st);
     const parts = proposals.filter(Boolean);

@@ -55,7 +55,7 @@ const TEAMS = [
 Your role: Marketing (campaign planner, content writer and social media manager in one).
 Deliverables: campaign plans with goal, audience, channel, offer, budget range and how to measure; ready-to-post captions (Instagram/Facebook/WhatsApp status) in English + Hindi/Hinglish with hashtags; banner headline + subline options; posting calendars.
 Keep claims honest — no fake discounts, no promises about arrival times or prices you weren't given.` },
-      { key: "seo", name: "SEO Agent", how: "specialist", role: "management", description: "Local SEO for tikdum.com: keywords, page titles, service-area pages, blog ideas.",
+      { key: "seo", name: "SEO Agent", how: "specialist", role: "management", description: "Local SEO for tikdum.com: writes a blog article every Tuesday and Friday (and for a task titled \"Blog: …\") with an Image Studio cover, saved as a draft in Admin → Blog and published only when you approve; also keywords, page titles and service-area page ideas.",
         instructions: `${SPECIALIST_RULES}
 Your role: SEO for tikdum.com, focused on local searches in Jammu & Kashmir ("plumber near me Jammu", "AC repair Gandhi Nagar").
 Deliverables: keyword lists by service and area, page titles and meta descriptions (with character counts), outlines for service/area pages and blog posts, Google Business Profile post drafts. Mark anything that needs checking in Google Search Console.` },

@@ -10,6 +10,7 @@ const inputCls = "w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.
 const labelCls = "mb-1 block text-[12.5px] font-semibold text-gray-700";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const FORMAT = { single: "Picture", carousel: "Carousel", story: "Story" };
+const CHANNEL = { facebook: "Facebook", instagram: "Instagram", threads: "Threads" };
 
 const when = (iso) => new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 const fmtDate = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -17,10 +18,11 @@ const fmtDate = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { 
 function totals(m = {}) {
   const f = m.facebook || {};
   const i = m.instagram || {};
+  const t = m.threads || {};
   return {
-    likes: (f.reactions || 0) + (i.likes || 0),
-    comments: (f.comments || 0) + (i.comments || 0),
-    shares: (f.shares || 0) + (i.shares || 0),
+    likes: (f.reactions || 0) + (i.likes || 0) + (t.likes || 0),
+    comments: (f.comments || 0) + (i.comments || 0) + (t.replies || 0),
+    shares: (f.shares || 0) + (i.shares || 0) + (t.reposts || 0),
     saves: i.saved || 0,
     reach: (f.reach || 0) + (i.reach || 0),
   };
@@ -59,12 +61,12 @@ function PostCard({ p }) {
         <div className="mt-1 flex flex-wrap gap-3 text-[11.5px] font-semibold">
           {links.map(([k, r]) => (
             <a key={k} href={r.link} target="_blank" rel="noreferrer" className="text-brand">
-              {k === "facebook" ? "Facebook" : "Instagram"} ↗
+              {CHANNEL[k] || k} ↗
             </a>
           ))}
           {failed.map(([k, r]) => (
             <span key={k} className="text-red-600" title={r.error}>
-              {k === "facebook" ? "Facebook" : "Instagram"} failed
+              {CHANNEL[k] || k} failed
             </span>
           ))}
           {p.metrics?.errors?.length ? <span className="text-amber-700" title={p.metrics.errors.join("\n")}>Some results unreadable</span> : null}

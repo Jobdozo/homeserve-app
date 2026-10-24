@@ -34,6 +34,8 @@ const BookingProtectionScreen = lazy(() => import("./screens/BookingProtectionSc
 const SavedAddressScreen = lazy(() => import("./screens/SavedAddressScreen"));
 const HelpSupportScreen = lazy(() => import("./screens/HelpSupportScreen"));
 const CityPageScreen = lazy(() => import("./screens/CityPageScreen"));
+const BlogListScreen = lazy(() => import("./screens/BlogScreen").then((m) => ({ default: m.BlogListScreen })));
+const BlogArticleScreen = lazy(() => import("./screens/BlogScreen").then((m) => ({ default: m.BlogArticleScreen })));
 const RateLinkScreen = lazy(() => import("./screens/RateLinkScreen"));
 const ReviewPrompt = lazy(() => import("./components/ReviewPrompt"));
 
@@ -130,6 +132,8 @@ function AppRoutes() {
           <Route path="/rate/:token" element={<RateLinkScreen />} />
           {/* City pages (tikdum.com/jammu, /jammu/ac-repair). Every fixed address above wins over
               these; anything that isn't a city page goes home (CityPageScreen). */}
+          <Route path="/blog" element={<BlogListScreen />} />
+          <Route path="/blog/:slug" element={<BlogArticleScreen />} />
           <Route path="/:city" element={<CityPageScreen />} />
           <Route path="/:city/:categoryId" element={<CityPageScreen />} />
           <Route

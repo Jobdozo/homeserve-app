@@ -19,6 +19,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const jsonStore = require("./jsonStore");
+const threads = require("./socialThreads");
 
 const GRAPH = (process.env.META_GRAPH_URL || "https://graph.facebook.com/v23.0").replace(/\/$/, "");
 const SITE = "https://tikdum.com";
@@ -51,13 +52,13 @@ async function graph(method, pathname, params = {}) {
 let statusCache = { at: 0, value: null };
 async function status() {
   const { pageId, token, igUserId } = cfg();
-  const base = { facebook: Boolean(pageId && token), instagram: Boolean(igUserId && token) };
-  if (!base.facebook) return { ...base, page: null, instagramUsername: null };
+  const base = { facebook: Boolean(pageId && token), instagram: Boolean(igUserId && token), threads: threads.configured() };
+  if (!base.facebook) return { ...base, page: null, instagramUsername: null, threadsUsername: base.threads ? await threads.username() : null };
   if (statusCache.value && Date.now() - statusCache.at < 10 * 60 * 1000) return statusCache.value;
   let value = { ...base, page: null, instagramUsername: null };
   try {
     const p = await graph("GET", `/${pageId}`, { fields: "name,instagram_business_account{username}" });
-    value = { ...base, page: p.name || null, instagramUsername: p.instagram_business_account?.username || null };
+    value = { ...base, page: p.name || null, instagramUsername: p.instagram_business_account?.username || null, threadsUsername: base.threads ? await threads.username() : null };
   } catch (e) {
     value = { ...base, error: e.message };
   }
@@ -116,7 +117,7 @@ function serveImage(req, res) {
 const FORMATS = ["single", "carousel", "story"];
 const line = (v, n) => String(v || "").replace(/\s+/g, " ").trim().slice(0, n);
 
-function cleanPost({ caption, imageUrl, channels, format, title, slides, storyLine, colour } = {}) {
+function cleanPost({ caption, imageUrl, channels, format, title, slides, storyLine, colour, threadsText } = {}) {
   const kind = FORMATS.includes(format) ? format : "single";
   const text = String(caption || "").trim();
   if (!text && kind !== "story") throw fail(400, "Write a caption");
@@ -124,8 +125,11 @@ function cleanPost({ caption, imageUrl, channels, format, title, slides, storyLi
   if ((text.match(/#[\p{L}\p{N}_]+/gu) || []).length > 30) throw fail(400, "Instagram allows at most 30 hashtags");
   if (!imageUrl) throw fail(400, "Pick a picture — Instagram posts need one");
   const wanted = [...new Set((Array.isArray(channels) && channels.length ? channels : ["facebook", "instagram"]).map(String))];
-  if (wanted.some((c) => !["facebook", "instagram"].includes(c))) throw fail(400, "Channels can be facebook and/or instagram");
-  const out = { caption: text, imageUrl: String(imageUrl), channels: wanted, format: kind };
+  if (wanted.some((c) => !["facebook", "instagram", "threads"].includes(c))) throw fail(400, "Channels can be facebook, instagram and threads");
+  // Threads has no Stories.
+  const out = { caption: text, imageUrl: String(imageUrl), channels: kind === "story" ? wanted.filter((c) => c !== "threads") : wanted, format: kind };
+  if (!out.channels.length) throw fail(400, "Stories go to Facebook and Instagram");
+  if (threadsText) out.threadsText = String(threadsText).trim().slice(0, threads.MAX_TEXT);
   out.colour = /^#[0-9a-f]{6}$/i.test(colour?.hex || "") ? { hex: colour.hex, name: line(colour.name, 30) } : null;
   if (kind === "carousel") {
     out.title = line(title, 90);
@@ -194,9 +198,10 @@ async function publish(input, actor) {
   const st = cfg();
   if (post.channels.includes("facebook") && !(st.pageId && st.token)) throw fail(400, "Facebook isn't connected (deploy/set-meta.sh)");
   if (post.channels.includes("instagram") && !(st.igUserId && st.token)) throw fail(400, "Instagram isn't connected (deploy/set-meta.sh)");
+  if (post.channels.includes("threads") && !threads.configured()) throw fail(400, "Threads isn't connected (deploy/set-threads.sh)");
   const images = await prepareFormat(post);
   const results = {};
-  for (const [channel, send] of [["facebook", toFacebook], ["instagram", toInstagram]]) {
+  for (const [channel, send] of [["facebook", toFacebook], ["instagram", toInstagram], ["threads", (_, p, im) => threads.publish(p, im)]]) {
     if (!post.channels.includes(channel)) continue;
     try {
       results[channel] = await send(st, post, images);
@@ -229,7 +234,8 @@ async function publish(input, actor) {
 function score(m = {}) {
   const f = m.facebook || {};
   const i = m.instagram || {};
-  return (f.reactions || 0) + (i.likes || 0) + 3 * ((f.comments || 0) + (i.comments || 0)) + 4 * ((f.shares || 0) + (i.shares || 0)) + 2 * (i.saved || 0);
+  const t = m.threads || {};
+  return (f.reactions || 0) + (i.likes || 0) + (t.likes || 0) + 3 * ((f.comments || 0) + (i.comments || 0) + (t.replies || 0)) + 4 * ((f.shares || 0) + (i.shares || 0) + (t.reposts || 0) + (t.quotes || 0)) + 2 * (i.saved || 0);
 }
 
 // Each number is asked for on its own: they need different Page permissions (reactions and
@@ -269,13 +275,14 @@ async function instagramMetrics(id) {
 
 // Reads the results of the posts from the last 30 days (not Stories: they're gone after a day).
 async function refreshMetrics({ now = Date.now() } = {}) {
-  if (!cfg().token) return { checked: 0 };
+  if (!cfg().token && !threads.configured()) return { checked: 0 };
+  await threads.renewIfDue(now);
   let checked = 0;
   for (const row of jsonStore.readAll(POSTS)) {
     if (row.format === "story" || now - Date.parse(row.at) > 30 * 24 * 3600 * 1000) continue;
     const metrics = { at: new Date(now).toISOString() };
     const errors = [];
-    for (const [channel, read] of [["facebook", facebookMetrics], ["instagram", instagramMetrics]]) {
+    for (const [channel, read] of [["facebook", facebookMetrics], ["instagram", instagramMetrics], ["threads", threads.metrics]]) {
       const r = row.results?.[channel];
       if (!r?.ok || !r.id) continue;
       try {

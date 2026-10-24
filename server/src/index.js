@@ -37,6 +37,7 @@ const otpGuard = require("./otpGuard");
 const loginAttempts = require("./loginAttempts");
 const blockedPhones = require("./blockedPhones");
 const paidServices = require("./paidServices");
+const blog = require("./blog");
 const accounting = require("./accounting");
 const subcategories = require("./subcategories");
 const imageStudio = require("./imageStudio");
@@ -1134,6 +1135,9 @@ app.get("/sitemap.xml", ah(async (req, res) => {
     { loc: `${SITE_URL}/about.html`, priority: "0.4" },
     // City pages (cityPages.js): /jammu and /jammu/<category>, only where providers serve.
     ...cityPages.allPaths(data).map((p) => ({ loc: `${SITE_URL}${p}`, priority: "0.9" })),
+    // The blog (blog.js): the list and every published article.
+    ...(data.blog?.length ? [{ loc: `${SITE_URL}/blog`, priority: "0.7" }] : []),
+    ...(data.blog || []).map((a) => ({ loc: `${SITE_URL}/blog/${encodeURIComponent(a.slug)}`, priority: "0.7", image: a.coverUrl ? { loc: absolute(a.coverUrl), title: a.title } : null })),
     ...categories
       .filter((c) => c.active && withServices.has(c.id))
       .map((c) => ({ loc: `${SITE_URL}/category/${encodeURIComponent(c.id)}`, priority: "0.8", image: c.imageUrl ? { loc: absolute(c.imageUrl), title: c.name } : null })),
@@ -1151,6 +1155,54 @@ app.get("/sitemap.xml", ah(async (req, res) => {
     )
     .join("\n")}\n</urlset>\n`;
   res.set({ "Content-Type": "application/xml", "Cache-Control": "public, max-age=3600" }).send(body);
+}));
+
+// ---- the blog (blog.js) ----
+// Public: the website's blog pages (tikdum.com/blog).
+app.get("/api/blog", (req, res) => res.set("Cache-Control", "public, max-age=300").json(blog.listPublished().map(blog.summary)));
+app.get("/api/blog/:slug", (req, res) => {
+  const a = blog.bySlug(req.params.slug);
+  if (!a) return res.status(404).json({ error: "Article not found" });
+  const { by, updatedBy, publishedBy, unpublishedBy, ...pub } = a;
+  res.set("Cache-Control", "public, max-age=300").json(pub);
+});
+// Staff (Admin → Blog), and the SEO Agent's drafts.
+app.get("/api/admin/blog", adminOnly, crm(async (req, res) => res.json(blog.listAll())));
+app.post("/api/admin/blog", adminOnly, crm(async (req, res) => {
+  const row = blog.create(req.body || {}, actorOf(req), { agent: Boolean(req.admin?.agent) });
+  audit(req, "blog.add", "blogArticle", row.id, row.title);
+  if (row.status === "published") await store.logActivity("cms", `Blog article published by ${actorOf(req)}: "${row.title}"`).catch(() => {});
+  res.status(201).json(row);
+}));
+app.patch("/api/admin/blog/:id", adminOnly, crm(async (req, res) => {
+  const row = blog.edit(req.params.id, req.body || {}, actorOf(req));
+  audit(req, "blog.edit", "blogArticle", row.id, row.title);
+  res.json(row);
+}));
+app.post("/api/admin/blog/:id/publish", adminOnly, crm(async (req, res) => {
+  const row = blog.setStatus(req.params.id, "published", actorOf(req));
+  audit(req, "blog.publish", "blogArticle", row.id, row.title);
+  await store.logActivity("cms", `Blog article published by ${actorOf(req)}: "${row.title}" — tikdum.com/blog/${row.slug}`).catch(() => {});
+  res.json(row);
+}));
+app.post("/api/admin/blog/:id/unpublish", adminOnly, crm(async (req, res) => {
+  const row = blog.setStatus(req.params.id, "draft", actorOf(req));
+  audit(req, "blog.unpublish", "blogArticle", row.id, row.title);
+  res.json(row);
+}));
+app.delete("/api/admin/blog/:id", adminOnly, crm(async (req, res) => {
+  const row = blog.listAll().find((r) => r.id === req.params.id);
+  if (row && blog.remove(row.id)) audit(req, "blog.delete", "blogArticle", row.id, row.title);
+  res.json({ ok: true });
+}));
+// A cover picture for an article, drawn by Image Studio (shares the post pictures' daily limit).
+app.post("/api/admin/blog/picture", adminOnly, crm(async (req, res) => {
+  const cats = await store.listCategories();
+  const want = String(req.body?.category || "").toLowerCase().trim();
+  const cat = cats.find((c) => c.id === want || String(c.name || "").toLowerCase() === want) || null;
+  const colour = cat ? imageStyle.colourFor(cat.id, cats.map((c) => c.id)) : null;
+  const out = await imageStudio.drawForSocial({ topic: req.body?.topic, category: cat?.name || "", scene: req.body?.scene, show: req.body?.show, colour });
+  res.json({ ...out, url: `${(process.env.UPLOADS_PUBLIC_BASE || "https://api.tikdum.com").replace(/\/$/, "")}${out.url}`, category: cat?.name || null });
 }));
 
 // Every page of the website with its own title, description, preview tags, structured data

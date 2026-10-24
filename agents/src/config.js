@@ -134,6 +134,12 @@ module.exports = {
 
   // Marketing Agent's scheduled Facebook/Instagram posts (socialPosts.js): one proposal on
   // each of these IST weekdays (0 = Sunday) from this hour. Empty SOCIAL_POST_DAYS_IST = none.
+  // SEO Agent blog articles (blogPosts.js): days of the week (0 = Sunday) and the hour, IST.
+  blog: {
+    daysIst: (process.env.BLOG_DAYS_IST ?? "2,5").split(",").map((d) => d.trim()).filter((d) => d !== "").map(Number).filter((d) => d >= 0 && d <= 6),
+    hourIst: num(process.env.BLOG_HOUR_IST, 10),
+  },
+
   social: {
     daysIst: (process.env.SOCIAL_POST_DAYS_IST ?? "0,1,2,3,4,5,6").split(",").map((d) => d.trim()).filter((d) => d !== "").map(Number).filter((d) => d >= 0 && d <= 6),
     hourIst: num(process.env.SOCIAL_POST_HOUR_IST, 10),

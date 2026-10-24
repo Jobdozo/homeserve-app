@@ -57,6 +57,9 @@ export default function DesktopFooter() {
             <Link to="/services" className={linkCls}>All services</Link>
           </li>
           <li>
+            <Link to="/blog" className={linkCls}>Home care tips</Link>
+          </li>
+          <li>
             <Link to="/profile/help" className={linkCls}>Help &amp; support</Link>
           </li>
         </Col>
