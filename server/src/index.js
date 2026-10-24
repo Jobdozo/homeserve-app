@@ -1157,54 +1157,6 @@ app.get("/sitemap.xml", ah(async (req, res) => {
   res.set({ "Content-Type": "application/xml", "Cache-Control": "public, max-age=3600" }).send(body);
 }));
 
-// ---- the blog (blog.js) ----
-// Public: the website's blog pages (tikdum.com/blog).
-app.get("/api/blog", (req, res) => res.set("Cache-Control", "public, max-age=300").json(blog.listPublished().map(blog.summary)));
-app.get("/api/blog/:slug", (req, res) => {
-  const a = blog.bySlug(req.params.slug);
-  if (!a) return res.status(404).json({ error: "Article not found" });
-  const { by, updatedBy, publishedBy, unpublishedBy, ...pub } = a;
-  res.set("Cache-Control", "public, max-age=300").json(pub);
-});
-// Staff (Admin → Blog), and the SEO Agent's drafts.
-app.get("/api/admin/blog", adminOnly, crm(async (req, res) => res.json(blog.listAll())));
-app.post("/api/admin/blog", adminOnly, crm(async (req, res) => {
-  const row = blog.create(req.body || {}, actorOf(req), { agent: Boolean(req.admin?.agent) });
-  audit(req, "blog.add", "blogArticle", row.id, row.title);
-  if (row.status === "published") await store.logActivity("cms", `Blog article published by ${actorOf(req)}: "${row.title}"`).catch(() => {});
-  res.status(201).json(row);
-}));
-app.patch("/api/admin/blog/:id", adminOnly, crm(async (req, res) => {
-  const row = blog.edit(req.params.id, req.body || {}, actorOf(req));
-  audit(req, "blog.edit", "blogArticle", row.id, row.title);
-  res.json(row);
-}));
-app.post("/api/admin/blog/:id/publish", adminOnly, crm(async (req, res) => {
-  const row = blog.setStatus(req.params.id, "published", actorOf(req));
-  audit(req, "blog.publish", "blogArticle", row.id, row.title);
-  await store.logActivity("cms", `Blog article published by ${actorOf(req)}: "${row.title}" — tikdum.com/blog/${row.slug}`).catch(() => {});
-  res.json(row);
-}));
-app.post("/api/admin/blog/:id/unpublish", adminOnly, crm(async (req, res) => {
-  const row = blog.setStatus(req.params.id, "draft", actorOf(req));
-  audit(req, "blog.unpublish", "blogArticle", row.id, row.title);
-  res.json(row);
-}));
-app.delete("/api/admin/blog/:id", adminOnly, crm(async (req, res) => {
-  const row = blog.listAll().find((r) => r.id === req.params.id);
-  if (row && blog.remove(row.id)) audit(req, "blog.delete", "blogArticle", row.id, row.title);
-  res.json({ ok: true });
-}));
-// A cover picture for an article, drawn by Image Studio (shares the post pictures' daily limit).
-app.post("/api/admin/blog/picture", adminOnly, crm(async (req, res) => {
-  const cats = await store.listCategories();
-  const want = String(req.body?.category || "").toLowerCase().trim();
-  const cat = cats.find((c) => c.id === want || String(c.name || "").toLowerCase() === want) || null;
-  const colour = cat ? imageStyle.colourFor(cat.id, cats.map((c) => c.id)) : null;
-  const out = await imageStudio.drawForSocial({ topic: req.body?.topic, category: cat?.name || "", scene: req.body?.scene, show: req.body?.show, colour });
-  res.json({ ...out, url: `${(process.env.UPLOADS_PUBLIC_BASE || "https://api.tikdum.com").replace(/\/$/, "")}${out.url}`, category: cat?.name || null });
-}));
-
 // Every page of the website with its own title, description, preview tags, structured data
 // and status (see seoPages.js). Only the website's nginx calls this, for addresses that
 // aren't files; the real address comes in X-Original-URI.
@@ -3896,6 +3848,54 @@ app.post("/api/admin/social/picture", adminOnly, crm(async (req, res) => {
 app.post("/api/admin/social/metrics/refresh", adminOnly, crm(async (req, res) => res.json(await social.refreshMetrics())));
 setInterval(() => social.refreshMetrics().catch((e) => console.error("social results check failed:", e.message)), 12 * 3600 * 1000).unref();
 setTimeout(() => social.refreshMetrics().catch((e) => console.error("social results check failed:", e.message)), 3 * 60 * 1000).unref();
+
+// ---- the blog (blog.js) ----
+// Public: the website's blog pages (tikdum.com/blog).
+app.get("/api/blog", (req, res) => res.set("Cache-Control", "public, max-age=300").json(blog.listPublished().map(blog.summary)));
+app.get("/api/blog/:slug", (req, res) => {
+  const a = blog.bySlug(req.params.slug);
+  if (!a) return res.status(404).json({ error: "Article not found" });
+  const { by, updatedBy, publishedBy, unpublishedBy, ...pub } = a;
+  res.set("Cache-Control", "public, max-age=300").json(pub);
+});
+// Staff (Admin → Blog), and the SEO Agent's drafts.
+app.get("/api/admin/blog", adminOnly, crm(async (req, res) => res.json(blog.listAll())));
+app.post("/api/admin/blog", adminOnly, crm(async (req, res) => {
+  const row = blog.create(req.body || {}, actorOf(req), { agent: Boolean(req.admin?.agent) });
+  audit(req, "blog.add", "blogArticle", row.id, row.title);
+  if (row.status === "published") await store.logActivity("cms", `Blog article published by ${actorOf(req)}: "${row.title}"`).catch(() => {});
+  res.status(201).json(row);
+}));
+app.patch("/api/admin/blog/:id", adminOnly, crm(async (req, res) => {
+  const row = blog.edit(req.params.id, req.body || {}, actorOf(req));
+  audit(req, "blog.edit", "blogArticle", row.id, row.title);
+  res.json(row);
+}));
+app.post("/api/admin/blog/:id/publish", adminOnly, crm(async (req, res) => {
+  const row = blog.setStatus(req.params.id, "published", actorOf(req));
+  audit(req, "blog.publish", "blogArticle", row.id, row.title);
+  await store.logActivity("cms", `Blog article published by ${actorOf(req)}: "${row.title}" — tikdum.com/blog/${row.slug}`).catch(() => {});
+  res.json(row);
+}));
+app.post("/api/admin/blog/:id/unpublish", adminOnly, crm(async (req, res) => {
+  const row = blog.setStatus(req.params.id, "draft", actorOf(req));
+  audit(req, "blog.unpublish", "blogArticle", row.id, row.title);
+  res.json(row);
+}));
+app.delete("/api/admin/blog/:id", adminOnly, crm(async (req, res) => {
+  const row = blog.listAll().find((r) => r.id === req.params.id);
+  if (row && blog.remove(row.id)) audit(req, "blog.delete", "blogArticle", row.id, row.title);
+  res.json({ ok: true });
+}));
+// A cover picture for an article, drawn by Image Studio (shares the post pictures' daily limit).
+app.post("/api/admin/blog/picture", adminOnly, crm(async (req, res) => {
+  const cats = await store.listCategories();
+  const want = String(req.body?.category || "").toLowerCase().trim();
+  const cat = cats.find((c) => c.id === want || String(c.name || "").toLowerCase() === want) || null;
+  const colour = cat ? imageStyle.colourFor(cat.id, cats.map((c) => c.id)) : null;
+  const out = await imageStudio.drawForSocial({ topic: req.body?.topic, category: cat?.name || "", scene: req.body?.scene, show: req.body?.show, colour });
+  res.json({ ...out, url: `${(process.env.UPLOADS_PUBLIC_BASE || "https://api.tikdum.com").replace(/\/$/, "")}${out.url}`, category: cat?.name || null });
+}));
 
 // The Marketing Agent's festival and season calendar (marketingCalendar.js).
 const marketingCalendar = require("./marketingCalendar");
