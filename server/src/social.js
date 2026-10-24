@@ -232,13 +232,27 @@ function score(m = {}) {
   return (f.reactions || 0) + (i.likes || 0) + 3 * ((f.comments || 0) + (i.comments || 0)) + 4 * ((f.shares || 0) + (i.shares || 0)) + 2 * (i.saved || 0);
 }
 
+// Each number is asked for on its own: they need different Page permissions (reactions and
+// shares: pages_read_engagement; comments: pages_read_user_content; reach: read_insights), and
+// one that's refused shouldn't hide the others. Throws only when none could be read.
 async function facebookMetrics(id) {
-  const p = await graph("GET", `/${id}`, { fields: "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0),shares" });
-  const out = { reactions: p.reactions?.summary?.total_count || 0, comments: p.comments?.summary?.total_count || 0, shares: p.shares?.count || 0 };
-  // Reach needs the read_insights permission; without it the counts above still work.
+  const out = {};
+  const refused = [];
+  const ask = async (fields, take) => {
+    try {
+      take(await graph("GET", `/${id}`, { fields }));
+    } catch (e) {
+      refused.push(e.message);
+    }
+  };
+  await ask("reactions.summary(total_count).limit(0)", (p) => (out.reactions = p.reactions?.summary?.total_count || 0));
+  await ask("shares", (p) => (out.shares = p.shares?.count || 0));
+  await ask("comments.summary(total_count).limit(0)", (p) => (out.comments = p.comments?.summary?.total_count || 0));
+  if (!Object.keys(out).length) throw new Error(refused[0] || "Facebook gave no numbers");
   const ins = await graph("GET", `/${id}/insights`, { metric: "post_impressions_unique" }).catch(() => null);
   const reach = ins?.data?.[0]?.values?.[0]?.value;
   if (Number.isFinite(reach)) out.reach = reach;
+  if (refused.length) out.refused = [...new Set(refused)].slice(0, 2);
   return out;
 }
 
@@ -265,7 +279,9 @@ async function refreshMetrics({ now = Date.now() } = {}) {
       const r = row.results?.[channel];
       if (!r?.ok || !r.id) continue;
       try {
-        metrics[channel] = await read(r.id);
+        const { refused, ...numbers } = await read(r.id);
+        metrics[channel] = numbers;
+        for (const m of refused || []) errors.push(`${channel}: ${m}`.slice(0, 160));
       } catch (e) {
         errors.push(`${channel}: ${e.message}`.slice(0, 160));
       }

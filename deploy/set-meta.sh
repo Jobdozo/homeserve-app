@@ -67,6 +67,13 @@ if [ -n "$missing" ]; then
   echo "In Graph API Explorer add them under Permissions, click Generate Access Token, and run this again. Nothing was changed."
   exit 1
 fi
+# Optional, for the Marketing Agent's results (comments, reach, Instagram saves/shares): posting
+# works without them, the results just come back with fewer numbers.
+extra=""
+for p in pages_read_user_content read_insights instagram_manage_insights; do
+  case " $granted " in *" $p "*) ;; *) extra="$extra $p" ;; esac
+done
+[ -n "$extra" ] && echo "Optional, for post results:$extra — add them in Graph API Explorer and run this again to read comments and reach."
 ig_ok=yes
 for p in instagram_basic instagram_content_publish; do
   case " $granted " in *" $p "*) ;; *) ig_ok=no ;; esac
