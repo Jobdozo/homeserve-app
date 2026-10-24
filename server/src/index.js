@@ -3360,6 +3360,8 @@ app.get("/api/agents/self", agentOnly, crm(async (req, res) => {
     supportAutoSend: agents.getConfig().supportAutoSend,
     socialAutoPost: agents.getConfig().socialAutoPost,
     socialPostsPerDay: agents.getConfig().socialPostsPerDay,
+    socialStories: agents.getConfig().socialStories,
+    socialCarousels: agents.getConfig().socialCarousels,
     kind: req.admin.kind,
     instructions: ["specialist", "engineer"].includes(req.admin.kind) ? req.admin.instructions : undefined,
     template: ["engineer", "specialist"].includes(req.admin.kind) ? req.admin.template : undefined,
@@ -3408,9 +3410,14 @@ app.patch("/api/admin/ai/config", adminOnly, crm(async (req, res) => {
       supportAutoSend: req.body?.supportAutoSend,
       socialAutoPost: req.body?.socialAutoPost,
       socialPostsPerDay: req.body?.socialPostsPerDay,
+      socialStories: req.body?.socialStories,
+      socialCarousels: req.body?.socialCarousels,
     },
     actorOf(req)
   );
+  for (const k of ["socialStories", "socialCarousels"]) {
+    if (before[k] !== cfg[k]) audit(req, "ai.config", "ai", "config", k === "socialStories" ? "Social Stories" : "Social carousels", [{ field: k, from: before[k], to: cfg[k] }]);
+  }
   if (before.socialAutoPost !== cfg.socialAutoPost || before.socialPostsPerDay !== cfg.socialPostsPerDay) {
     audit(req, "ai.config", "ai", "config", "Social auto-post", [
       { field: "socialAutoPost", from: `${before.socialAutoPost} (${before.socialPostsPerDay}/day)`, to: `${cfg.socialAutoPost} (${cfg.socialPostsPerDay}/day)` },
@@ -3813,8 +3820,44 @@ app.get("/api/admin/social/posts", adminOnly, crm(async (req, res) => res.json(s
 app.post("/api/admin/social/posts", adminOnly, crm(async (req, res) => {
   const row = await social.publish(req.body || {}, actorOf(req));
   const done = Object.entries(row.results).filter(([, r]) => r.ok).map(([k]) => k);
-  await store.logActivity("social", `Posted on ${done.join(" + ")} by ${actorOf(req)}: "${row.caption.slice(0, 60)}${row.caption.length > 60 ? "…" : ""}"`).catch(() => {});
+  const what = row.format === "story" ? `a Story: "${row.storyLine}"` : `${row.format === "carousel" ? "a carousel" : ""}"${row.caption.slice(0, 60)}${row.caption.length > 60 ? "…" : ""}"`;
+  await store.logActivity("social", `Posted on ${done.join(" + ")} by ${actorOf(req)}: ${what}`).catch(() => {});
   res.status(201).json(row);
+}));
+// A fresh picture for a post, drawn by Image Studio in the category's colour with the logo.
+app.post("/api/admin/social/picture", adminOnly, crm(async (req, res) => {
+  const cats = await store.listCategories();
+  const want = String(req.body?.category || "").toLowerCase().trim();
+  const cat = cats.find((c) => c.id === want || String(c.name || "").toLowerCase() === want) || null;
+  const colour = cat ? imageStyle.colourFor(cat.id, cats.map((c) => c.id)) : null;
+  const out = await imageStudio.drawForSocial({ topic: req.body?.topic, category: cat?.name || "", scene: req.body?.scene, show: req.body?.show, colour });
+  // A full address, so Approvals can show it and social.js can fetch it (uploads live on the API host).
+  res.json({ ...out, url: `${(process.env.SOCIAL_IMAGE_BASE || "https://api.tikdum.com").replace(/\/$/, "")}${out.url}`, colour, category: cat?.name || null });
+}));
+app.post("/api/admin/social/metrics/refresh", adminOnly, crm(async (req, res) => res.json(await social.refreshMetrics())));
+setInterval(() => social.refreshMetrics().catch((e) => console.error("social results check failed:", e.message)), 12 * 3600 * 1000).unref();
+setTimeout(() => social.refreshMetrics().catch((e) => console.error("social results check failed:", e.message)), 3 * 60 * 1000).unref();
+
+// The Marketing Agent's festival and season calendar (marketingCalendar.js).
+const marketingCalendar = require("./marketingCalendar");
+app.get("/api/admin/social/calendar", adminOnly, crm(async (req, res) => {
+  const all = marketingCalendar.list();
+  res.json(req.query.upcoming ? marketingCalendar.upcoming(all) : all);
+}));
+app.post("/api/admin/social/calendar", adminOnly, crm(async (req, res) => {
+  const row = marketingCalendar.add(req.body || {}, actorOf(req));
+  audit(req, "calendar.add", "marketingCalendar", row.id, row.name);
+  res.status(201).json(row);
+}));
+app.patch("/api/admin/social/calendar/:id", adminOnly, crm(async (req, res) => {
+  const row = marketingCalendar.edit(req.params.id, req.body || {}, actorOf(req));
+  audit(req, "calendar.edit", "marketingCalendar", row.id, row.name);
+  res.json(row);
+}));
+app.delete("/api/admin/social/calendar/:id", adminOnly, crm(async (req, res) => {
+  const row = marketingCalendar.list().find((r) => r.id === req.params.id);
+  if (row && marketingCalendar.remove(row.id)) audit(req, "calendar.delete", "marketingCalendar", row.id, row.name);
+  res.json({ ok: true });
 }));
 
 // ---- Scheduled push campaigns (pushCampaigns.js) ----

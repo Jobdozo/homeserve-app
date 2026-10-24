@@ -323,6 +323,9 @@ const RULES = [
   [/^\/admin\/meta\/(status|exclusion-check)$/, () => "reports.view"],
   [/^\/admin\/meta\/self-test$/, () => "settings.edit"],
   [/^\/admin\/social\/posts$/, (m) => (m === "GET" ? "social.view" : "social.add")],
+  // A fresh picture for a post (Image Studio) and reading results back are part of posting.
+  [/^\/admin\/social\/(picture|metrics\/refresh)$/, () => "social.add"],
+  [/^\/admin\/social\/calendar(\/|$)/, (m) => (m === "GET" ? "social.view" : "social.add")],
   [/^\/admin\/social(\/|$)/, () => "social.view"],
   [/^\/admin\/crm\/settings$/, (m) => (m === "GET" ? "crm.view" : "crm.manage")],
   [/^\/admin\/crm(\/|$)/, (m) => `crm.${byMethod(m)}`],

@@ -53,6 +53,7 @@ const NOTIFY_PER_HOUR = 30;
 const WHATSAPP_PER_HOUR = 20;
 // Facebook/Instagram posts the agents may publish by themselves in a day (Auto-post), at most.
 const SOCIAL_MAX_PER_DAY = 5;
+const SOCIAL_STORIES_PER_DAY = 2;
 const clampPosts = (n) => Math.min(SOCIAL_MAX_PER_DAY, Math.max(1, Math.round(Number(n) || 1)));
 
 // What an agent may propose for a person to approve: [type, method, path regex].
@@ -83,6 +84,9 @@ function getConfig() {
     // socialPostsPerDay a day). Off by default: posts wait in Approvals.
     socialAutoPost: row?.socialAutoPost === true,
     socialPostsPerDay: clampPosts(row?.socialPostsPerDay ?? SOCIAL_MAX_PER_DAY),
+    // What the Marketing Agent may make besides single pictures (both on by default).
+    socialStories: row?.socialStories !== false,
+    socialCarousels: row?.socialCarousels !== false,
     updatedAt: row?.updatedAt || null,
     updatedBy: row?.updatedBy || null,
   };
@@ -95,6 +99,8 @@ function setConfig(patch, actor) {
   if (patch.supportAutoSend !== undefined) row.supportAutoSend = patch.supportAutoSend === true;
   if (patch.socialAutoPost !== undefined) row.socialAutoPost = patch.socialAutoPost === true;
   if (patch.socialPostsPerDay !== undefined) row.socialPostsPerDay = clampPosts(patch.socialPostsPerDay);
+  if (patch.socialStories !== undefined) row.socialStories = patch.socialStories !== false;
+  if (patch.socialCarousels !== undefined) row.socialCarousels = patch.socialCarousels !== false;
   if (patch.supportKnowledge !== undefined) {
     const text = String(patch.supportKnowledge || "");
     if (text.length > MAX_KNOWLEDGE) throw fail(400, `Support knowledge is limited to ${MAX_KNOWLEDGE} characters`);
@@ -317,8 +323,19 @@ function policy(req, admin, path) {
     const cfg = getConfig();
     if (!cfg.socialAutoPost) return { status: 403, error: "Auto-post is off — propose the post for approval instead" };
     const today = istDay();
-    const byAgents = jsonStore.readAll("socialPosts").filter((p) => String(p.by || "").endsWith("[AI agent]") && istDay(Date.parse(p.at)) === today).length;
-    if (byAgents >= cfg.socialPostsPerDay) return { status: 429, error: `Today's ${cfg.socialPostsPerDay} automatic posts are done` };
+    const mine = jsonStore.readAll("socialPosts").filter((p) => String(p.by || "").endsWith("[AI agent]") && istDay(Date.parse(p.at)) === today);
+    // Stories don't count towards the day's posts; they have their own small limit.
+    if (body.format === "story") {
+      if (!cfg.socialStories) return { status: 403, error: "Stories are switched off" };
+      if (mine.filter((p) => p.format === "story").length >= SOCIAL_STORIES_PER_DAY) return { status: 429, error: "Today's Stories are done" };
+    } else {
+      if (body.format === "carousel" && !cfg.socialCarousels) return { status: 403, error: "Carousels are switched off" };
+      if (mine.filter((p) => p.format !== "story").length >= cfg.socialPostsPerDay) return { status: 429, error: `Today's ${cfg.socialPostsPerDay} automatic posts are done` };
+    }
+  }
+  // The calendar is the people's: the agent reads it, never changes it.
+  if (req.method !== "GET" && /^\/admin\/social\/calendar(\/|$)/.test(path)) {
+    return { status: 403, error: "Only a person can change the marketing calendar" };
   }
   if (req.method === "POST" && /^\/admin\/push-campaigns(\/|$)/.test(path)) {
     return { status: 403, error: "AI agents can't start or stop push campaigns — propose one for approval instead" };

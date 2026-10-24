@@ -48,6 +48,7 @@ const sections = [
       { label: "Complaints & Disputes", icon: AlertIcon, to: "/complaints", perm: "complaints.view" },
       { label: "Notifications", icon: BellIcon, to: "/notifications", perm: "notifications.view" },
       { label: "WhatsApp Inbox", icon: ChatIcon, to: "/inbox", perm: "inbox.view" },
+      { label: "Social Media", icon: ChartIcon, to: "/social", perm: "social.view" },
     ],
   },
   {

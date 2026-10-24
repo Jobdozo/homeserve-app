@@ -29,7 +29,9 @@ class TikdumClient {
     return data.agent;
   }
 
-  async request(method, path, body, { retries = 2 } = {}) {
+  // timeoutMs: longer for slow calls (drawing a picture, publishing a carousel); pass retries: 0
+  // for anything that must not happen twice.
+  async request(method, path, body, { retries = 2, timeoutMs = 30000 } = {}) {
     for (let attempt = 0; ; attempt++) {
       if (!this.token || Date.now() > this.tokenExpiresAt) await this.login();
       let r;
@@ -38,7 +40,7 @@ class TikdumClient {
           method,
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.token}` },
           body: body === undefined ? undefined : JSON.stringify(body),
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(timeoutMs),
         });
       } catch (e) {
         if (attempt < retries) {

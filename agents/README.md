@@ -123,6 +123,19 @@ Friday from 10:00 IST (`SOCIAL_POST_DAYS_IST`, `SOCIAL_POST_HOUR_IST`) and one f
 service photos); Approvals shows the picture and caption, and approving publishes to both. Nothing is posted
 without a person's approval; a rejected post is simply dropped.
 
+With **Auto-post** on (AI Agents → Approvals) it publishes up to 5 a day by itself. Every post now:
+- gets a **fresh picture** from Image Studio in the category's colour with the logo (`POST /admin/social/picture`,
+  max `SOCIAL_PICTURES_PER_DAY`, default 8); if that fails it uses one of Tikdum's own pictures;
+- may be a **carousel** (title card, 3–5 point cards and a "book now" card, drawn by `server/src/socialCards.js` with
+  the bundled brand fonts) — at most one a day, switch in Approvals;
+- follows the **festival & season calendar** in Admin → **Social Media** → Festival calendar
+  (`server/src/marketingCalendar.js`): it only names festivals listed there, from `leadDays` before each;
+- learns from **results**: the server reads likes, comments, shares, saves and reach of every post twice a day;
+  the writer sees its best and worst recent posts, and after 10 measured posts the posting hours move to the
+  ones that do best (one hour a day stays experimental).
+The day's first post from 16:00 IST is also shared as a **Story** (switch in Approvals; max 2 a day, not counted
+in the daily posts). Mondays from 11:00 IST it posts a **results report** to Alerts & reports.
+
 Not built yet (shown as "Not built yet"): the Google side of Reviews (needs Google Business Profile access), and the Engineering team (needs GitHub branch protection + a repo-only token first).
 
 ## Engineering team (GitHub): Bug Triage, Developer, Code Reviewer, Tester

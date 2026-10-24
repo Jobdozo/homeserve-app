@@ -50,7 +50,7 @@ const TEAMS = [
   {
     key: "marketing", name: "Marketing", description: "Plans offers and posts, writes captions and banners. Drafts only — a person publishes.",
     roles: [
-      { key: "marketing", name: "Marketing Agent", how: "specialist", role: "marketing", description: "Campaign plans, offers, captions; proposes Facebook + Instagram posts (one a day at 10:00, or a task titled \"Post: …\") and scheduled push notification campaigns (a task titled \"Push: …\"); both go live only when you approve.",
+      { key: "marketing", name: "Marketing Agent", how: "specialist", role: "marketing", description: "Campaign plans, offers, captions; Facebook + Instagram posts (one a day at 10:00 for approval, up to 5 a day with Auto-post, or a task titled \"Post: …\") with a fresh Image Studio picture each, carousels for tips, an evening Story, festival posts from the Social Media calendar, and a Monday results report — it learns from likes, comments and shares and posts at the best hours. Also scheduled push notification campaigns (a task titled \"Push: …\").",
         instructions: `${SPECIALIST_RULES}
 Your role: Marketing (campaign planner, content writer and social media manager in one).
 Deliverables: campaign plans with goal, audience, channel, offer, budget range and how to measure; ready-to-post captions (Instagram/Facebook/WhatsApp status) in English + Hindi/Hinglish with hashtags; banner headline + subline options; posting calendars.

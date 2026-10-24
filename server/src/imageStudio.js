@@ -529,6 +529,49 @@ function enqueue(targets, actor) {
   return made;
 }
 
+// A fresh picture for one Facebook/Instagram post (social.js, the Marketing Agent): drawn and
+// checked like a service picture, the logo stamped on, and used straight away — a post is reviewed
+// as a whole (Approvals) or published by the agent when Auto-post is on. At most
+// SOCIAL_PICTURES_PER_DAY a day, inside the studio's daily limit. Returns { url: "/uploads/…", maker }.
+const SOCIAL_PICTURES_PER_DAY = Number(process.env.SOCIAL_PICTURES_PER_DAY) || 8;
+const SOCIAL_USAGE = "socialPictureUsage";
+async function drawForSocial({ topic, category = "", scene = "", show = "service", colour = null }) {
+  if (!configured()) throw fail(400, NOT_SET_UP);
+  const today = jsonStore.readAll(SOCIAL_USAGE).find((u) => u.id === istDay());
+  if ((today?.count || 0) >= SOCIAL_PICTURES_PER_DAY) throw fail(429, `Today's ${SOCIAL_PICTURES_PER_DAY} new post pictures are done`);
+  if (usageToday() >= DAILY_LIMIT) throw fail(429, `Daily limit of ${DAILY_LIMIT} pictures reached`);
+  const list = await makers();
+  if (!list.length) throw fail(400, NOT_SET_UP);
+  const name = String(topic || "").slice(0, 120);
+  const found = audienceFor({ name, category });
+  const person = found.people && show === "person";
+  const expect = { audience: found.audience, people: person };
+  // The scene comes from the agent's own writing; prices and numbers would be drawn as text.
+  const sceneText = String(scene || "").replace(/[₹$d]+/g, "").replace(/s+/g, " ").trim().slice(0, 400);
+  const what = person ? personLine(found.audience) : `${sceneText || builtInScene(name) || builtInScene(category) || `the room, items and tools involved in ${name}, shown clean and finished`}, in a bright, tidy Indian home. No people and no body parts.`;
+  const accent = ` Accent colour ${colour?.name || "soft purple"} with white in a few small details; everything else in natural colours.`;
+  const prompt = `${STYLE} Subject — a picture for a social media post about ${name}${category ? ` (${category})` : ""}. ${person && sceneText ? `Setting: ${sceneText}. ` : ""}${what}${accent} Square composition, subject centred with breathing room.`;
+  const checker = list.find((m) => m.name === "gemini" && m.textModel)?.textModel || null;
+  let kept = null;
+  let used = null;
+  let qc = null;
+  for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+    addUsage();
+    const brief = attempt === 1 ? prompt : `${prompt} Avoid these problems seen in the previous try: ${(qc?.issues || []).join("; ") || "none"}.`;
+    const { image, maker } = await draw(list, brief, "1:1");
+    used = maker;
+    qc = checker && !geminiResting() ? await inspect(checker, image, expect).catch(() => ({ ok: true, issues: [] })) : { ok: true, issues: [] };
+    kept = await stampLogo(image, colour);
+    if (qc.ok) break;
+  }
+  if (!qc.ok) throw fail(422, `The new picture didn't pass the check (${qc.issues.join("; ").slice(0, 160)})`);
+  if (today) jsonStore.update(SOCIAL_USAGE, today.id, { count: today.count + 1 });
+  else jsonStore.insert(SOCIAL_USAGE, { id: istDay(), count: 1 });
+  const file = `${crypto.randomBytes(16).toString("hex")}${extFor(kept.mime)}`;
+  fs.writeFileSync(path.join(UPLOADS_DIR, file), kept.data);
+  return { url: `/uploads/${file}`, maker: used.name, people: person };
+}
+
 // Admin decided: the picture was used (the page uploads the final, resized copy) or thrown away.
 function settle(id, status, actor) {
   const c = jsonStore.readAll(CANDIDATES).find((x) => x.id === id);
@@ -563,4 +606,4 @@ async function status() {
   return out;
 }
 
-module.exports = { audienceFor, buildBrief, pickModels, enqueue, settle, listCandidates, status, MAX_QUEUE, DAILY_LIMIT, _inspect: inspect, _drawImage: drawImage, _stampLogo: stampLogo, _forFlux: forFlux, _sceneFor: sceneFor, _builtInScene: builtInScene, _resetGemini: () => { geminiRestUntil = 0; } };
+module.exports = { audienceFor, buildBrief, pickModels, enqueue, settle, drawForSocial, SOCIAL_PICTURES_PER_DAY, listCandidates, status, MAX_QUEUE, DAILY_LIMIT, _inspect: inspect, _drawImage: drawImage, _stampLogo: stampLogo, _forFlux: forFlux, _sceneFor: sceneFor, _builtInScene: builtInScene, _resetGemini: () => { geminiRestUntil = 0; } };

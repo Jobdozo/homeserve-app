@@ -173,6 +173,17 @@ function SocialAutoPostPanel({ config, onSaved, canEdit }) {
           </div>
         )}
       </div>
+      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-gray-100 pt-3 text-[12.5px] text-gray-700">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" className="h-4 w-4 accent-brand" checked={config.socialCarousels !== false} disabled={!canEdit} onChange={(e) => save({ socialCarousels: e.target.checked }, e.target.checked ? "Carousels on" : "Carousels off")} />
+          Carousels (tips as swipeable slides, at most one a day)
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" className="h-4 w-4 accent-brand" checked={config.socialStories !== false} disabled={!canEdit} onChange={(e) => save({ socialStories: e.target.checked }, e.target.checked ? "Stories on" : "Stories off")} />
+          A Story every evening (with Auto-post)
+        </label>
+        <a href="#/social" className="font-semibold text-brand">Results &amp; festival calendar →</a>
+      </div>
     </div>
   );
 }
