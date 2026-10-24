@@ -53,6 +53,49 @@ export function remaining(pos, dest, route) {
   return { km: left * 1.3, minutes: Math.max(1, Math.round(((left * 1.3) / 20) * 60)), byRoad: false };
 }
 
+// Index of the route point nearest to p.
+function nearestIndex(points, p) {
+  let best = 0;
+  points.forEach((q, i) => {
+    if (km(q, p) < km(points[best], p)) best = i;
+  });
+  return best;
+}
+
+// The route still to ride from pos: starting at pos, without the part already ridden. Empty once
+// they're at the door (within ~150 m), so no line loops round the block on arrival.
+export function routeAhead(points, pos, dest) {
+  if (!pos || (dest && km(pos, dest) < 0.15)) return [];
+  if (points.length < 2) return dest ? [pos, dest] : [];
+  return [pos, ...points.slice(Math.min(nearestIndex(points, pos) + 1, points.length - 1))];
+}
+
+// The next turn on the route (route.steps from the server) and how far along the road it is:
+// { step, metres } or null. The first step ("Head south-east") only counts while still at it.
+export function nextTurn(points, steps, pos) {
+  if (!pos || points.length < 2 || !steps?.length) return null;
+  const here = nearestIndex(points, pos);
+  const at = steps.map((s) => nearestIndex(points, s));
+  const i = steps.findIndex((s, n) => n > 0 && at[n] > here);
+  if (i < 0) return null;
+  let metres = km(pos, points[Math.min(here + 1, points.length - 1)]) * 1000;
+  for (let k = here + 1; k < at[i]; k++) metres += km(points[k], points[k + 1]) * 1000;
+  return { step: steps[i], metres: Math.max(0, Math.round(metres)) };
+}
+
+// An arrow for Google's manoeuvre names.
+export function turnArrow(maneuver = "") {
+  if (/ROUNDABOUT/.test(maneuver)) return "⟳";
+  if (/UTURN/.test(maneuver)) return "⤺";
+  if (/SHARP_LEFT/.test(maneuver)) return "↰";
+  if (/SHARP_RIGHT/.test(maneuver)) return "↱";
+  if (/SLIGHT_LEFT|FORK_LEFT|RAMP_LEFT|MERGE/.test(maneuver)) return "↖";
+  if (/SLIGHT_RIGHT|FORK_RIGHT|RAMP_RIGHT/.test(maneuver)) return "↗";
+  if (/LEFT/.test(maneuver)) return "←";
+  if (/RIGHT/.test(maneuver)) return "→";
+  return "↑";
+}
+
 // The muted Google map look that lets the route and the vehicle stand out.
 export const QUIET_MAP_STYLE = [
   { featureType: "poi", stylers: [{ visibility: "off" }] },

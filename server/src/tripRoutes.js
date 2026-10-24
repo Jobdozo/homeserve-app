@@ -34,7 +34,9 @@ async function compute(from, to, mode, fetchImpl) {
     headers: {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": KEY(),
-      "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline",
+      // + the turn-by-turn steps for the Business app's full-screen trip view
+      "X-Goog-FieldMask":
+        "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.navigationInstruction,routes.legs.steps.startLocation,routes.legs.steps.distanceMeters",
       Referer: "https://tikdum.com/",
     },
     body: JSON.stringify({ origin: point(from), destination: point(to), travelMode: mode, languageCode: "en-IN", units: "METRIC" }),
@@ -44,7 +46,19 @@ async function compute(from, to, mode, fetchImpl) {
   if (!res.ok) throw Object.assign(new Error(json.error?.message || `Routes API answered ${res.status}`), { status: res.status });
   const r = json.routes?.[0];
   if (!r?.polyline?.encodedPolyline) throw new Error("No route found");
-  return { polyline: r.polyline.encodedPolyline, distanceMeters: Number(r.distanceMeters) || 0, durationSeconds: parseInt(String(r.duration || "0"), 10) || 0 };
+  // Each turn: where it is, what to do ("Turn left onto Canal Rd") and the manoeuvre for the arrow.
+  const steps = (r.legs || [])
+    .flatMap((l) => l.steps || [])
+    .map((s) => ({
+      lat: s.startLocation?.latLng?.latitude,
+      lng: s.startLocation?.latLng?.longitude,
+      instruction: String(s.navigationInstruction?.instructions || "").slice(0, 160),
+      maneuver: String(s.navigationInstruction?.maneuver || ""),
+      distanceMeters: Number(s.distanceMeters) || 0,
+    }))
+    .filter((s) => typeof s.lat === "number" && typeof s.lng === "number" && s.instruction)
+    .slice(0, 80);
+  return { polyline: r.polyline.encodedPolyline, distanceMeters: Number(r.distanceMeters) || 0, durationSeconds: parseInt(String(r.duration || "0"), 10) || 0, steps };
 }
 
 // The route for this trip: a cached one, or a fresh one when needed. { route, fresh } or null
@@ -79,6 +93,7 @@ async function routeFor(bookingId, from, to, { now = Date.now(), fetchImpl = fet
 const cached = (bookingId) => cache.get(bookingId) || null;
 const forget = (bookingId) => cache.delete(bookingId);
 // What the apps get: no internal fields.
-const view = (r) => (r ? { polyline: r.polyline, distanceMeters: r.distanceMeters, durationSeconds: r.durationSeconds, from: r.from, computedAt: new Date(r.at).toISOString() } : null);
+const view = (r) =>
+  r ? { polyline: r.polyline, distanceMeters: r.distanceMeters, durationSeconds: r.durationSeconds, steps: r.steps || [], from: r.from, computedAt: new Date(r.at).toISOString() } : null;
 
 module.exports = { routeFor, cached, forget, view, needsRoute, metres };

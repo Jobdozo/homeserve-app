@@ -3,7 +3,8 @@ import { useApp } from "../context/AppContext";
 import { Card } from "./biz";
 import { NavigateIcon } from "./icons";
 import { loadGoogleMaps, mapsKey } from "../utils/googleMaps";
-import { bearing, decodePolyline, km, remaining, QUIET_MAP_STYLE, VEHICLE_PATH, PIN_PATH } from "../utils/tripMath";
+import { bearing, decodePolyline, km, remaining, routeAhead, QUIET_MAP_STYLE, VEHICLE_PATH, PIN_PATH } from "../utils/tripMath";
+import FullScreenTrip from "./FullScreenTrip";
 
 // The trip on an accepted job (server: liveLocation.js, tripRoutes.js). A map shows the road route
 // from this phone to the customer, the vehicle turning the way they ride and the customer's pin;
@@ -70,15 +71,8 @@ function TripMap({ me, heading, destination, route }) {
 
   useEffect(() => {
     if (state !== "ready") return;
-    let points = route?.polyline ? decodePolyline(route.polyline) : me ? [me, destination] : [];
-    if (me && points.length > 1) {
-      let nearest = 0;
-      points.forEach((p, i) => {
-        if (km(p, me) < km(points[nearest], me)) nearest = i;
-      });
-      points = [me, ...points.slice(Math.min(nearest + 1, points.length - 1))];
-    }
-    api.current?.update(me, heading, points);
+    // From this phone on (a straight line until Google's route arrives); none once at the door.
+    api.current?.update(me, heading, routeAhead(route?.polyline ? decodePolyline(route.polyline) : [], me, destination));
   }, [state, me?.lat, me?.lng, heading, route?.polyline]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (state === "none") return null;
@@ -135,6 +129,7 @@ export default function TripCard({ request, destination, mapsUrl, customerSharin
   const { trips, setTrip, myFix, showToast } = useApp();
   const [busy, setBusy] = useState(false);
   const [heading, setHeading] = useState(0);
+  const [full, setFull] = useState(false);
   const last = useRef(null);
   const onTrip = trips.includes(request.id);
   const who = firstName(request.customer?.name);
@@ -154,6 +149,7 @@ export default function TripCard({ request, destination, mapsUrl, customerSharin
     try {
       await setTrip(request.id, !onTrip);
       showToast(onTrip ? "Stopped sharing your location" : `${who} can now see you coming`);
+      setFull(!onTrip); // starting opens the full-screen trip; stopping closes it
     } catch (e) {
       showToast(e.message || "Couldn't change the trip");
     }
@@ -186,10 +182,29 @@ export default function TripCard({ request, destination, mapsUrl, customerSharin
 
       {onTrip ? (
         <>
-          {mapsUrl && (
-            <a href={mapsUrl} target="_blank" rel="noreferrer" className="flex h-[46px] items-center justify-center gap-2 rounded-2xl bg-raised text-[14px] font-bold text-ink">
-              <NavigateIcon width={17} height={17} /> Navigate in Google Maps
-            </a>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => setFull(true)} className="flex h-[46px] items-center justify-center gap-2 rounded-2xl bg-brand text-[14px] font-bold text-white">
+              <NavigateIcon width={17} height={17} /> Full screen
+            </button>
+            {mapsUrl && (
+              <a href={mapsUrl} target="_blank" rel="noreferrer" className="flex h-[46px] items-center justify-center gap-2 rounded-2xl bg-raised text-[14px] font-bold text-ink">
+                Google Maps
+              </a>
+            )}
+          </div>
+          {full && (
+            <FullScreenTrip
+              request={request}
+              me={me}
+              heading={heading}
+              destination={destination}
+              route={route}
+              mapsUrl={mapsUrl}
+              who={who}
+              onStop={toggle}
+              stopping={busy}
+              onClose={() => setFull(false)}
+            />
           )}
           <p className="text-[11.5px] leading-snug text-ink-muted">Keep Tikdum open on the way — your location only updates while the app is on screen.</p>
         </>

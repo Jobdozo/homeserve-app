@@ -4,7 +4,7 @@ import { socket } from "../socket";
 import { useApp } from "../context/AppContext";
 import { columnsFromRows, downloadCsv, toCsv } from "../utils/csv";
 import { loadGoogleMaps, onMapsRefused } from "../utils/googleMaps";
-import { bearing, decodePolyline, km, QUIET_MAP_STYLE, VEHICLE_PATH, PIN_PATH } from "../utils/tripMath";
+import { bearing, decodePolyline, km, routeAhead, QUIET_MAP_STYLE, VEHICLE_PATH, PIN_PATH } from "../utils/tripMath";
 
 const inputCls =
   "w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-[12.5px] text-gray-800 outline-none focus:border-brand";
@@ -78,13 +78,9 @@ function LiveTripsMap({ trips }) {
       d.home = marker(d.home, home, symbol(PIN_PATH, DOT.home), `${t.customer}'s address · #${t.ref}`);
       d.customer = marker(d.customer, cust, dot(DOT.customer, 7), `${t.customer} (sharing live) · #${t.ref}`);
       if (pro && home) {
-        // The road route (server tripRoutes.js) from the vehicle on; a straight line until it's drawn.
-        let path = t.route?.polyline ? decodePolyline(t.route.polyline) : [pro, home];
-        let nearest = 0;
-        path.forEach((p, i) => {
-          if (km(p, pro) < km(path[nearest], pro)) nearest = i;
-        });
-        path = [pro, ...path.slice(Math.min(nearest + 1, path.length - 1))];
+        // The road route (server tripRoutes.js) from the vehicle on; a straight line until it's drawn,
+        // and none once they're at the door.
+        const path = routeAhead(t.route?.polyline ? decodePolyline(t.route.polyline) : [], pro, home);
         d.line = d.line || new g.maps.Polyline({ map, strokeColor: DOT.provider, strokeOpacity: 0.85, strokeWeight: 4 });
         d.line.setPath(path);
       } else if (d.line) {

@@ -5,7 +5,7 @@ import { api } from "../api";
 import { socket } from "../socket";
 import { useApp } from "../context/AppContext";
 import { mapsKey, loadGoogleMaps } from "../utils/googleMaps";
-import { bearing, decodePolyline, km, remaining, QUIET_MAP_STYLE, VEHICLE_PATH, PIN_PATH } from "../utils/tripMath";
+import { bearing, decodePolyline, km, remaining, routeAhead, QUIET_MAP_STYLE, VEHICLE_PATH, PIN_PATH } from "../utils/tripMath";
 import { MapPinIcon } from "./icons";
 
 // Live tracking on a booking (server: liveLocation.js, tripRoutes.js). Once the professional starts
@@ -134,17 +134,8 @@ function LiveMap({ home, pro, heading, route }) {
   }, [ready, pro?.lat, pro?.lng, heading]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!ready) return;
-    // The road route from where it was drawn; until then, a straight line so there's always a line.
-    let points = route?.polyline ? decodePolyline(route.polyline) : pro && home ? [pro, home] : [];
-    // Start the line at the vehicle and drop the part already ridden (up to the nearest point).
-    if (pro && points.length > 1) {
-      let nearest = 0;
-      points.forEach((p, i) => {
-        if (km(p, pro) < km(points[nearest], pro)) nearest = i;
-      });
-      points = [pro, ...points.slice(Math.min(nearest + 1, points.length - 1))];
-    }
-    map.current?.setRoute(points);
+    // The road route from the vehicle on (a straight line until it's drawn); none once they're at the door.
+    map.current?.setRoute(routeAhead(route?.polyline ? decodePolyline(route.polyline) : [], pro, home));
   }, [ready, route?.polyline, pro?.lat, pro?.lng, home?.lat, home?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <div ref={el} className="h-[260px] w-full overflow-hidden rounded-2xl bg-mist" />;
