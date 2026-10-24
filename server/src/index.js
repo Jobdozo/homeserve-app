@@ -3489,19 +3489,26 @@ app.post("/api/admin/ai/actions/:id/approve", adminOnly, crm(async (req, res) =>
   let ok = false;
   let result = null;
   let error = null;
+  // Publishing on Instagram waits for Meta to process each picture (a carousel: several), so a
+  // social post gets 5 minutes. A request that's still running when we stop waiting may well have
+  // worked — it's marked done, not put back for approval, so nobody approves (and posts) it twice.
+  const slow = action.type === "social.post";
   try {
     const r = await fetch(`http://127.0.0.1:${PORT}/api${path}`, {
       method,
       headers: { "Content-Type": "application/json", Authorization: req.headers.authorization },
       body: method === "GET" ? undefined : JSON.stringify(body || {}),
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(slow ? 300000 : 20000),
     });
     const data = await r.json().catch(() => null);
     ok = r.ok;
     if (ok) result = { status: r.status };
     else error = data?.error || `Request failed (${r.status})`;
   } catch (e) {
-    error = e.message;
+    if (e.name === "TimeoutError") {
+      ok = true;
+      result = { status: "unconfirmed", note: "Still running when we stopped waiting — check the Page (or Activity) before doing it again." };
+    } else error = e.message;
   }
   const updated = agents.finishExecution(action.id, { ok, result, error });
   audit(req, ok ? "ai.action.approve" : "ai.action.approve_failed", "aiAction", action.id, action.title, [
