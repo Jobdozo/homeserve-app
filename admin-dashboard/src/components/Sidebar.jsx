@@ -58,6 +58,7 @@ const sections = [
       { label: "User Management", icon: UsersIcon, to: "/users", perm: "users.view" },
       { label: "AI Agents", icon: BotIcon, to: "/ai-agents", perm: "ai.view" },
       { label: "Settings", icon: SettingsIcon, to: "/settings", perm: "settings.view" },
+      { label: "Paid Services", icon: CalendarIcon, to: "/paid-services", perm: "*" },
       { label: "Audit Logs", icon: ArchiveIcon, to: "/audit-logs", perm: "audit.view" },
       { label: "Support", icon: SupportIcon, perm: "*" },
     ],

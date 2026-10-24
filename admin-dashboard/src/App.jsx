@@ -23,6 +23,7 @@ const DisputesPage = lazy(() => import("./pages/DisputesPage"));
 const PaymentsPage = lazy(() => import("./pages/PaymentsPage"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage"));
 const AuditLogsPage = lazy(() => import("./pages/AuditLogsPage"));
+const PaidServicesPage = lazy(() => import("./pages/PaidServicesPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsHubPage"));
 const DataManagementPage = lazy(() => import("./pages/DataManagementPage"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
@@ -78,6 +79,7 @@ function AppRoutes() {
     ["/payments", <PaymentsPage />, "payments.view"],
     ["/reports", <ReportsPage />, "reports.view"],
     ["/audit-logs", <AuditLogsPage />, "audit.view"],
+    ["/paid-services", <PaidServicesPage />, "*"], // Super Admin only (costs and accounts)
     ["/settings", <SettingsPage />, "settings.view"],
     ["/data", <DataManagementPage />, ["data.export", "data.import"]],
     ["/notifications", <NotificationsPage />, "notifications.view"],

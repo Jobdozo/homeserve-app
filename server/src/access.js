@@ -318,6 +318,8 @@ const RULES = [
   [/^\/admin\/verification\/precheck$/, () => "providers.view"],
   [/^\/admin\/watch\/provider-quality$/, () => "providers.view"],
   [/^\/admin\/watch\/(retention|fraud|reviews)$/, () => "customers.view"],
+  // The Renewals Bot reads renewal dates; the list itself (/admin/paid-services) stays Super Admin only.
+  [/^\/admin\/watch\/renewals$/, () => "reports.view"],
   [/^\/admin\/meta\/(status|exclusion-check)$/, () => "reports.view"],
   [/^\/admin\/meta\/self-test$/, () => "settings.edit"],
   [/^\/admin\/social\/posts$/, (m) => (m === "GET" ? "social.view" : "social.add")],

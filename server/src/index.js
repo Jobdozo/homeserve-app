@@ -36,6 +36,7 @@ const { sendOtpViaWhatsApp, isConfigured: whatsappConfigured } = require("./what
 const otpGuard = require("./otpGuard");
 const loginAttempts = require("./loginAttempts");
 const blockedPhones = require("./blockedPhones");
+const paidServices = require("./paidServices");
 const accounting = require("./accounting");
 const subcategories = require("./subcategories");
 const imageStudio = require("./imageStudio");
@@ -3765,6 +3766,36 @@ app.get("/api/admin/watch/fraud", adminOnly, crm(async (req, res) => {
   const [providers, bookings] = await Promise.all([store.listProviders(), store.listBookings({})]);
   res.json(watchdogs.fraud({ providers, bookings, refundClaims: store.listRefundClaims(), ignore: testProviderIds() }));
 }));
+// Paid services and their renewal dates (paidServices.js): Super Admin edits the list,
+// the Renewals Bot reads it here. Automatic dates (domain, HTTPS) are read twice a day.
+app.get("/api/admin/watch/renewals", adminOnly, crm(async (req, res) => res.json(paidServices.list())));
+app.get("/api/admin/paid-services", adminOnly, crm(async (req, res) => res.json(paidServices.list())));
+app.post("/api/admin/paid-services", adminOnly, crm(async (req, res) => {
+  const row = paidServices.add(req.body || {}, actorOf(req));
+  audit(req, "paidService.add", "paidService", row.id, row.name);
+  res.status(201).json(row);
+}));
+app.post("/api/admin/paid-services/check-now", adminOnly, crm(async (req, res) => {
+  await paidServices.refresh();
+  res.json(paidServices.list());
+}));
+app.patch("/api/admin/paid-services/:id", adminOnly, crm(async (req, res) => {
+  const row = paidServices.edit(req.params.id, req.body || {}, actorOf(req));
+  audit(req, "paidService.edit", "paidService", row.id, row.name);
+  res.json(row);
+}));
+app.post("/api/admin/paid-services/:id/renewed", adminOnly, crm(async (req, res) => {
+  const row = paidServices.markRenewed(req.params.id, actorOf(req));
+  audit(req, "paidService.renewed", "paidService", row.id, row.name, [{ field: "renewsOn", from: null, to: row.renewsOn }]);
+  res.json(row);
+}));
+app.delete("/api/admin/paid-services/:id", adminOnly, crm(async (req, res) => {
+  const row = paidServices.list().find((r) => r.id === req.params.id);
+  if (row && paidServices.remove(row.id)) audit(req, "paidService.delete", "paidService", row.id, row.name);
+  res.json({ ok: true });
+}));
+setTimeout(() => paidServices.refresh().catch((e) => console.error("paid services check failed:", e.message)), 60 * 1000).unref();
+setInterval(() => paidServices.refresh().catch((e) => console.error("paid services check failed:", e.message)), 12 * 3600 * 1000).unref();
 app.get("/api/admin/watch/reviews", adminOnly, crm(async (req, res) => {
   const [providers, bookings] = await Promise.all([store.listProviders(), store.listBookings({})]);
   res.json(watchdogs.reviewsList({ providers, bookings, ignore: testProviderIds() }));

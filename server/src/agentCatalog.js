@@ -43,6 +43,7 @@ const TEAMS = [
       { key: "provider_quality", name: "Provider Quality Agent", how: "rules", role: "operations", description: "Daily: providers with falling ratings, ignored requests, dropped jobs or complaints; proposes a warning for the worst." },
       { key: "retention", name: "Retention Agent", how: "rules", role: "operations", description: "Weekly: customers who stopped booking, booked once, or got no provider; proposes a win-back message per group." },
       { key: "fraud", name: "Fraud Agent", how: "rules", role: "operations", description: "Hourly: self-bookings, repeat customer–provider pairs, refund-heavy customers, mass cancellations, instant completions. Alerts only." },
+      { key: "renewals", name: "Renewals Bot", how: "rules", role: "management", description: "Every paid service Tikdum runs on (domain, VPS, MSG91, AI, maps, storage) with its renewal date. Reminds you on WhatsApp 30, 14, 7, 3 and 1 days before, on the day and while overdue; Monday list of everything coming up. Reads domain and HTTPS dates by itself. Edit the list in Super Admin → Paid services." },
       { key: "network", name: "Network Bot", how: "rules", role: "operations", description: "Every second: API, websites, admin panel and web server; every 10 s: tikdum.com over HTTPS and the internet. WhatsApps you within 20 s of an outage, and when it's back. Runs in its own container." },
     ],
   },

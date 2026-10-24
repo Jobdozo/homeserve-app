@@ -85,6 +85,14 @@ module.exports = {
     hourIst: num(process.env.REVIEWS_HOUR_IST, 12),
   },
 
+  // Renewals Bot (renewals.js): paid services ending soon; Monday list.
+  renewals: {
+    key: process.env.AGENT_KEY_RENEWALS || "",
+    everyMs: num(process.env.RENEWALS_CHECK_EVERY_HOURS, 3) * 3600000,
+    weekdayIst: num(process.env.RENEWALS_WEEKDAY_IST, 1), // Monday
+    hourIst: num(process.env.RENEWALS_HOUR_IST, 10),
+  },
+
   // Fraud (fraud.js): hourly suspicious patterns, alerts only.
   fraud: {
     key: process.env.AGENT_KEY_FRAUD || "",
