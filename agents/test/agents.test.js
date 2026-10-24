@@ -53,7 +53,11 @@ test("operations: detects stuck, late, very late and long jobs; ignores fine and
 });
 
 test("operations tick: posts alerts, nudges a late provider only once", async () => {
-  const late = { id: "a1", ref: "B1", providerId: "prov1", status: "Accepted", date: istDay(), time: "12:00 AM", createdAt: new Date().toISOString(), service: { name: "Plumbing" } };
+  // A slot that started 45 minutes ago (IST) — late, not critical — whatever time the test runs.
+  const start = new Date(Date.now() - 45 * 60000 + 5.5 * 3600000);
+  const h = start.getUTCHours();
+  const time = `${String(h % 12 || 12).padStart(2, "0")}:${String(start.getUTCMinutes()).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+  const late = { id: "a1", ref: "B1", providerId: "prov1", status: "Accepted", date: start.toISOString().slice(0, 10), time, createdAt: new Date(Date.now() - 3 * 3600000).toISOString(), service: { name: "Plumbing" } };
   const calls = [];
   const client = {
     get: async () => [late],

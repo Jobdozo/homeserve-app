@@ -533,12 +533,16 @@ function enqueue(targets, actor) {
 // checked like a service picture, the logo stamped on, and used straight away — a post is reviewed
 // as a whole (Approvals) or published by the agent when Auto-post is on. At most
 // SOCIAL_PICTURES_PER_DAY a day, inside the studio's daily limit. Returns { url: "/uploads/…", maker }.
+// Blog covers (kind "blog") have their own count, BLOG_PICTURES_PER_DAY.
 const SOCIAL_PICTURES_PER_DAY = Number(process.env.SOCIAL_PICTURES_PER_DAY) || 8;
+const BLOG_PICTURES_PER_DAY = Number(process.env.BLOG_PICTURES_PER_DAY) || 10;
 const SOCIAL_USAGE = "socialPictureUsage";
-async function drawForSocial({ topic, category = "", scene = "", show = "service", colour = null }) {
+async function drawForSocial({ topic, category = "", scene = "", show = "service", colour = null, kind = "post" }) {
   if (!configured()) throw fail(400, NOT_SET_UP);
-  const today = jsonStore.readAll(SOCIAL_USAGE).find((u) => u.id === istDay());
-  if ((today?.count || 0) >= SOCIAL_PICTURES_PER_DAY) throw fail(429, `Today's ${SOCIAL_PICTURES_PER_DAY} new post pictures are done`);
+  const dayId = kind === "blog" ? `blog:${istDay()}` : istDay();
+  const cap = kind === "blog" ? BLOG_PICTURES_PER_DAY : SOCIAL_PICTURES_PER_DAY;
+  const today = jsonStore.readAll(SOCIAL_USAGE).find((u) => u.id === dayId);
+  if ((today?.count || 0) >= cap) throw fail(429, `Today's ${cap} new ${kind === "blog" ? "blog cover" : "post"} pictures are done`);
   if (usageToday() >= DAILY_LIMIT) throw fail(429, `Daily limit of ${DAILY_LIMIT} pictures reached`);
   const list = await makers();
   if (!list.length) throw fail(400, NOT_SET_UP);
@@ -566,7 +570,7 @@ async function drawForSocial({ topic, category = "", scene = "", show = "service
   }
   if (!qc.ok) throw fail(422, `The new picture didn't pass the check (${qc.issues.join("; ").slice(0, 160)})`);
   if (today) jsonStore.update(SOCIAL_USAGE, today.id, { count: today.count + 1 });
-  else jsonStore.insert(SOCIAL_USAGE, { id: istDay(), count: 1 });
+  else jsonStore.insert(SOCIAL_USAGE, { id: dayId, count: 1 });
   const file = `${crypto.randomBytes(16).toString("hex")}${extFor(kept.mime)}`;
   fs.writeFileSync(path.join(UPLOADS_DIR, file), kept.data);
   return { url: `/uploads/${file}`, maker: used.name, people: person };

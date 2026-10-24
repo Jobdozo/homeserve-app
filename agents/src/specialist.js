@@ -67,7 +67,7 @@ async function tick(client, log, name = "specialist", { now = Date.now() } = {})
       ? office.tasks.filter((t) => !blogPosts.isBlogTask(t))
       : office.tasks;
   const work = tasksToWork(mine, st.failed);
-  const proposals = [posted && `${posted} social post(s) ${st.socialMode || "proposed for approval"}`, pushed && `${pushed} push campaign(s) proposed for approval`, drafted && `${drafted} blog article(s) drafted for approval`];
+  const proposals = [posted && `${posted} social post(s) ${st.socialMode || "proposed for approval"}`, pushed && `${pushed} push campaign(s) proposed for approval`, drafted && `${drafted} blog article(s) ${st.blogMode || "drafted for approval"}`];
   if (!work.length) {
     state.save(`specialist-${name}`, st);
     const parts = proposals.filter(Boolean);

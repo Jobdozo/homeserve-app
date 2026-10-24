@@ -139,6 +139,7 @@ function setStatus(id, status, actor) {
   if (!old) throw fail(404, "Article not found");
   if (status === old.status) return old;
   const now = new Date().toISOString();
+  // A first publish is dated now; re-publishing after an unpublish keeps the first date.
   return jsonStore.update(COLL, id, { status, publishedAt: status === "published" ? old.publishedAt || now : old.publishedAt, updatedAt: now, [status === "published" ? "publishedBy" : "unpublishedBy"]: actor || null });
 }
 

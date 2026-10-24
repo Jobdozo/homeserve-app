@@ -77,10 +77,31 @@ test("search pages: /blog and an article carry their head and the article text; 
   assert.match(html, /property="og:type" content="article"/);
 });
 
-test("agents: may save drafts, may only propose publishing", () => {
+test("agents: may save drafts and publish (gated by Auto-publish in the policy), never edit", () => {
   const perms = agents.agentPermissions(["blog.view", "blog.add", "blog.approve", "blog.edit"]);
   assert.ok(perms.includes("blog.add"));
-  assert.ok(!perms.includes("blog.approve"));
+  assert.ok(perms.includes("blog.approve"));
   assert.ok(!perms.includes("blog.edit"));
   assert.ok(agents.PROPOSABLE_TYPES.includes("blog.publish"));
+});
+
+test("agents: publishing only with Auto-publish on, at most the day's number; never edit or unpublish", () => {
+  const admin = { agentId: "seo1" };
+  const pub = (id) => agents.policy({ method: "POST", body: {} }, admin, `/admin/blog/${id}/publish`);
+  agents.setConfig({ blogAutoPublish: false }, "Owner");
+  assert.match(pub("x").error, /auto-publish is off/);
+  agents.setConfig({ blogAutoPublish: true, blogPerDay: 2 }, "Owner");
+  assert.equal(pub("x"), null);
+  for (const t of ["First automatic article here", "Second automatic article here"]) {
+    const a = blog.create({ title: t, body: BODY }, "SEO Agent [AI agent]", { agent: true });
+    blog.setStatus(a.id, "published", "SEO Agent [AI agent]");
+  }
+  assert.match(pub("x").error, /2 automatic articles are done/);
+  assert.match(agents.policy({ method: "PATCH", body: {} }, admin, "/admin/blog/x").error, /Only a person/);
+  assert.match(agents.policy({ method: "POST", body: {} }, admin, "/admin/blog/x/unpublish").error, /Only a person/);
+  assert.equal(agents.policy({ method: "POST", body: {} }, admin, "/admin/blog/picture"), null);
+  assert.equal(agents.policy({ method: "POST", body: {} }, admin, "/admin/blog"), null);
+  assert.equal(agents.getConfig().blogPerDay, 2);
+  agents.setConfig({ blogPerDay: 50 }, "Owner");
+  assert.equal(agents.getConfig().blogPerDay, 10);
 });

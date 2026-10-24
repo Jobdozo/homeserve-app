@@ -3366,6 +3366,8 @@ app.get("/api/agents/self", agentOnly, crm(async (req, res) => {
     socialPostsPerDay: agents.getConfig().socialPostsPerDay,
     socialStories: agents.getConfig().socialStories,
     socialCarousels: agents.getConfig().socialCarousels,
+    blogAutoPublish: agents.getConfig().blogAutoPublish,
+    blogPerDay: agents.getConfig().blogPerDay,
     kind: req.admin.kind,
     instructions: ["specialist", "engineer"].includes(req.admin.kind) ? req.admin.instructions : undefined,
     template: ["engineer", "specialist"].includes(req.admin.kind) ? req.admin.template : undefined,
@@ -3416,9 +3418,15 @@ app.patch("/api/admin/ai/config", adminOnly, crm(async (req, res) => {
       socialPostsPerDay: req.body?.socialPostsPerDay,
       socialStories: req.body?.socialStories,
       socialCarousels: req.body?.socialCarousels,
+      blogAutoPublish: req.body?.blogAutoPublish,
+      blogPerDay: req.body?.blogPerDay,
     },
     actorOf(req)
   );
+  if (before.blogAutoPublish !== cfg.blogAutoPublish || before.blogPerDay !== cfg.blogPerDay) {
+    audit(req, "ai.config", "ai", "config", "Blog auto-publish", [{ field: "blogAutoPublish", from: `${before.blogAutoPublish} (${before.blogPerDay}/day)`, to: `${cfg.blogAutoPublish} (${cfg.blogPerDay}/day)` }]);
+    await store.logActivity("ai", cfg.blogAutoPublish ? `SEO Agent now publishes blog articles by itself, ${cfg.blogPerDay} a day — by ${actorOf(req)}` : `Blog articles back to approval first — by ${actorOf(req)}`).catch(() => {});
+  }
   for (const k of ["socialStories", "socialCarousels"]) {
     if (before[k] !== cfg[k]) audit(req, "ai.config", "ai", "config", k === "socialStories" ? "Social Stories" : "Social carousels", [{ field: k, from: before[k], to: cfg[k] }]);
   }
@@ -3893,7 +3901,7 @@ app.post("/api/admin/blog/picture", adminOnly, crm(async (req, res) => {
   const want = String(req.body?.category || "").toLowerCase().trim();
   const cat = cats.find((c) => c.id === want || String(c.name || "").toLowerCase() === want) || null;
   const colour = cat ? imageStyle.colourFor(cat.id, cats.map((c) => c.id)) : null;
-  const out = await imageStudio.drawForSocial({ topic: req.body?.topic, category: cat?.name || "", scene: req.body?.scene, show: req.body?.show, colour });
+  const out = await imageStudio.drawForSocial({ topic: req.body?.topic, category: cat?.name || "", scene: req.body?.scene, show: req.body?.show, colour, kind: "blog" });
   res.json({ ...out, url: `${(process.env.UPLOADS_PUBLIC_BASE || "https://api.tikdum.com").replace(/\/$/, "")}${out.url}`, category: cat?.name || null });
 }));
 

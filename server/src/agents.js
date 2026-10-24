@@ -45,8 +45,9 @@ const DENY_MODULES = ["users", "settings", "data", "ai", "accounting"];
 const READ_ACTIONS = ["view", "export"];
 // The only writes an agent may make directly (if its role has them).
 // social.add only takes effect while Admin has "Auto-post" on (policy below); otherwise posts are proposed.
-// blog.add: drafts only (blog.js keeps an agent's article a draft until a person publishes it).
-const AGENT_WRITES = ["complaints.add", "complaints.edit", "notifications.add", "inbox.add", "social.add", "blog.add"];
+// blog.add: drafts only (blog.js keeps an agent's article a draft until it's published).
+// blog.approve: publishing, only while Admin has the blog's "Auto-publish" on (policy below).
+const AGENT_WRITES = ["complaints.add", "complaints.edit", "notifications.add", "inbox.add", "social.add", "blog.add", "blog.approve"];
 // Per-agent ceiling on direct notifications (in-app messages to one person).
 const NOTIFY_PER_HOUR = 30;
 // Per-agent ceiling on new WhatsApp messages started from Tikdum's number (/admin/inbox/send),
@@ -55,6 +56,8 @@ const WHATSAPP_PER_HOUR = 20;
 // Facebook/Instagram posts the agents may publish by themselves in a day (Auto-post), at most.
 const SOCIAL_MAX_PER_DAY = 5;
 const SOCIAL_STORIES_PER_DAY = 2;
+const BLOG_MAX_PER_DAY = 10;
+const clampBlog = (n) => Math.min(BLOG_MAX_PER_DAY, Math.max(1, Math.round(Number(n) || 1)));
 const clampPosts = (n) => Math.min(SOCIAL_MAX_PER_DAY, Math.max(1, Math.round(Number(n) || 1)));
 
 // What an agent may propose for a person to approve: [type, method, path regex].
@@ -89,6 +92,10 @@ function getConfig() {
     // What the Marketing Agent may make besides single pictures (both on by default).
     socialStories: row?.socialStories !== false,
     socialCarousels: row?.socialCarousels !== false,
+    // true: the SEO Agent publishes its blog articles itself, up to blogPerDay a day (off by
+    // default: each article waits in Approvals).
+    blogAutoPublish: row?.blogAutoPublish === true,
+    blogPerDay: clampBlog(row?.blogPerDay ?? 2),
     updatedAt: row?.updatedAt || null,
     updatedBy: row?.updatedBy || null,
   };
@@ -103,6 +110,8 @@ function setConfig(patch, actor) {
   if (patch.socialPostsPerDay !== undefined) row.socialPostsPerDay = clampPosts(patch.socialPostsPerDay);
   if (patch.socialStories !== undefined) row.socialStories = patch.socialStories !== false;
   if (patch.socialCarousels !== undefined) row.socialCarousels = patch.socialCarousels !== false;
+  if (patch.blogAutoPublish !== undefined) row.blogAutoPublish = patch.blogAutoPublish === true;
+  if (patch.blogPerDay !== undefined) row.blogPerDay = clampBlog(patch.blogPerDay);
   if (patch.supportKnowledge !== undefined) {
     const text = String(patch.supportKnowledge || "");
     if (text.length > MAX_KNOWLEDGE) throw fail(400, `Support knowledge is limited to ${MAX_KNOWLEDGE} characters`);
@@ -334,6 +343,18 @@ function policy(req, admin, path) {
       if (body.format === "carousel" && !cfg.socialCarousels) return { status: 403, error: "Carousels are switched off" };
       if (mine.filter((p) => p.format !== "story").length >= cfg.socialPostsPerDay) return { status: 429, error: `Today's ${cfg.socialPostsPerDay} automatic posts are done` };
     }
+  }
+  // Publishing a blog article: only with Auto-publish on, and not more than the day's number.
+  if (req.method === "POST" && /^\/admin\/blog\/[^/]+\/publish$/.test(path)) {
+    const cfg = getConfig();
+    if (!cfg.blogAutoPublish) return { status: 403, error: "Blog auto-publish is off — propose publishing for approval instead" };
+    const today = istDay();
+    const mine = jsonStore.readAll("blogArticles").filter((a) => String(a.publishedBy || "").endsWith("[AI agent]") && a.publishedAt && istDay(Date.parse(a.publishedAt)) === today).length;
+    if (mine >= cfg.blogPerDay) return { status: 429, error: `Today's ${cfg.blogPerDay} automatic articles are done` };
+  }
+  // Agents never take an article down, edit or delete one.
+  if (/^\/admin\/blog\/(?!picture$)[^/]+(\/unpublish)?$/.test(path) && req.method !== "GET") {
+    return { status: 403, error: "Only a person can edit, unpublish or delete an article" };
   }
   // The calendar is the people's: the agent reads it, never changes it.
   if (req.method !== "GET" && /^\/admin\/social\/calendar(\/|$)/.test(path)) {

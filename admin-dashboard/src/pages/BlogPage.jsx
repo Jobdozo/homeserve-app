@@ -173,6 +173,67 @@ function ArticleCard({ a, open, onToggle, onEdit, run, can }) {
   );
 }
 
+// Approval first (default), or the SEO Agent publishes by itself up to N a day.
+function AutoPublishPanel() {
+  const { showToast, can } = useApp();
+  const [cfg, setCfg] = useState(null);
+  useEffect(() => {
+    api.getAiConfig().then(setCfg).catch(() => {});
+  }, []);
+  if (!cfg) return null;
+  const canEdit = can("ai.manage");
+  const save = async (patch, msg) => {
+    try {
+      setCfg(await api.setAiConfig(patch));
+      showToast(msg);
+    } catch (e) {
+      showToast(e.message || "Couldn't save");
+    }
+  };
+  const turnOn = () =>
+    window.confirm(`The SEO Agent will publish up to ${cfg.blogPerDay} articles a day on tikdum.com by itself, without asking you. Turn on?`) &&
+    save({ blogAutoPublish: true }, `Auto-publish on: up to ${cfg.blogPerDay} a day`);
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-card">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 max-w-[620px]">
+          <h2 className="text-[14px] font-bold text-gray-900">Publishing</h2>
+          <p className="text-[12px] leading-snug text-gray-500">
+            {cfg.blogAutoPublish
+              ? `Auto-publish: the SEO Agent writes and publishes up to ${cfg.blogPerDay} article${cfg.blogPerDay === 1 ? "" : "s"} a day by itself, spread from 7 AM to 9 PM, and skips topics it has already covered. You can edit, unpublish or delete any of them here.`
+              : "Approval first: the SEO Agent writes a draft every Tuesday and Friday and waits for someone to publish it."}
+          </p>
+          {cfg.blogAutoPublish && cfg.blogPerDay > 3 && (
+            <p className="mt-1.5 text-[12px] leading-snug text-amber-700">
+              Many AI-written articles a day can look like mass-produced content to Google and pull down the whole site's ranking. Keep an eye on Search Console; 1–3 a day is safer.
+            </p>
+          )}
+        </div>
+        {canEdit && (
+          <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1.5 text-[12px] text-gray-600">
+              Articles a day
+              <select value={cfg.blogPerDay} onChange={(e) => save({ blogPerDay: Number(e.target.value) }, `${e.target.value} article(s) a day`)} className="rounded-lg border border-gray-200 px-2 py-1 text-[12px]">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </label>
+            <div className="flex rounded-xl border border-gray-200 p-0.5">
+              <button className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold ${!cfg.blogAutoPublish ? "bg-brand text-white" : "text-gray-500"}`} onClick={() => cfg.blogAutoPublish && save({ blogAutoPublish: false }, "Articles wait for approval again")}>
+                Approval first
+              </button>
+              <button className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold ${cfg.blogAutoPublish ? "bg-brand text-white" : "text-gray-500"}`} onClick={() => !cfg.blogAutoPublish && turnOn()}>
+                Auto-publish
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function BlogPage() {
   const { showToast, can } = useApp();
   const [list, setList] = useState(null);
@@ -205,6 +266,7 @@ export default function BlogPage() {
   const live = (list || []).filter((a) => a.status === "published");
   return (
     <div className="space-y-4">
+      <AutoPublishPanel />
       <div className="rounded-2xl bg-white p-4 shadow-card">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <p className="max-w-[640px] text-[12px] leading-snug text-gray-500">

@@ -96,3 +96,34 @@ test("Marketing Agent: a new article is shared once, with its link and cover pic
   assert.equal(p.request.body.format, undefined);
   assert.equal(writes(c, "/admin/social/picture").length, 0); // the cover is used, no new picture
 });
+
+test("auto-publish: articles spread through the day, each published by the agent, repeats skipped", async () => {
+  assert.deepEqual(blogPosts.blogSlots(10), [7, 9, 10, 12, 13, 15, 16, 18, 19, 21]);
+  assert.deepEqual(blogPosts.blogSlots(2), [10, 17]);
+  assert.ok(blogPosts.similarity("How to get your geyser ready for winter in Jammu", "Geyser ready for winter: a Jammu guide") >= 0.75);
+  assert.ok(blogPosts.similarity("Diwali deep cleaning checklist", "Pest control after the monsoon") < 0.2);
+
+  claude(JSON.stringify(ARTICLE));
+  const existing = [];
+  const c = fake({
+    "GET /agents/office": { tasks: [] },
+    "GET /agents/self": { kind: "specialist", template: "seo", budgetRemainingUsd: 1, dailyBudgetUsd: 1, blogAutoPublish: true, blogPerDay: 10 },
+    "GET /admin/blog": existing,
+    "GET /admin/social/calendar": { events: [], seasons: [] },
+    "GET /admin/images/colours": [],
+    "POST /admin/blog/picture": { url: "https://api.tikdum.com/uploads/c.jpg" },
+    "POST /admin/blog": (b) => (existing.push({ title: b.title }), { id: `blog_${existing.length}`, slug: "s", ...b }),
+    "POST /admin/blog/blog_1/publish": { id: "blog_1", slug: "geyser", title: ARTICLE.title, readMinutes: 4 },
+  });
+  const SUN = (h, m = 5) => Date.parse(`2026-10-25T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00+05:30`);
+  assert.equal(await specialist.tick(c, silent, "specialist-auto", { now: SUN(6) }), null); // before 7:00
+  assert.match(await specialist.tick(c, silent, "specialist-auto", { now: SUN(7) }), /1 blog article\(s\) published/);
+  assert.equal(writes(c, "/admin/blog/blog_1/publish").length, 1);
+  assert.equal(writes(c, "/agents/actions").length, 0); // nothing waits for approval
+  // 9:00 slot: the same topic again is skipped, nothing new saved or published.
+  await specialist.tick(c, silent, "specialist-auto", { now: SUN(9) });
+  global.fetch = realFetch;
+  assert.equal(writes(c, "/admin/blog").length, 1);
+  // The 9:00 slot is used up; 9:30 does nothing more.
+  assert.equal(await specialist.tick(c, silent, "specialist-auto", { now: SUN(9, 30) }), null);
+});

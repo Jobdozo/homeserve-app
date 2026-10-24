@@ -4,7 +4,10 @@
 // coming up, the season's services), Tikdum's categories and what it has already written. Image
 // Studio draws the cover picture. The article is saved as a DRAFT (server/src/blog.js) and the
 // agent PROPOSES publishing it: a person reads it in Admin → Blog and approves it in AI Agents →
-// Approvals. Nothing goes live on the website without that.
+// Approvals.
+// With Admin's blog "Auto-publish" on, it instead writes up to blogPerDay articles every day,
+// spread from 07:00 to 21:00 IST (blogSlots), and publishes each itself; the server refuses more
+// than the day's number (agents.js policy). A topic too close to an earlier article is skipped.
 const config = require("./config");
 const { istDay, istHour } = require("./time");
 const { completeJson, untrusted } = require("./claude");
@@ -13,6 +16,26 @@ const IST_MS = 5.5 * 3600 * 1000;
 const weekdayIst = (ms) => new Date(ms + IST_MS).getUTCDay();
 const isBlogTask = (t) => /^\s*blog\s*[:\-–]/i.test(t.title || "");
 const SLOW = { timeoutMs: 240000, retries: 0 };
+
+// Pure: the IST hours for N automatic articles a day, spread from 7:00 to 21:00.
+function blogSlots(perDay) {
+  const n = Math.max(1, Math.min(10, perDay || 1));
+  if (n === 1) return [10];
+  if (n === 2) return [10, 17];
+  return [...new Set(Array.from({ length: n }, (_, i) => Math.round(7 + (i * 14) / (n - 1))))];
+}
+
+// Pure: how alike two titles are (shared words, 0–1), ignoring small words.
+const SMALL = new Set(["a", "an", "the", "and", "or", "for", "to", "in", "of", "on", "your", "you", "how", "what", "with", "before", "this", "is", "are", "at", "jammu", "kashmir", "srinagar", "j&k"]);
+const titleWords = (t) => new Set(String(t || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !SMALL.has(w)));
+function similarity(a, b) {
+  const x = titleWords(a);
+  const y = titleWords(b);
+  if (!x.size || !y.size) return 0;
+  let both = 0;
+  for (const w of x) if (y.has(w)) both++;
+  return both / Math.min(x.size, y.size);
+}
 
 const SYSTEM = `You write articles for the blog on tikdum.com. Tikdum is a home-services app in Jammu & Kashmir, India: customers book verified local professionals (plumbers, electricians, AC repair, cleaning, pest control, salon at home and more) on tikdum.com or the Tikdum app.
 Write ONE helpful article that people in Jammu, Srinagar and the rest of J&K would search Google for. Rules:
@@ -34,12 +57,12 @@ function calendarText(cal) {
 }
 
 // Pure: checks the answer; returns the article or null. Exported for tests.
-function cleanArticle(raw) {
+function cleanArticle(raw, { minWords = 400 } = {}) {
   if (!raw || typeof raw.title !== "string" || typeof raw.body !== "string") return null;
   const title = raw.title.replace(/\s+/g, " ").trim();
   const body = raw.body.replace(/\r/g, "").trim();
   const words = body.split(/\s+/).filter(Boolean).length;
-  if (title.length < 15 || title.length > 90 || words < 400 || words > 2000) return null;
+  if (title.length < 15 || title.length > 90 || words < minWords || words > 2000) return null;
   if (!/^##\s/m.test(body)) return null; // needs sections
   const faqs = (Array.isArray(raw.faqs) ? raw.faqs : []).map((f) => ({ q: String(f?.q || "").trim(), a: String(f?.a || "").trim() })).filter((f) => f.q && f.a).slice(0, 5);
   return {
@@ -55,7 +78,7 @@ function cleanArticle(raw) {
   };
 }
 
-async function writeArticle(client, log, brief, now) {
+async function writeArticle(client, log, brief, now, { minWords = 400 } = {}) {
   const [existing, calendar, colours] = await Promise.all([
     client.get("/admin/blog").catch(() => []),
     client.get("/admin/social/calendar?upcoming=1").catch(() => null),
@@ -67,10 +90,13 @@ async function writeArticle(client, log, brief, now) {
     untrusted("brief", brief || "Pick the most useful topic for people in J&K right now (the season, a festival coming up, a common home problem)."),
     untrusted("calendar", calendarText(calendar)),
     untrusted("categories", categories.join(", ") || "(any)"),
-    untrusted("already_written", (existing || []).slice(0, 40).map((a) => `- ${a.title}`).join("\n") || "(nothing yet)"),
+    untrusted("already_written", (existing || []).slice(0, 150).map((a) => `- ${a.title}`).join("\n") || "(nothing yet)"),
   ].join("\n\n");
-  const article = cleanArticle(await completeJson(client, { system: SYSTEM, prompt, maxTokens: 3200 }));
+  const article = cleanArticle(await completeJson(client, { system: SYSTEM, prompt, maxTokens: 3200 }), { minWords });
   if (!article) throw new Error("The AI's article didn't pass the checks (length, title or sections)");
+  // Many articles a day mustn't turn into the same article many times (Google treats that as spam).
+  const twin = (existing || []).find((a) => similarity(a.title, article.title) >= 0.75);
+  if (twin) throw new Error(`Too close to an earlier article ("${twin.title}") — skipped`);
   try {
     const pic = await client.request("POST", "/admin/blog/picture", { topic: article.topic || article.title, category: article.category, scene: article.scene, show: article.show }, SLOW);
     if (pic?.url) article.coverUrl = pic.url;
@@ -95,12 +121,36 @@ async function draftAndPropose(client, article, dedupeKey) {
   return draft;
 }
 
-// Runs the schedule and any "Blog: …" tasks. Returns how many articles were drafted.
+// Saves the article and publishes it straight away (Auto-publish on).
+async function draftAndPublish(client, article) {
+  const { scene, show, why, ...fields } = article;
+  const draft = await client.post("/admin/blog", fields);
+  return client.post(`/admin/blog/${encodeURIComponent(draft.id)}/publish`, {});
+}
+
+// Runs the schedule and any "Blog: …" tasks. Returns how many articles were drafted or published.
 async function run(client, log, { st, office, now = Date.now() }) {
   let drafted = 0;
   const today = istDay(now);
   st.blogTasks = st.blogTasks || {};
-  if (config.blog.daysIst.includes(weekdayIst(now)) && istHour(now) >= config.blog.hourIst && st.blogLast !== today) {
+  const self = await client.get("/agents/self").catch(() => ({}));
+  const auto = self?.blogAutoPublish === true;
+  st.blogMode = auto ? "published" : "drafted for approval";
+  if (auto) {
+    if (st.blogAuto?.day !== today) st.blogAuto = { day: today, done: [] };
+    const due = blogSlots(self.blogPerDay).filter((h) => h <= istHour(now) && !st.blogAuto.done.includes(h));
+    if (due.length) {
+      // A slot missed while the worker was down isn't made up later: one article per run.
+      st.blogAuto.done.push(...due);
+      try {
+        const live = await draftAndPublish(client, await writeArticle(client, log, null, now, { minWords: 600 }));
+        log.info("seo", "blog article published", { slug: live?.slug });
+        drafted++;
+      } catch (e) {
+        log.warn("seo", "automatic article failed", { error: e.message });
+      }
+    }
+  } else if (config.blog.daysIst.includes(weekdayIst(now)) && istHour(now) >= config.blog.hourIst && st.blogLast !== today) {
     st.blogLast = today; // one try a day, even if it fails
     try {
       const draft = await draftAndPropose(client, await writeArticle(client, log, null, now), `blog:${today}`);
@@ -120,8 +170,15 @@ async function run(client, log, { st, office, now = Date.now() }) {
       if (t.status === "open") await client.post(`/agents/office/tasks/${id}/status`, { status: "in_progress" });
       const feedback = (t.messages || []).filter((m) => m.from.type === "person").map((m) => m.text).join("\n");
       const brief = `${t.title.replace(/^\s*blog\s*[:\-–]\s*/i, "")}\n${t.description || ""}${feedback ? `\nFeedback on the last try: ${feedback}` : ""}`;
-      const draft = await draftAndPropose(client, await writeArticle(client, log, brief, now), `blog:task:${t.id}:${t.updatedAt}`.slice(0, 120));
-      const text = `Draft ready: "${draft.title}" (${draft.readMinutes} min read). Read or edit it in Admin → Blog, and approve it in AI Agents → Approvals to publish at tikdum.com/blog/${draft.slug}.`;
+      const article = await writeArticle(client, log, brief, now);
+      let text;
+      if (auto) {
+        const live = await draftAndPublish(client, article);
+        text = `Published: "${live.title}" (${live.readMinutes} min read) — https://tikdum.com/blog/${live.slug}. Edit or unpublish it in Admin → Blog.`;
+      } else {
+        const draft = await draftAndPropose(client, article, `blog:task:${t.id}:${t.updatedAt}`.slice(0, 120));
+        text = `Draft ready: "${draft.title}" (${draft.readMinutes} min read). Read or edit it in Admin → Blog, and approve it in AI Agents → Approvals to publish at tikdum.com/blog/${draft.slug}.`;
+      }
       await client.post(`/agents/office/tasks/${id}/messages`, { text });
       await client.post(`/agents/office/tasks/${id}/status`, { status: "review", result: text });
       drafted++;
@@ -135,4 +192,4 @@ async function run(client, log, { st, office, now = Date.now() }) {
   return drafted;
 }
 
-module.exports = { run, isBlogTask, cleanArticle, SYSTEM };
+module.exports = { run, isBlogTask, cleanArticle, blogSlots, similarity, SYSTEM };

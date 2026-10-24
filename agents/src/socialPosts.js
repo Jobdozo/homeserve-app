@@ -344,12 +344,12 @@ async function run(client, log, { st, office, now = Date.now() }) {
   // A new blog article to share (once), as the next scheduled post.
   st.socialBlogShared = st.socialBlogShared || {};
   const published = await client.get("/blog").catch(() => []);
-  const article = (Array.isArray(published) ? published : []).find((a) => now - Date.parse(a.publishedAt) < 7 * DAY_MS && !st.socialBlogShared[a.id]);
+  const article = st.socialBlogShareDay === today ? null : (Array.isArray(published) ? published : []).find((a) => now - Date.parse(a.publishedAt) < 7 * DAY_MS && !st.socialBlogShared[a.id]);
   const articleBrief = article
     ? `Share our new blog article "${article.title}" — ${article.description || ""}. Give two or three of its most useful points, then invite people to read the whole guide. The caption MUST include the link https://tikdum.com/blog/${article.slug} on its own line (before the hashtags). Format: single.`
     : null;
   const scheduledOpts = article ? { carousel: false, cover: article.coverUrl || null } : { carousel };
-  const shared = () => article && (st.socialBlogShared[article.id] = now);
+  const shared = () => article && ((st.socialBlogShared[article.id] = now), (st.socialBlogShareDay = today));
   if (auto && postingDay) {
     if (st.socialAuto?.day !== today || !st.socialAuto.slots) {
       const history = await client.get("/admin/social/posts?limit=200").catch(() => []);

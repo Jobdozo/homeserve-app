@@ -145,7 +145,10 @@ Friday from 10:00 IST (`BLOG_DAYS_IST`, `BLOG_HOUR_IST`) and for every task titl
 700–1,000-word article from the marketing calendar and the categories, with an Image Studio cover
 (`agents/src/blogPosts.js`). The article is saved as a **draft** in Admin → **Blog** and the agent proposes publishing
 it; approving puts it live at tikdum.com/blog/<slug> (server-rendered for search engines, in the sitemap). The
-Marketing Agent then shares each new article once, with its link, at its next scheduled post.
+Marketing Agent then shares each new article once (at most one a day), with its link, at its next scheduled post.
+With **Auto-publish** on (Admin → Blog → Publishing) it writes and publishes up to 10 articles a day itself, spread
+from 07:00 to 21:00 IST, at least 600 words each, skipping any title too close to an earlier one; the server refuses
+more than the day's number. Covers have their own daily picture count (`BLOG_PICTURES_PER_DAY`, default 10).
 
 Not built yet (shown as "Not built yet"): the Google side of Reviews (needs Google Business Profile access), and the Engineering team (needs GitHub branch protection + a repo-only token first).
 

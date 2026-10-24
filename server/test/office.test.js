@@ -87,8 +87,9 @@ test("specialist agents: created from a catalog template with team + default ins
   const r = agents.resolveAgent(m.id);
   assert.equal(r.kind, "specialist");
   assert.equal(r.ceo, false);
-  // still no direct writes beyond the role's safe list
-  assert.ok(!r.permissions.some((p) => /approve|delete|manage/.test(p)));
+  // still no direct writes beyond the role's safe list (blog.approve only works while Admin's
+  // blog Auto-publish is on — agents.policy)
+  assert.ok(!r.permissions.some((p) => /approve|delete|manage/.test(p) && p !== "blog.approve"));
 });
 
 test("engineering agents: need a role; Bug Triage may only propose (capped); others can't", () => {
