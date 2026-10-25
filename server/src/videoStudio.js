@@ -138,6 +138,7 @@ function summary() {
     picturesToday: startedToday("pictures"),
     picturesPerDay: PICTURE_VIDEOS_PER_DAY,
     music: require("./socialMusic").info(),
+    picturesWaitUntil: Date.now() < picturesRestUntil ? new Date(picturesRestUntil).toISOString() : null,
     paidAllowed: paidAllowed(),
     jobs: jobs.slice(0, 100),
     estimates: { short: estimate("short"), story: estimate("story"), aiShort: estimate("short", "ai"), aiStory: estimate("story", "ai") },
@@ -180,6 +181,18 @@ function addSet(setKind, { categories = [], calendar = [], aspect = "upright", l
 // ---- making ----
 let busy = false;
 
+// The free picture maker's daily allowance (Cloudflare Workers AI) starts again at midnight UTC,
+// 5:30 AM in India. Once it's used up, picture videos wait for it rather than being made from
+// Tikdum's photos (26 Oct 2026: the festival videos made just after midnight IST got photos that
+// didn't fit). Other failures still fall back to the photos.
+let picturesRestUntil = 0;
+const afterUtcMidnight = (t) => {
+  const d = new Date(t);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1, 0, 5);
+};
+const allowanceUsedUp = (e) => e?.status === 429 || /daily free allocation|neurons|daily limit|pictures are done/i.test(String(e?.message || ""));
+class WaitForPictures extends Error {}
+
 // Pure: the category a video is about when none was picked — the one whose name's words appear
 // most in the idea and title ("AC service before summer" → AC Repair), so its pictures and
 // colour fit. Exported for tests.
@@ -200,7 +213,7 @@ function guessCategory(text, cats = []) {
 async function makeNext(deps) {
   if (busy) return null;
   const cfg = getConfig();
-  const room = { ai: paidAllowed() && startedToday("ai") < cfg.perDay, pictures: startedToday("pictures") < PICTURE_VIDEOS_PER_DAY };
+  const room = { ai: paidAllowed() && startedToday("ai") < cfg.perDay, pictures: startedToday("pictures") < PICTURE_VIDEOS_PER_DAY && Date.now() >= picturesRestUntil };
   const next = list({ status: "queued" }).reverse().find((j) => room[j.kind === "ai" ? "ai" : "pictures"]);
   if (!next) return null; // nothing to make, or today's limits are reached: waits for tomorrow
   busy = true;
@@ -232,6 +245,10 @@ async function makeNext(deps) {
         const pic = await deps.imageStudio.drawForSocial({ topic: job.script.title, category, scene: sc.video, show: /\b(technician|professional|worker|cleaner|plumber|electrician|beautician|family|customer|woman|man)\b/i.test(sc.video) ? "person" : "service", colour, kind: "studio", ratio: wide ? "16:9" : "9:16", stamp: false, freeOnly: true });
         picture = deps.readUpload(pic.url);
       } catch (e) {
+        if (allowanceUsedUp(e)) {
+          picturesRestUntil = afterUtcMidnight(Date.now());
+          throw new WaitForPictures(e.message);
+        }
         console.error("free picture failed, using Tikdum's photo:", e.message);
         picture = await deps.libraryPicture(category, i);
         focusX = 0.6; // Tikdum's wide photos carry the logo at the left: crop to the right of it
@@ -266,6 +283,11 @@ async function makeNext(deps) {
       updatedAt: now(),
     });
   } catch (e) {
+    if (e instanceof WaitForPictures) {
+      // Back in the queue as it was (not counted as made today), until the allowance is back.
+      console.log(`Video Studio: free pictures used up for today — waiting until ${new Date(picturesRestUntil).toISOString()}`);
+      return jsonStore.update(JOBS, next.id, { status: "queued", startedAt: next.startedAt || null, updatedAt: now() });
+    }
     console.error("Video Studio failed:", e.message);
     return jsonStore.update(JOBS, next.id, { status: "failed", error: String(e.message).slice(0, 300), updatedAt: now() });
   } finally {
@@ -284,4 +306,5 @@ async function publish(id, { channels, caption }, actor, social) {
   return jsonStore.update(JOBS, id, { status: "published", postId: row.id, publishedAt: now(), publishedBy: actor || null, channels, updatedAt: now() });
 }
 
-module.exports = { getConfig, setConfig, addJob, cleanScript, setScript, getJob, list, summary, remake, remove, addSet, makeNext, publish, estimate, SCENES, guessCategory };
+const _resetPictureRest = () => (picturesRestUntil = 0);
+module.exports = { _resetPictureRest, getConfig, setConfig, addJob, cleanScript, setScript, getJob, list, summary, remake, remove, addSet, makeNext, publish, estimate, SCENES, guessCategory };

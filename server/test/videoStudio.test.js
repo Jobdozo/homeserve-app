@@ -279,3 +279,31 @@ test("music: an uploaded track under every video, else the built-in; only a pers
   assert.ok(p.audio && Math.abs(p.seconds - 25) < 0.5, JSON.stringify(p));
   music.clearTrack();
 });
+
+test("free pictures used up: the video waits for tomorrow's allowance (not Tikdum's photos) and isn't counted", async () => {
+  for (const j of studio.list()) studio.remove(j.id);
+  studio._resetPictureRest();
+  const job = studio.addJob({ idea: "Diwali se pehle ghar chamakao", length: "short" }, "Owner");
+  studio.setScript(job.id, { ...SCRIPT, scenes: SCRIPT.scenes.slice(0, 1) });
+  let library = 0;
+  const d = deps({
+    imageStudio: { drawForSocial: async () => Promise.reject(Object.assign(new Error("Cloudflare AI: you have used up your daily free allocation of 10,000 neurons"), { status: 429 })) },
+    libraryPicture: async () => (library++, Buffer.from("photo")),
+    readUpload: () => Buffer.from("x"),
+  });
+  d.video = { ...d.video, seconds: async () => 0, stillClip: async () => Buffer.from("clip") };
+  const out = await studio.makeNext(d);
+  assert.equal(out.status, "queued"); // back in the queue
+  assert.equal(out.startedAt, null); // not counted as made today
+  assert.equal(library, 0); // no photo fallback
+  const wait = studio.summary().picturesWaitUntil;
+  assert.ok(wait && Date.parse(wait) > Date.now());
+  assert.equal(new Date(wait).getUTCHours(), 0); // just after midnight UTC (5:35 AM IST)
+  assert.equal(await studio.makeNext(deps()), null); // nothing is made until then
+  // Any other failure still falls back to Tikdum's photos.
+  studio._resetPictureRest();
+  d.imageStudio = { drawForSocial: async () => Promise.reject(new Error("Cloudflare AI: 502 bad gateway")) };
+  assert.equal((await studio.makeNext(d)).status, "ready");
+  assert.equal(library, 1);
+  assert.equal(studio.summary().picturesWaitUntil, null);
+});

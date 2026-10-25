@@ -293,7 +293,7 @@ export default function VideoStudioPage() {
               {data.paidAllowed ? (
                 <>Videos with subtitles, music, your logo and a "Book" card. <b>Picture stories</b> are free; <b>AI video</b> (real footage, about ₹{data.estimates.aiStory} a story) is paid. Today: {data.picturesToday} of {data.picturesPerDay} picture stories, <b>{data.startedToday}</b> of {cfg.perDay} AI videos.</>
               ) : (
-                <><b>Free</b> videos: moving AI pictures (Cloudflare's free allowance, or Tikdum's own photos), subtitles, background music (yours, or made by the server), your logo and a "Book" card. The Video Studio Agent writes each script. Nothing is paid per video. Made today: {data.picturesToday} of {data.picturesPerDay}.</>
+                <><b>Free</b> videos: moving AI pictures (Cloudflare's free allowance, or Tikdum's own photos), subtitles, background music (yours, or made by the server), your logo and a "Book" card. The Video Studio Agent writes each script. Nothing is paid per video. Made today: {data.picturesToday} of {data.picturesPerDay}.{data.picturesWaitUntil && <> <b className="text-amber-700">Today's free pictures are used up</b> — the next videos are made from {new Date(data.picturesWaitUntil).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}.</>}</>
               )}
             </p>
           </div>
