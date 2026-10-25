@@ -3944,6 +3944,25 @@ app.delete("/api/admin/video-studio/jobs/:id", adminOnly, crm(async (req, res) =
   audit(req, "video.delete", "videoJob", req.params.id, "");
   res.json({ ok: true });
 }));
+// The music under every video (socialMusic.js): an uploaded track, or the built-in music.
+const socialMusic = require("./socialMusic");
+const musicUpload = multer({
+  dest: require("os").tmpdir(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /^audio\//.test(file.mimetype) || /\.(mp3|m4a|wav|aac|ogg)$/i.test(file.originalname || "")),
+});
+app.post("/api/admin/video-studio/music", adminOnly, musicUpload.single("file"), crm(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Choose a music file (MP3, M4A or WAV, up to 15 MB)" });
+  const info = await socialMusic.setTrack(req.file.path, req.file.originalname, actorOf(req), require("./socialVideo").probe);
+  audit(req, "video.music", "videoStudio", "music", "Video music", [{ field: "music", from: null, to: info.name }]);
+  res.json(info);
+}));
+app.delete("/api/admin/video-studio/music", adminOnly, crm(async (req, res) => {
+  const before = socialMusic.info();
+  const info = socialMusic.clearTrack();
+  audit(req, "video.music", "videoStudio", "music", "Video music", [{ field: "music", from: before.name || null, to: "built-in" }]);
+  res.json(info);
+}));
 app.patch("/api/admin/video-studio/config", adminOnly, crm(async (req, res) => {
   const cfg = videoStudio.setConfig(req.body || {}, actorOf(req));
   audit(req, "video.config", "videoStudio", "config", "Video Studio settings", [{ field: "settings", from: null, to: JSON.stringify(cfg) }]);

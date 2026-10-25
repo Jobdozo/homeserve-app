@@ -199,10 +199,10 @@ function JobCard({ job, connected, run, reload }) {
             )}
             {["ready", "failed", "published"].includes(job.status) && (
               <>
-                <button onClick={() => window.confirm(`Make it again with the same script? About ₹${job.estimateInr}.`) && run(() => api.remakeVideoJob(job.id, false), "Queued again").then(reload)} className="rounded-lg bg-gray-100 px-3 py-1.5 text-[12.5px] font-semibold text-gray-700">
+                <button onClick={() => window.confirm(`Make it again with the same script?${job.estimateInr ? ` About ₹${job.estimateInr}.` : ""}`) && run(() => api.remakeVideoJob(job.id, false), "Queued again").then(reload)} className="rounded-lg bg-gray-100 px-3 py-1.5 text-[12.5px] font-semibold text-gray-700">
                   Remake
                 </button>
-                <button onClick={() => window.confirm(`New script and new video? About ₹${job.estimateInr}.`) && run(() => api.remakeVideoJob(job.id, true), "The agent writes a new script").then(reload)} className="rounded-lg bg-gray-100 px-3 py-1.5 text-[12.5px] font-semibold text-gray-700">
+                <button onClick={() => window.confirm(`New script and new video?${job.estimateInr ? ` About ₹${job.estimateInr}.` : ""}`) && run(() => api.remakeVideoJob(job.id, true), "The agent writes a new script").then(reload)} className="rounded-lg bg-gray-100 px-3 py-1.5 text-[12.5px] font-semibold text-gray-700">
                   New script
                 </button>
               </>
@@ -215,6 +215,41 @@ function JobCard({ job, connected, run, reload }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+
+// The music under every video and the Marketing Agent's Reels: an uploaded track, or the built-in.
+function Music({ music, on, run, busy }) {
+  const pick = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) run(() => api.uploadVideoMusic(file), `"${file.name}" is now the music in every video`);
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-white p-4 shadow-card">
+      <div className="min-w-0 flex-1">
+        <h3 className="text-[13px] font-bold text-gray-900">Music</h3>
+        <p className="mt-0.5 text-[12px] leading-snug text-gray-500">
+          {music?.custom ? (
+            <>Every video and Reel uses <b>{music.name}</b> ({mmss(music.seconds)}), from its start, faded out at the end. Use music you have the rights to — Instagram and YouTube can mute or claim a video otherwise.</>
+          ) : (
+            <>Every video and Reel uses the music made by the server. Upload your own track (MP3, M4A or WAV, up to 15 MB) to use it instead.</>
+          )}
+          {!on && <> Music is switched off above.</>}
+        </p>
+      </div>
+      <label className={`cursor-pointer rounded-lg bg-brand px-3 py-1.5 text-[12.5px] font-semibold text-white ${busy ? "pointer-events-none opacity-60" : ""}`}>
+        {music?.custom ? "Change music" : "Upload music"}
+        <input type="file" accept="audio/*,.mp3,.m4a,.wav" className="hidden" onChange={pick} />
+      </label>
+      {music?.custom && (
+        <button disabled={busy} onClick={() => window.confirm("Go back to the built-in music?") && run(() => api.clearVideoMusic(), "Built-in music again")} className="rounded-lg bg-gray-100 px-3 py-1.5 text-[12.5px] font-semibold text-gray-700">
+          Use built-in music
+        </button>
+      )}
     </div>
   );
 }
@@ -258,7 +293,7 @@ export default function VideoStudioPage() {
               {data.paidAllowed ? (
                 <>Videos with subtitles, music, your logo and a "Book" card. <b>Picture stories</b> are free; <b>AI video</b> (real footage, about ₹{data.estimates.aiStory} a story) is paid. Today: {data.picturesToday} of {data.picturesPerDay} picture stories, <b>{data.startedToday}</b> of {cfg.perDay} AI videos.</>
               ) : (
-                <><b>Free</b> videos: moving AI pictures (Cloudflare's free allowance, or Tikdum's own photos), subtitles, background music made by the server, your logo and a "Book" card. The Video Studio Agent writes each script. Nothing is paid per video. Made today: {data.picturesToday} of {data.picturesPerDay}.</>
+                <><b>Free</b> videos: moving AI pictures (Cloudflare's free allowance, or Tikdum's own photos), subtitles, background music (yours, or made by the server), your logo and a "Book" card. The Video Studio Agent writes each script. Nothing is paid per video. Made today: {data.picturesToday} of {data.picturesPerDay}.</>
               )}
             </p>
           </div>
@@ -290,6 +325,7 @@ export default function VideoStudioPage() {
           </div>
         </div>
       </div>
+      <Music music={data.music} on={cfg.music !== false} run={run} busy={busy} />
       <NewVideo estimates={data.estimates} categories={categories} onMade={load} busy={busy} run={run} paid={data.paidAllowed} />
       <Sets estimates={data.estimates} categories={categories} run={run} onMade={load} paid={data.paidAllowed} />
       {data.jobs.length === 0 ? (

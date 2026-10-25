@@ -235,3 +235,47 @@ test("black bands drawn into a picture are cut off; other pictures are left as t
   const night = await picture(720, 1280, 0, { r: 40, g: 40, b: 60 }); // dark, but not a band
   assert.equal(await video.trimBands(night), night);
 });
+
+test("music: an uploaded track under every video, else the built-in; only a person can change it", async () => {
+  const music = require("../src/socialMusic");
+  const video = require("../src/socialVideo");
+  assert.deepEqual(music.info(), { custom: false });
+  assert.equal(music.nameFrom("Rising_Horizon.mp3"), "Rising Horizon");
+  const tmp = (body = "x") => {
+    const p = path.join(os.tmpdir(), `tikdum-music-test-${Math.random().toString(16).slice(2)}`);
+    fs.writeFileSync(p, body);
+    return p;
+  };
+  await assert.rejects(music.setTrack(tmp(), "notes.mp3", "Owner", async () => ({ audio: false, seconds: 0 })), /no sound/);
+  await assert.rejects(music.setTrack(tmp(), "jingle.mp3", "Owner", async () => ({ audio: true, seconds: 4 })), /too short/);
+  const first = tmp("track one");
+  const info = await music.setTrack(first, "Rising_Horizon.mp3", "Owner", async () => ({ audio: true, seconds: 99.9 }));
+  assert.deepEqual([info.custom, info.name, info.seconds], [true, "Rising Horizon", 100]);
+  assert.equal(fs.existsSync(first), false); // the upload's temporary file is cleaned up
+  const file1 = music.trackFile();
+  assert.equal(fs.readFileSync(file1, "utf8"), "track one");
+  await music.setTrack(tmp("track two"), "Other.m4a", "Owner", async () => ({ audio: true, seconds: 30 }));
+  assert.equal(fs.existsSync(file1), false); // the old track is removed
+  assert.match(music.trackFile(), /\.m4a$/);
+  assert.equal(music.clearTrack().custom, false);
+  assert.equal(music.trackFile(), null);
+
+  const a = video.trackArgs("t.mp3", 20, "o.wav");
+  assert.deepEqual(a.slice(2, 8), ["-stream_loop", "-1", "-i", "t.mp3", "-t", "20"]);
+  assert.match(a[a.indexOf("-af") + 1], /loudnorm=I=-20.*afade=t=out:st=18.5:d=1\.5/);
+  assert.match(agents.policy({ method: "POST", body: {} }, { agentId: "v1" }, "/admin/video-studio/music").error, /Only a person/);
+  assert.match(agents.policy({ method: "DELETE", body: {} }, { agentId: "v1" }, "/admin/video-studio/music").error, /Only a person/);
+
+  // With ffmpeg here: the track really becomes the music, as long as asked.
+  if (!process.env.FFMPEG_PATH) return;
+  const { spawnSync } = require("child_process");
+  const src = path.join(os.tmpdir(), `tikdum-tone-${Date.now()}.mp3`);
+  spawnSync(process.env.FFMPEG_PATH, ["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=12", src]);
+  await music.setTrack(src, "Tone.mp3", "Owner", video.probe);
+  const wav = await video.musicBed(25); // longer than the track: it loops
+  const out = path.join(os.tmpdir(), `tikdum-bed-${Date.now()}.wav`);
+  fs.writeFileSync(out, wav);
+  const p = await video.probe(out);
+  assert.ok(p.audio && Math.abs(p.seconds - 25) < 0.5, JSON.stringify(p));
+  music.clearTrack();
+});

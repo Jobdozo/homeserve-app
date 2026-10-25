@@ -338,12 +338,25 @@ function musicArgs(seconds, out) {
   ];
 }
 
-// The music as a WAV Buffer.
+// Pure: ffmpeg arguments for the uploaded track (socialMusic.js) as the music: from its start,
+// looped if the video is longer, evened out to the built-in music's loudness, faded in and out.
+// Exported for tests.
+function trackArgs(track, seconds, out) {
+  return [
+    "-hide_banner", "-y",
+    "-stream_loop", "-1", "-i", track, "-t", String(seconds),
+    "-af", `loudnorm=I=-20:TP=-2:LRA=11,afade=t=in:st=0:d=0.5,afade=t=out:st=${Math.max(0, seconds - 1.5)}:d=1.5`,
+    "-ar", "44100", "-ac", "2", out,
+  ];
+}
+
+// The music as a WAV Buffer: the uploaded track if there is one, else the built-in music.
 async function musicBed(seconds) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "tikdum-music-"));
   try {
     const out = path.join(work, "music.wav");
-    await run(musicArgs(Math.ceil(seconds), out), 60000);
+    const track = require("./socialMusic").trackFile();
+    await run(track ? trackArgs(track, Math.ceil(seconds), out) : musicArgs(Math.ceil(seconds), out), 60000);
     return fs.readFileSync(out);
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
@@ -356,4 +369,4 @@ async function thumbnail(file, out) {
   return out;
 }
 
-module.exports = { buildReel, reelArgs, brandClip, brandArgs, compose, composeArgs, stillClip, stillArgs, trimBands, bandsFrom, seconds, musicBed, musicArgs, thumbnail, probe, available };
+module.exports = { buildReel, reelArgs, brandClip, brandArgs, compose, composeArgs, stillClip, stillArgs, trimBands, bandsFrom, seconds, musicBed, musicArgs, trackArgs, thumbnail, probe, available };

@@ -80,6 +80,20 @@ async function uploadImageLogo(file) {
   return data;
 }
 
+// Video Studio: the music under every video (an MP3, M4A or WAV).
+async function uploadVideoMusic(file) {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(`${API_BASE}/admin/video-studio/music`, {
+    method: "POST",
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    body,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Upload failed: ${res.status}`);
+  return data;
+}
+
 // Category banners and tile photos go up as multipart too.
 async function uploadCategoryBanner(id, file, kind = "banner") {
   const body = new FormData();
@@ -213,6 +227,8 @@ export const api = {
   publishVideoJob: (id, data) => request(`/admin/video-studio/jobs/${id}/publish`, { method: "POST", body: JSON.stringify(data) }),
   remakeVideoJob: (id, newScript) => request(`/admin/video-studio/jobs/${id}/remake`, { method: "POST", body: JSON.stringify({ newScript }) }),
   deleteVideoJob: (id) => request(`/admin/video-studio/jobs/${id}`, { method: "DELETE" }),
+  uploadVideoMusic,
+  clearVideoMusic: () => request("/admin/video-studio/music", { method: "DELETE" }),
   setVideoStudioConfig: (patch) => request("/admin/video-studio/config", { method: "PATCH", body: JSON.stringify(patch) }),
   listBlogArticles: () => request("/admin/blog"),
   addBlogArticle: (data) => request("/admin/blog", { method: "POST", body: JSON.stringify(data) }),

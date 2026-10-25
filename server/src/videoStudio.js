@@ -137,6 +137,7 @@ function summary() {
     startedToday: startedToday("ai"),
     picturesToday: startedToday("pictures"),
     picturesPerDay: PICTURE_VIDEOS_PER_DAY,
+    music: require("./socialMusic").info(),
     paidAllowed: paidAllowed(),
     jobs: jobs.slice(0, 100),
     estimates: { short: estimate("short"), story: estimate("story"), aiShort: estimate("short", "ai"), aiStory: estimate("story", "ai") },
@@ -216,9 +217,11 @@ async function makeNext(deps) {
       for (const sc of job.script.scenes) voices.push(await deps.tts.speak(sc.line, { language: job.voice, voice: cfg.voiceGender }).catch((e) => (console.error("voice line failed:", e.message), null)));
     }
     const clips = [];
+    let videoSeconds = 3; // the end card
     for (const [i, sc] of job.script.scenes.entries()) {
       if (job.kind === "ai") {
         clips.push(await deps.aiVideo.makeClip({ scene: sc.video, topic: job.script.title, category: job.category || "", wide }));
+        videoSeconds += 9;
         continue;
       }
       // A picture story: the scene as a free AI picture (or one of Tikdum's own photos), moving
@@ -237,6 +240,7 @@ async function makeNext(deps) {
       const words = String(sc.line || "").split(/\s+/).filter(Boolean).length;
       const length = Math.min(9, Math.max(4.5, said ? said + 1.2 : 2 + words * 0.35));
       clips.push(await deps.video.stillClip(picture, length, { wide, zoomOut: i % 2 === 1, focusX }));
+      videoSeconds += length;
     }
     const subtitles = job.subtitles ? await Promise.all(job.script.scenes.map((sc) => deps.cards.subtitlePng(sc.line, wide ? 1920 : 1080))) : [];
     const made = await deps.video.compose(
@@ -247,7 +251,7 @@ async function makeNext(deps) {
         cta: wide ? await deps.cards.wideCta(colour) : await deps.cards.reelCta(colour),
         subtitles,
         voices,
-        music: cfg.music ? await deps.video.musicBed(60).catch(() => null) : null,
+        music: cfg.music ? await deps.video.musicBed(Math.ceil(videoSeconds)).catch(() => null) : null,
       },
       deps.dir,
       { wide }
