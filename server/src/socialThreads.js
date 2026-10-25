@@ -22,13 +22,26 @@ function token() {
 const userId = () => String(process.env.THREADS_USER_ID || "").trim();
 const configured = () => Boolean(userId() && token());
 
+// Meta's passing errors ("An unknown error occurred", code 1/2, is_transient, 5xx) are tried again
+// twice, a few seconds apart (25 Oct 2026: one lost a post's Threads copy). Never threads_publish:
+// if that one did go through, a second try would post it twice.
+const RETRY_MS = () => Number(process.env.THREADS_RETRY_MS) || 4000;
+const passing = (r, e = {}) => e.is_transient === true || [1, 2].includes(Number(e.code)) || r.status >= 500;
+
 async function call(method, pathname, params = {}) {
   const body = new URLSearchParams({ ...params, access_token: token() });
   const url = method === "GET" ? `${API}${pathname}?${body}` : `${API}${pathname}`;
-  const r = await fetch(url, { method, body: method === "GET" ? undefined : body, signal: AbortSignal.timeout(30000) });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok || data.error) throw fail(502, `Threads: ${data.error?.message || `HTTP ${r.status}`}`);
-  return data;
+  const retries = pathname.endsWith("_publish") ? 0 : 2;
+  for (let i = 0; ; i++) {
+    const r = await fetch(url, { method, body: method === "GET" ? undefined : body, signal: AbortSignal.timeout(30000) });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok && !data.error) return data;
+    if (i < retries && passing(r, data.error)) {
+      await new Promise((ok) => setTimeout(ok, RETRY_MS() * (i + 1)));
+      continue;
+    }
+    throw fail(502, `Threads: ${data.error?.message || `HTTP ${r.status}`}`);
+  }
 }
 
 // Pure: the text for Threads — the post's own Threads text, else the caption without its hashtags

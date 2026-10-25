@@ -110,3 +110,40 @@ test("AI video Reels: the prompt's rules, reading Gemini's answer, branding argu
   assert.equal(social.cleanPost({ ...base, format: "reel", videoScene: "A scene" }).videoScene, "A scene");
   assert.equal(social.cleanPost({ ...base, format: "carousel", videoScene: "A scene" }).videoScene, undefined);
 });
+
+test("publish: Meta's passing errors are tried again, but never the final publish (it could post twice)", async () => {
+  process.env.THREADS_TOKEN = "t";
+  process.env.THREADS_USER_ID = "123";
+  process.env.THREADS_RETRY_MS = "1";
+  const realFetch = global.fetch;
+  const asked = [];
+  let failCreate = 1;
+  let failPublish = false;
+  const reply = (status, body) => ({ ok: status === 200, status, json: async () => body });
+  global.fetch = async (url, opts) => {
+    const where = `${opts.method} ${new URL(url).pathname.replace(/^\/v[\d.]+/, "")}`;
+    asked.push(where);
+    if (where === "POST /123/threads") return failCreate-- > 0 ? reply(500, { error: { message: "An unknown error occurred", code: 1, is_transient: false } }) : reply(200, { id: "c1" });
+    if (where === "GET /c1") return reply(200, { status: "FINISHED" });
+    if (where === "POST /123/threads_publish") return failPublish ? reply(500, { error: { message: "An unknown error occurred", code: 1 } }) : reply(200, { id: "p1" });
+    return reply(200, { permalink: "https://www.threads.com/@tikdum_com/post/x" });
+  };
+  try {
+    const out = await threads.publish({ caption: "Hello #Jammu" }, [{ url: "https://api.tikdum.com/a.jpg" }]);
+    assert.equal(out.id, "p1");
+    assert.equal(asked.filter((a) => a === "POST /123/threads").length, 2); // failed once, then worked
+    failPublish = true;
+    asked.length = 0;
+    await assert.rejects(threads.publish({ caption: "Hello" }, [{ url: "https://api.tikdum.com/a.jpg" }]), /unknown error/);
+    assert.equal(asked.filter((a) => a === "POST /123/threads_publish").length, 1);
+    failCreate = 5; // keeps failing: gives up after 3 tries
+    asked.length = 0;
+    await assert.rejects(threads.publish({ caption: "Hello" }, [{ url: "https://api.tikdum.com/a.jpg" }]), /unknown error/);
+    assert.equal(asked.filter((a) => a === "POST /123/threads").length, 3);
+  } finally {
+    global.fetch = realFetch;
+    delete process.env.THREADS_TOKEN;
+    delete process.env.THREADS_USER_ID;
+    delete process.env.THREADS_RETRY_MS;
+  }
+});
