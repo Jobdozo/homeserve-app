@@ -47,9 +47,10 @@ case "$NAME" in
   SPECIALIST|ENGINEERING)
     # Keys an earlier version of this script saved as AGENT_KEYS_ENGINEERINGS (a typo) are moved over.
     if [ "$NAME" = SPECIALIST ]; then VAR=AGENT_KEYS_SPECIALISTS; LINES="^AGENT_KEYS_SPECIALISTS="; else VAR=AGENT_KEYS_ENGINEERING; LINES="^AGENT_KEYS_ENGINEERINGS?="; fi
-    # tr -d '\r': a Windows line ending (from a copy-paste) would otherwise split the saved line in
+    # Only the keys themselves are kept (tkag_ + letters, digits, _ and -): a Windows line ending,
+    # a space or an invisible character from a copy-paste would otherwise split the saved line in
     # two, and docker compose then refuses the whole .env ("unexpected character ','", 25 Oct 2026).
-    OLD="$( { grep -E "$LINES" "$ENV_FILE" || true; } | cut -d= -f2- | tr -d '\r' | tr ',' '\n' | { grep . || true; } | awk '!seen[$0]++' | paste -sd, - )"
+    OLD="$( { grep -aE "$LINES" "$ENV_FILE" || true; } | cut -d= -f2- | grep -aoE 'tkag_[A-Za-z0-9_-]+' | awk '!seen[$0]++' | paste -sd, - )"
     if printf ',%s,' "$OLD" | grep -qF ",$KEY,"; then
       LIST="$OLD"
       echo "   (this key was already in the list)"
