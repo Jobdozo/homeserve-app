@@ -22,6 +22,23 @@ case "$PWD" in
 esac
 [ -f .env ] || { echo "$PWD/.env is missing: deploying now would start the apps without their settings. If it was lost, run deploy/recover-env.sh first. Stopping."; exit 1; }
 
+# Every deploy keeps a copy of .env (.env.deploy-<time>: the last 10, only root can read them) and
+# stops if a setting that was there at the last deploy is gone. On 25 Oct 2026 settings went
+# missing from .env three times and nobody knew until Instagram, WhatsApp or pictures broke.
+env_names() { tr -d '\r' < "$1" | grep -aoE '^[A-Za-z_][A-Za-z0-9_]*=' | tr -d '=' | sort -u; }
+last_env="$(ls -t .env.deploy-* 2>/dev/null | head -1 || true)"
+if [ -n "$last_env" ] && [ "${ALLOW_ENV_REMOVAL:-}" != 1 ]; then
+  gone="$(comm -23 <(env_names "$last_env") <(env_names .env) | paste -sd' ' - || true)"
+  if [ -n "$gone" ]; then
+    echo "These settings were in .env at the last deploy and are missing now: $gone"
+    echo "Put them back with: bash deploy/restore-env-lines.sh (it copies them from $last_env)."
+    echo "If you removed them on purpose: ALLOW_ENV_REMOVAL=1 bash deploy/build-images.sh ...  Nothing was deployed."
+    exit 1
+  fi
+fi
+( umask 077; cp .env ".env.deploy-$(date +%Y%m%d-%H%M%S)" )
+ls -t .env.deploy-* | tail -n +11 | xargs -r rm -f
+
 services=("$@")
 [ ${#services[@]} -eq 0 ] && services=(server admin-dashboard local-service-app provider-app)
 

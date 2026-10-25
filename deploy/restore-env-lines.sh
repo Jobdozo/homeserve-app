@@ -7,7 +7,8 @@
 #
 # Looks in the saved copies (.env.backup-*, .env.pre-restore, .env.bak-*) newest first, also where a
 # value is glued onto another line. The Instagram ID can also be read from Facebook with the saved
-# page token. Values are never shown. Then restarts the API if anything changed.
+# page token. Then puts back any other setting the last deploy's copy (.env.deploy-*, kept by
+# build-images.sh) had. Values are never shown. Then restarts the API if anything changed.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ENV_FILE=.env
@@ -72,6 +73,19 @@ else
     echo "!! WHATSAPP_WEBHOOK_SECRET isn't in any saved copy. Run: bash deploy/fix-webhook-secret.sh"
   fi
   unset secret
+fi
+
+# Anything else that was in .env at the last deploy (deploy/build-images.sh keeps those copies).
+last="$(ls -t "$ENV_FILE".deploy-* 2>/dev/null | head -1 || true)"
+if [ -n "$last" ]; then
+  while IFS= read -r line; do
+    name="${line%%=*}"
+    if ! grep -aq "^$name=" "$ENV_FILE"; then
+      printf '%s\n' "$line" >> "$ENV_FILE"
+      changed=yes
+      echo "== $name put back (from $last)"
+    fi
+  done < <(tr -d '\r' < "$last" | grep -aE '^[A-Za-z_][A-Za-z0-9_]*=' || true)
 fi
 
 docker compose config -q 2>/dev/null || { echo "!! docker compose doesn't accept .env now — send me these lines."; exit 1; }
