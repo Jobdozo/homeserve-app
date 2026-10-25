@@ -76,15 +76,18 @@ test("registration tick: nudges only with permission; posts the daily call list 
   assert.equal(writes(c, "/admin/notifications/broadcast").length, 0); // cooldown
 });
 
+// A fixed time outside WhatsApp hours, so this test never leaves follow-up state for the next one.
+const NIGHT = Date.parse("2026-10-21T02:00:00+05:30");
+
 test("verification: proposes approval only for complete applications, never rejection", async () => {
   const c = fake({ "GET /admin/verification/precheck": [incomplete, ready, dupe], "POST /agents/actions": { duplicate: false }, "POST /agents/feed": { duplicate: false } });
-  await verification.tick(c, silent);
+  await verification.tick(c, silent, { now: NIGHT }); // outside WhatsApp hours: no follow-ups here
   const props = writes(c, "/agents/actions");
   assert.equal(props.length, 1);
   assert.deepEqual(props[0][2].request, { method: "PATCH", path: "/providers/p2/verification", body: { status: "approved" } });
   assert.match(props[0][2].summary, /check the Udyam or GST number/);
   assert.ok(writes(c, "/agents/feed").some(([, , b]) => /duplicate/.test(b.title)));
-  await verification.tick(c, silent);
+  await verification.tick(c, silent, { now: NIGHT }); // outside WhatsApp hours: no follow-ups here
   assert.equal(writes(c, "/agents/actions").length, 1); // not re-proposed
 });
 

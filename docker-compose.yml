@@ -42,6 +42,11 @@ services:
       # Threads (deploy/set-threads.sh); the server renews the token itself.
       THREADS_USER_ID: ${THREADS_USER_ID:-}
       THREADS_TOKEN: ${THREADS_TOKEN:-}
+      # YouTube Shorts (deploy/set-youtube.sh). YOUTUBE_PRIVACY: public | unlisted | private.
+      YOUTUBE_CLIENT_ID: ${YOUTUBE_CLIENT_ID:-}
+      YOUTUBE_CLIENT_SECRET: ${YOUTUBE_CLIENT_SECRET:-}
+      YOUTUBE_REFRESH_TOKEN: ${YOUTUBE_REFRESH_TOKEN:-}
+      YOUTUBE_PRIVACY: ${YOUTUBE_PRIVACY:-public}
       SOCIAL_IMAGE_BASE: ${SOCIAL_IMAGE_BASE:-https://api.tikdum.com}
       # Meta Pixel + Conversions API: bookings for Meta ads (server/src/metaEvents.js; set with deploy/set-meta-pixel.sh).
       META_PIXEL_ID: ${META_PIXEL_ID:-}

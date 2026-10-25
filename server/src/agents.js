@@ -56,6 +56,7 @@ const WHATSAPP_PER_HOUR = 20;
 // Facebook/Instagram posts the agents may publish by themselves in a day (Auto-post), at most.
 const SOCIAL_MAX_PER_DAY = 5;
 const SOCIAL_STORIES_PER_DAY = 2;
+const SOCIAL_REELS_PER_DAY = 1;
 const BLOG_MAX_PER_DAY = 10;
 const clampBlog = (n) => Math.min(BLOG_MAX_PER_DAY, Math.max(1, Math.round(Number(n) || 1)));
 const clampPosts = (n) => Math.min(SOCIAL_MAX_PER_DAY, Math.max(1, Math.round(Number(n) || 1)));
@@ -92,6 +93,7 @@ function getConfig() {
     // What the Marketing Agent may make besides single pictures (both on by default).
     socialStories: row?.socialStories !== false,
     socialCarousels: row?.socialCarousels !== false,
+    socialReels: row?.socialReels !== false,
     // true: the SEO Agent publishes its blog articles itself, up to blogPerDay a day (off by
     // default: each article waits in Approvals).
     blogAutoPublish: row?.blogAutoPublish === true,
@@ -110,6 +112,7 @@ function setConfig(patch, actor) {
   if (patch.socialPostsPerDay !== undefined) row.socialPostsPerDay = clampPosts(patch.socialPostsPerDay);
   if (patch.socialStories !== undefined) row.socialStories = patch.socialStories !== false;
   if (patch.socialCarousels !== undefined) row.socialCarousels = patch.socialCarousels !== false;
+  if (patch.socialReels !== undefined) row.socialReels = patch.socialReels !== false;
   if (patch.blogAutoPublish !== undefined) row.blogAutoPublish = patch.blogAutoPublish === true;
   if (patch.blogPerDay !== undefined) row.blogPerDay = clampBlog(patch.blogPerDay);
   if (patch.supportKnowledge !== undefined) {
@@ -339,6 +342,10 @@ function policy(req, admin, path) {
     if (body.format === "story") {
       if (!cfg.socialStories) return { status: 403, error: "Stories are switched off" };
       if (mine.filter((p) => p.format === "story").length >= SOCIAL_STORIES_PER_DAY) return { status: 429, error: "Today's Stories are done" };
+    } else if (body.format === "reel") {
+      // A Reel a day, on top of the day's posts.
+      if (!cfg.socialReels) return { status: 403, error: "Reels are switched off" };
+      if (mine.filter((p) => p.format === "reel").length >= SOCIAL_REELS_PER_DAY) return { status: 429, error: "Today's Reel is done" };
     } else {
       if (body.format === "carousel" && !cfg.socialCarousels) return { status: 403, error: "Carousels are switched off" };
       if (mine.filter((p) => p.format !== "story").length >= cfg.socialPostsPerDay) return { status: 429, error: `Today's ${cfg.socialPostsPerDay} automatic posts are done` };

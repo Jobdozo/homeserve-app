@@ -13,6 +13,9 @@
 // Normally a post is PROPOSED in Admin → AI Agents → Approvals and goes live when a person
 // approves it; with Auto-post on, the agent publishes it itself (server/src/social.js), and
 // the server refuses more than the day's number (agents.js policy).
+// Once a day from 18:00 IST (Admin's "Reels" switch) it also makes a Reel: a title and 3–5 quick
+// points the server turns into a 12–18 second vertical video for Instagram and Facebook Reels,
+// Threads and YouTube Shorts (whichever are connected). It's published (or proposed) like a post.
 // Mondays from 11:00 IST: a results report for the last 7 days (weeklyReport).
 const config = require("./config");
 const { istDay, istHour } = require("./time");
@@ -23,6 +26,7 @@ const DAY_MS = 24 * 3600 * 1000;
 const weekdayIst = (ms) => new Date(ms + IST_MS).getUTCDay();
 const isPostTask = (t) => /^\s*post\s*[:\-–]/i.test(t.title || "");
 const STORY_FROM_HOUR = 16; // Stories are watched most in the evening
+const REEL_FROM_HOUR = 18;
 const REPORT_WEEKDAY = 1; // Monday
 const REPORT_HOUR = 11;
 // Publishing a carousel or drawing a picture takes longer than an ordinary request; never retried
@@ -123,10 +127,14 @@ function calendarText(cal) {
   return [...ev, ...se].join("\n") || "(nothing special coming up — pick a timely, useful theme)";
 }
 
-function promptFor({ brief, today, pictures, recent, offers, calendar, results, categories = [], carousel = false }) {
+function promptFor({ brief, today, pictures, recent, offers, calendar, results, categories = [], carousel = false, reel = false }) {
   return [
     `Today's date: ${today} (India).`,
-    carousel ? "Format: single or carousel (allowed today)." : 'Format: "single" only today.',
+    reel
+      ? 'Format: "reel" — a short vertical video. "title" is the hook on the first frame (max 7 words); "slides" are 3–5 quick points, each "title" max 6 words and "text" max 12 words, read in 3 seconds. Pick a topic that works as quick tips. Caption as usual.'
+      : carousel
+        ? "Format: single or carousel (allowed today)."
+        : 'Format: "single" only today.',
     untrusted("brief", brief || "A post for today: pick a timely, useful theme (season, common home problems, a service people need now)."),
     untrusted("calendar", calendarText(calendar)),
     untrusted("offers", offers.length ? offers.map((o) => `${o.code}: ${o.discountPercent}% off${o.minOrder ? ` on orders over ₹${o.minOrder}` : ""}${o.description ? ` — ${o.description}` : ""}`).join("\n") : "(no active offers — don't mention any)"),
@@ -140,13 +148,13 @@ function promptFor({ brief, today, pictures, recent, offers, calendar, results, 
   ].join("\n\n");
 }
 
-const channelName = (c) => ({ facebook: "Facebook", instagram: "Instagram", threads: "Threads" })[c] || c;
+const channelName = (c) => ({ facebook: "Facebook", instagram: "Instagram", threads: "Threads", youtube: "YouTube" })[c] || c;
 const oneLine = (v, n) => String(v || "").replace(/\s+/g, " ").trim().slice(0, n);
 const latinOnly = (v) => !/[ऀ-ॿ]/.test(v); // the server draws picture text without a Devanagari font
 
 // Pure: checks the model's answer; returns the post, or null. A carousel that doesn't pass falls
 // back to a single picture. Exported for tests.
-function cleanAnswer(raw, pictures, { carousel = false } = {}) {
+function cleanAnswer(raw, pictures, { carousel = false, reel = false } = {}) {
   if (!raw || typeof raw.caption !== "string") return null;
   const caption = raw.caption.trim();
   const n = Number(raw.picture);
@@ -165,10 +173,12 @@ function cleanAnswer(raw, pictures, { carousel = false } = {}) {
     threadsText: String(raw.threads || "").trim().slice(0, 500),
     why: String(raw.why || "").slice(0, 300),
   };
-  if (carousel && raw.format === "carousel") {
-    const title = oneLine(raw.title, 90);
-    const slides = (Array.isArray(raw.slides) ? raw.slides : []).map((s) => ({ title: oneLine(s?.title, 70), text: oneLine(s?.text, 220) })).filter((s) => s.title).slice(0, 5);
-    if (title && slides.length >= 3 && [title, ...slides.flatMap((s) => [s.title, s.text])].every(latinOnly)) Object.assign(post, { format: "carousel", title, slides });
+  const wants = reel ? "reel" : carousel && raw.format === "carousel" ? "carousel" : null;
+  if (wants) {
+    const title = oneLine(raw.title, wants === "reel" ? 70 : 90);
+    const slides = (Array.isArray(raw.slides) ? raw.slides : []).map((s) => ({ title: oneLine(s?.title, wants === "reel" ? 50 : 70), text: oneLine(s?.text, wants === "reel" ? 110 : 220) })).filter((s) => s.title).slice(0, 5);
+    if (title && slides.length >= 3 && [title, ...slides.flatMap((s) => [s.title, s.text])].every(latinOnly)) Object.assign(post, { format: wants, title, slides });
+    else if (reel) return null; // a Reel needs its points
   }
   return post;
 }
@@ -176,7 +186,7 @@ function cleanAnswer(raw, pictures, { carousel = false } = {}) {
 // The request that publishes a post (sent by the agent with Auto-post on, or by Approvals).
 function bodyFor(post, channels) {
   const body = { caption: post.caption, imageUrl: post.picture.url, channels };
-  if (post.format === "carousel") Object.assign(body, { format: "carousel", title: post.title, slides: post.slides });
+  if (post.format === "carousel" || post.format === "reel") Object.assign(body, { format: post.format, title: post.title, slides: post.slides });
   if (post.topic) body.topic = post.topic;
   if (post.picture.fresh) body.fresh = true;
   if (post.colour) body.colour = post.colour;
@@ -186,9 +196,10 @@ function bodyFor(post, channels) {
 
 function proposalFor(post, channels, dedupeKey) {
   const where = channels.map(channelName).join(" + ");
-  const slides = post.format === "carousel" ? `\n\nCarousel: "${post.title}"\n${post.slides.map((s, i) => `${i + 2}. ${s.title} — ${s.text}`).join("\n")}\n${post.slides.length + 2}. Book on tikdum.com or the Tikdum app` : "";
+  const kind = { carousel: "Carousel", reel: "Reel" }[post.format];
+  const slides = kind ? `\n\n${kind}: "${post.title}"\n${post.slides.map((s, i) => `${i + 2}. ${s.title} — ${s.text}`).join("\n")}\n${post.slides.length + 2}. Book on tikdum.com or the Tikdum app` : "";
   return {
-    title: `${post.format === "carousel" ? "Carousel" : "Post"} on ${where}: "${post.caption.split("\n")[0].slice(0, 70)}${post.caption.length > 70 ? "…" : ""}"`,
+    title: `${kind || "Post"} on ${where}: "${post.caption.split("\n")[0].slice(0, 70)}${post.caption.length > 70 ? "…" : ""}"`,
     summary: `${post.caption}${slides}\n\nPicture: ${post.picture.label}`,
     reasoning: `${post.why || "Written by the Marketing Agent."}\nApproving publishes it right away on ${where}. Reject it if anything is off — nothing is posted until you approve.`,
     dedupeKey,
@@ -208,7 +219,7 @@ async function pictureFor(client, log, post, colours) {
   return { picture: post.picture, colour: c?.hex ? { hex: c.hex, name: c.name } : null };
 }
 
-async function writePost(client, log, brief, now, { carousel = false, cover = null } = {}) {
+async function writePost(client, log, brief, now, { carousel = false, cover = null, reel = false } = {}) {
   const [pictures, recent, offers, calendar, colours] = await Promise.all([
     client.get("/admin/social/images"),
     client.get("/admin/social/posts?limit=60").catch(() => []),
@@ -218,9 +229,9 @@ async function writePost(client, log, brief, now, { carousel = false, cover = nu
   ]);
   if (!pictures.length) throw new Error("No pictures to use — add category photos or banners first");
   const categories = (Array.isArray(colours) ? colours : []).map((c) => c.category).filter(Boolean);
-  const prompt = promptFor({ brief, today: istDay(now), pictures, recent: (recent || []).slice(0, 8), offers, calendar, results: resultsFor(recent, now), categories, carousel });
+  const prompt = promptFor({ brief, today: istDay(now), pictures, recent: (recent || []).slice(0, 8), offers, calendar, results: resultsFor(recent, now), categories, carousel, reel });
   const raw = await completeJson(client, { system: SYSTEM, prompt, maxTokens: 1100 });
-  const post = cleanAnswer(raw, pictures, { carousel });
+  const post = cleanAnswer(raw, pictures, { carousel, reel });
   if (!post) throw new Error("The AI's post didn't pass the checks (caption length, hashtags or picture)");
   if (cover) {
     const c = (Array.isArray(colours) ? colours : []).find((x) => x.category && post.category && x.category.toLowerCase() === post.category.toLowerCase());
@@ -326,6 +337,9 @@ async function weeklyReport(client, log, now) {
 async function run(client, log, { st, office, now = Date.now() }) {
   const status = await client.get("/admin/social/status").catch(() => null);
   const channels = ["facebook", "instagram", "threads"].filter((c) => status?.[c]);
+  // YouTube only takes Reels (as Shorts); the server needs ffmpeg to make them.
+  const reelChannels = [...channels, ...(status?.youtube ? ["youtube"] : [])];
+  const reelsOn = self0 => self0?.socialReels !== false && status?.video !== false;
   st.socialConnected = channels.length > 0;
   if (!channels.length) return 0; // not connected yet (deploy/set-meta.sh): "Post: …" tasks get a normal draft
   st.socialTasks = st.socialTasks || {};
@@ -341,6 +355,22 @@ async function run(client, log, { st, office, now = Date.now() }) {
     if (post.format === "carousel") st.socialCarouselDay = today;
   };
   const postingDay = config.social.daysIst.includes(weekdayIst(now));
+  // The day's Reel, from 18:00 — a run that makes it doesn't also make a post (the next run does).
+  if (postingDay && reelsOn(self) && istHour(now) >= REEL_FROM_HOUR && st.socialReelDay !== today) {
+    st.socialReelDay = today; // one try a day
+    try {
+      const reel = await writePost(client, log, null, now, { reel: true });
+      if (auto) {
+        await client.request("POST", "/admin/social/posts", bodyFor(reel, reelChannels), SLOW);
+        log.info("marketing", "reel started", { title: reel.title });
+      } else {
+        await client.propose(proposalFor(reel, reelChannels, `social:reel:${today}`));
+      }
+      return proposed + 1;
+    } catch (e) {
+      log.warn("marketing", "reel failed", { error: e.message });
+    }
+  }
   // A new blog article to share (once), as the next scheduled post.
   st.socialBlogShared = st.socialBlogShared || {};
   const published = await client.get("/blog").catch(() => []);

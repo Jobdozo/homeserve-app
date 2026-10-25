@@ -9,8 +9,8 @@ import { useApp } from "../context/AppContext";
 const inputCls = "w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-[13px] text-gray-800 outline-none focus:border-brand";
 const labelCls = "mb-1 block text-[12.5px] font-semibold text-gray-700";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const FORMAT = { single: "Picture", carousel: "Carousel", story: "Story" };
-const CHANNEL = { facebook: "Facebook", instagram: "Instagram", threads: "Threads" };
+const FORMAT = { single: "Picture", carousel: "Carousel", story: "Story", reel: "Reel" };
+const CHANNEL = { facebook: "Facebook", instagram: "Instagram", threads: "Threads", youtube: "YouTube" };
 
 const when = (iso) => new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 const fmtDate = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -34,14 +34,17 @@ function PostCard({ p }) {
   const failed = Object.entries(p.results || {}).filter(([, r]) => !r.ok);
   return (
     <div className="flex gap-3 rounded-2xl bg-white p-3 shadow-card">
-      <div className={`relative flex-shrink-0 overflow-hidden rounded-xl bg-gray-100 ${p.format === "story" ? "h-[128px] w-[72px]" : "h-[96px] w-[96px]"}`}>
+      <div className={`relative flex-shrink-0 overflow-hidden rounded-xl bg-gray-100 ${p.format === "story" || p.format === "reel" ? "h-[128px] w-[72px]" : "h-[96px] w-[96px]"}`}>
         {p.image && <img src={p.image} alt="" loading="lazy" className="h-full w-full object-cover" />}
         {p.format === "carousel" && <span className="absolute right-1 top-1 rounded-md bg-black/60 px-1.5 text-[10.5px] font-bold text-white">1/{p.images?.length || "…"}</span>}
+        {p.format === "reel" && <span className="absolute inset-0 flex items-center justify-center text-[22px] text-white drop-shadow">▶</span>}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-gray-600">{FORMAT[p.format || "single"]}</span>
           {p.fresh && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-700">New picture</span>}
+          {p.status === "publishing" && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">Publishing… (a few minutes)</span>}
+          {p.status === "failed" && <span className="rounded-full bg-red-50 px-2 py-0.5 text-red-700">Reel failed</span>}
           <span className="text-gray-400">{when(p.at)} · {String(p.by || "").replace(" [AI agent]", " (AI)")}</span>
         </div>
         <p className="mt-1 line-clamp-2 text-[12.5px] leading-snug text-gray-800">{p.format === "story" ? p.storyLine : p.title ? `${p.title} — ${p.caption}` : p.caption}</p>

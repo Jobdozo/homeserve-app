@@ -78,6 +78,22 @@ async function publish(post, images) {
   return { ok: true, id: r.id, link: info.permalink || null };
 }
 
+// A Reel as a Threads video post. Video takes Threads longer to process than a picture.
+async function publishVideo(post, videoUrl) {
+  const uid = userId();
+  const creation = (await call("POST", `/${uid}/threads`, { media_type: "VIDEO", video_url: videoUrl, text: threadsText(post) })).id;
+  for (let i = 0; i < 60; i++) {
+    const s = await call("GET", `/${creation}`, { fields: "status,error_message" });
+    if (s.status === "FINISHED") break;
+    if (s.status === "ERROR" || s.status === "EXPIRED") throw fail(502, `Threads couldn't process the video${s.error_message ? ` (${s.error_message})` : ""}`);
+    if (i === 59) throw fail(502, "Threads took too long to process the video");
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  const r = await call("POST", `/${uid}/threads_publish`, { creation_id: creation });
+  const info = await call("GET", `/${r.id}`, { fields: "permalink" }).catch(() => ({}));
+  return { ok: true, id: r.id, link: info.permalink || null };
+}
+
 // Likes, replies, reposts, quotes and views of one post (needs threads_manage_insights).
 async function metrics(id) {
   const d = await call("GET", `/${id}/insights`, { metric: "views,likes,replies,reposts,quotes" });
@@ -121,4 +137,4 @@ async function renewIfDue(now = Date.now()) {
   }
 }
 
-module.exports = { configured, publish, metrics, username, renewIfDue, threadsText, MAX_TEXT };
+module.exports = { configured, publish, publishVideo, metrics, username, renewIfDue, threadsText, MAX_TEXT };

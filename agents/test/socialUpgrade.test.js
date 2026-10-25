@@ -99,7 +99,7 @@ test("auto-post: fresh picture, carousel with the calendar in the prompt, a Stor
     prompt = JSON.parse(opts.body).messages[0].content;
     return anthropicFetch(url, opts);
   };
-  const self = { kind: "specialist", template: "marketing", budgetRemainingUsd: 1, dailyBudgetUsd: 1, instructions: "x", socialAutoPost: true, socialPostsPerDay: 5, socialStories: true, socialCarousels: true };
+  const self = { kind: "specialist", template: "marketing", budgetRemainingUsd: 1, dailyBudgetUsd: 1, instructions: "x", socialAutoPost: true, socialPostsPerDay: 5, socialStories: true, socialCarousels: true, socialReels: false };
   const published = { results: { facebook: { ok: true, link: "https://www.facebook.com/1" } } };
   const c = fake({
     "GET /agents/self": self,
@@ -157,4 +157,44 @@ test("auto-post: fresh picture, carousel with the calendar in the prompt, a Stor
   assert.equal(reports.length, 1);
   assert.match(reports[0].title, /^Social media this week: 3 posts, 60 likes, 0 comments/);
   assert.match(reports[0].body, /^Carousels did well\./);
+});
+
+test("Reels: one a day from 18:00, a title and 3+ points, to every channel incl. YouTube; nothing when switched off", async () => {
+  const answer = JSON.stringify({ format: "reel", topic: "Geyser care", category: "Appliance Repair", caption: CAPTION, title: "Is your geyser winter-ready?", slides: [{ title: "Slow heating", text: "Sediment builds up." }, { title: "Strange noises", text: "Get it checked." }, { title: "Leaks", text: "Fix drips early." }], scene: "a geyser", show: "service", picture: 1, storyLine: "x" });
+  let prompt = "";
+  global.fetch = async (url, opts) => ((prompt = JSON.parse(opts.body).messages[0].content), { ok: true, json: async () => ({ content: [{ type: "text", text: answer }], usage: {}, stop_reason: "end_turn" }) });
+  const self = { kind: "specialist", template: "marketing", budgetRemainingUsd: 1, dailyBudgetUsd: 1, instructions: "x", socialAutoPost: true, socialPostsPerDay: 5, socialStories: false, socialCarousels: true, socialReels: true };
+  const routes = {
+    "GET /agents/self": self,
+    "GET /agents/office": { tasks: [] },
+    "GET /admin/social/status": { facebook: true, instagram: true, threads: true, youtube: true, video: true },
+    "GET /admin/social/images": PICTURES,
+    "GET /admin/social/posts": [],
+    "GET /admin/offers": [],
+    "POST /admin/social/picture": { url: "https://api.tikdum.com/uploads/r.jpg", colour: null },
+    "POST /admin/social/posts": { id: "r1", format: "reel", status: "publishing", results: {} },
+  };
+  const c = fake(routes);
+  await specialist.tick(c, silent, "specialist-reel", { now: at(24, 18, 3) });
+  global.fetch = realFetch;
+  assert.match(prompt, /Format: "reel"/);
+  const [[, , body]] = writes(c, "/admin/social/posts");
+  assert.equal(body.format, "reel");
+  assert.equal(body.title, "Is your geyser winter-ready?");
+  assert.equal(body.slides.length, 3);
+  assert.deepEqual(body.channels, ["facebook", "instagram", "threads", "youtube"]);
+  // Same day: no second Reel (the next run makes the slot's post instead).
+  global.fetch = async () => ({ ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ caption: CAPTION, picture: 1 }) }], usage: {}, stop_reason: "end_turn" }) });
+  await specialist.tick(c, silent, "specialist-reel", { now: at(24, 19, 3) });
+  global.fetch = realFetch;
+  const bodies = writes(c, "/admin/social/posts").map(([, , b]) => b);
+  assert.equal(bodies.filter((b) => b.format === "reel").length, 1);
+  assert.ok(!bodies[1].channels.includes("youtube")); // ordinary posts don't go to YouTube
+
+  // Switched off (or the server can't make videos): no Reel.
+  const off = fake({ ...routes, "GET /agents/self": { ...self, socialReels: false } });
+  global.fetch = async () => ({ ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ caption: CAPTION, picture: 1 }) }], usage: {}, stop_reason: "end_turn" }) });
+  await specialist.tick(off, silent, "specialist-reel2", { now: at(24, 18, 3) });
+  global.fetch = realFetch;
+  assert.equal(writes(off, "/admin/social/posts").filter(([, , b]) => b.format === "reel").length, 0);
 });

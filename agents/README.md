@@ -140,6 +140,12 @@ in the daily posts). Mondays from 11:00 IST it posts a **results report** to Ale
 shorter text the writer makes for it (500 characters, one tag; `server/src/socialThreads.js`). The server renews the
 60-day token by itself every week. Stories stay on Facebook and Instagram.
 
+**Reels and YouTube Shorts.** Once a day from 18:00 IST (switch "Reels" in AI Agents → Approvals) the Marketing
+Agent writes a title and 3–5 quick points; the server draws 9:16 frames (`socialCards.js`), makes a 12–18 s video with
+ffmpeg (`socialVideo.js`, installed in the server image) and publishes it in the background to Instagram and Facebook
+Reels, Threads and — after `bash deploy/set-youtube.sh` — YouTube as a Short (`socialYoutube.js`). Google keeps
+API uploads private until the Cloud project passes YouTube's API audit. A Reel doesn't count in the daily posts.
+
 **Blog (SEO Agent).** Give the SEO Agent the **Reporting / Management Team** role (template `seo`). Every Tuesday and
 Friday from 10:00 IST (`BLOG_DAYS_IST`, `BLOG_HOUR_IST`) and for every task titled **"Blog: …"** it writes a
 700–1,000-word article from the marketing calendar and the categories, with an Image Studio cover

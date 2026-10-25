@@ -4,6 +4,10 @@
 //   carousel  the picture with the title on it, one card per point, and a "book now" card
 //             (socialCards.js), swiped through on Instagram / shown as an album on Facebook
 //   story     a 9:16 Story made from the picture with one line on it (Stories have no caption)
+//   reel      a 9:16 video of the picture and the points (socialVideo.js) — Instagram and Facebook
+//             Reels, a Threads video and a YouTube Short (socialYoutube.js). Video takes Meta a
+//             minute or two to process, so a Reel is published in the background: the post is
+//             saved as "publishing" and updated when every channel has answered.
 // Every post's results (likes, comments, shares, saves, reach) are read back twice a day
 // (refreshMetrics) for the Marketing Agent's weekly report, so it writes more of what works. Only ever called when a person posts from
 // Admin or approves a Marketing Agent proposal (agents.js "social.post") — agents can't
@@ -20,6 +24,8 @@ const path = require("path");
 const crypto = require("crypto");
 const jsonStore = require("./jsonStore");
 const threads = require("./socialThreads");
+const youtube = require("./socialYoutube");
+const video = require("./socialVideo");
 
 const GRAPH = (process.env.META_GRAPH_URL || "https://graph.facebook.com/v23.0").replace(/\/$/, "");
 const SITE = "https://tikdum.com";
@@ -52,7 +58,7 @@ async function graph(method, pathname, params = {}) {
 let statusCache = { at: 0, value: null };
 async function status() {
   const { pageId, token, igUserId } = cfg();
-  const base = { facebook: Boolean(pageId && token), instagram: Boolean(igUserId && token), threads: threads.configured() };
+  const base = { facebook: Boolean(pageId && token), instagram: Boolean(igUserId && token), threads: threads.configured(), youtube: youtube.configured(), video: await video.available() };
   if (!base.facebook) return { ...base, page: null, instagramUsername: null, threadsUsername: base.threads ? await threads.username() : null };
   if (statusCache.value && Date.now() - statusCache.at < 10 * 60 * 1000) return statusCache.value;
   let value = { ...base, page: null, instagramUsername: null };
@@ -105,6 +111,16 @@ async function prepareFormat(post) {
 }
 
 // GET /api/social-images/<name>: the prepared pictures, public so Meta can fetch them.
+// GET /api/social-videos/<name>: the Reels, public so Meta can fetch them.
+function serveVideo(req, res) {
+  const name = String(req.params.name || "");
+  if (!/^[a-f0-9]{32}\.mp4$/.test(name)) return res.status(404).end();
+  const file = path.join(DIR, "videos", name);
+  if (!fs.existsSync(file)) return res.status(404).end();
+  res.set("Cache-Control", "public, max-age=604800, immutable");
+  res.type("mp4").sendFile(file);
+}
+
 function serveImage(req, res) {
   const name = String(req.params.name || "");
   if (!/^[a-f0-9]{32}\.jpg$/.test(name)) return res.status(404).end();
@@ -114,7 +130,8 @@ function serveImage(req, res) {
   res.type("jpg").sendFile(file);
 }
 
-const FORMATS = ["single", "carousel", "story"];
+const FORMATS = ["single", "carousel", "story", "reel"];
+const CHANNELS = ["facebook", "instagram", "threads", "youtube"];
 const line = (v, n) => String(v || "").replace(/\s+/g, " ").trim().slice(0, n);
 
 function cleanPost({ caption, imageUrl, channels, format, title, slides, storyLine, colour, threadsText } = {}) {
@@ -125,17 +142,19 @@ function cleanPost({ caption, imageUrl, channels, format, title, slides, storyLi
   if ((text.match(/#[\p{L}\p{N}_]+/gu) || []).length > 30) throw fail(400, "Instagram allows at most 30 hashtags");
   if (!imageUrl) throw fail(400, "Pick a picture — Instagram posts need one");
   const wanted = [...new Set((Array.isArray(channels) && channels.length ? channels : ["facebook", "instagram"]).map(String))];
-  if (wanted.some((c) => !["facebook", "instagram", "threads"].includes(c))) throw fail(400, "Channels can be facebook, instagram and threads");
-  // Threads has no Stories.
-  const out = { caption: text, imageUrl: String(imageUrl), channels: kind === "story" ? wanted.filter((c) => c !== "threads") : wanted, format: kind };
-  if (!out.channels.length) throw fail(400, "Stories go to Facebook and Instagram");
+  if (wanted.some((c) => !CHANNELS.includes(c))) throw fail(400, "Channels can be facebook, instagram, threads and youtube");
+  // Threads has no Stories; YouTube only takes Reels (as Shorts).
+  const fits = (c) => (c === "youtube" ? kind === "reel" : c === "threads" ? kind !== "story" : true);
+  const out = { caption: text, imageUrl: String(imageUrl), channels: wanted.filter(fits), format: kind };
+  if (!out.channels.length) throw fail(400, kind === "story" ? "Stories go to Facebook and Instagram" : "Choose Facebook, Instagram or Threads");
   if (threadsText) out.threadsText = String(threadsText).trim().slice(0, threads.MAX_TEXT);
   out.colour = /^#[0-9a-f]{6}$/i.test(colour?.hex || "") ? { hex: colour.hex, name: line(colour.name, 30) } : null;
-  if (kind === "carousel") {
+  if (kind === "carousel" || kind === "reel") {
+    const what = kind === "reel" ? "A Reel" : "A carousel";
     out.title = line(title, 90);
-    if (!out.title) throw fail(400, "A carousel needs a title for its first picture");
-    out.slides = (Array.isArray(slides) ? slides : []).map((sl) => ({ title: line(sl?.title, 70), text: line(sl?.text, 220) })).filter((sl) => sl.title).slice(0, 6);
-    if (out.slides.length < 2) throw fail(400, "A carousel needs at least 2 points");
+    if (!out.title) throw fail(400, `${what} needs a title for its first picture`);
+    out.slides = (Array.isArray(slides) ? slides : []).map((sl) => ({ title: line(sl?.title, 70), text: line(sl?.text, 220) })).filter((sl) => sl.title).slice(0, kind === "reel" ? 5 : 6);
+    if (out.slides.length < 2) throw fail(400, `${what} needs at least 2 points`);
   }
   if (kind === "story") {
     out.storyLine = line(storyLine, 70);
@@ -192,6 +211,82 @@ async function toInstagram(st, post, images) {
   return { ok: true, id: r.id, link: info.permalink || null };
 }
 
+// ---- Reels ----
+async function waitForVideo(get, label) {
+  for (let i = 0; i < 60; i++) {
+    const s = await get();
+    if (s === "FINISHED") return;
+    if (s === "ERROR" || s === "EXPIRED") throw fail(502, `${label} couldn't process the video`);
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  throw fail(502, `${label} took too long to process the video`);
+}
+
+async function reelToInstagram(st, post, videoUrl) {
+  const c = await graph("POST", `/${st.igUserId}/media`, { media_type: "REELS", video_url: videoUrl, caption: post.caption, share_to_feed: "true" });
+  await waitForVideo(async () => (await graph("GET", `/${c.id}`, { fields: "status_code" })).status_code, "Instagram");
+  const r = await graph("POST", `/${st.igUserId}/media_publish`, { creation_id: c.id });
+  const info = await graph("GET", `/${r.id}`, { fields: "permalink" }).catch(() => ({}));
+  return { ok: true, id: r.id, link: info.permalink || null };
+}
+
+// Facebook Reels: start an upload, let Facebook fetch the file, then publish it.
+async function reelToFacebook(st, post, videoUrl) {
+  const start = await graph("POST", `/${st.pageId}/video_reels`, { upload_phase: "start" });
+  const up = await fetch(start.upload_url || `https://rupload.facebook.com/video-upload/v23.0/${start.video_id}`, {
+    method: "POST",
+    headers: { Authorization: `OAuth ${st.token}`, file_url: videoUrl },
+    signal: AbortSignal.timeout(120000),
+  });
+  const upData = await up.json().catch(() => ({}));
+  if (!up.ok || upData.success === false) throw fail(502, `Meta: ${upData.debug_info?.message || upData.error?.message || `upload HTTP ${up.status}`}`);
+  await graph("POST", `/${st.pageId}/video_reels`, { upload_phase: "finish", video_id: start.video_id, video_state: "PUBLISHED", description: post.caption });
+  return { ok: true, id: start.video_id, link: `https://www.facebook.com/reel/${start.video_id}` };
+}
+
+// The frames of a Reel: the photo with the title, one per point, then "book now".
+async function reelFrames(post) {
+  const cards = require("./socialCards");
+  const photo = await fetchPicture(post.imageUrl);
+  const total = post.slides.length + 2;
+  const frames = [{ buffer: await cards.reelCover(photo, post.title, post.colour), seconds: 3.5 }];
+  for (const [i, sl] of post.slides.entries()) frames.push({ buffer: await cards.reelSlide({ ...sl, n: i + 2, total, colour: post.colour }), seconds: sl.text ? 3.5 : 2.5 });
+  frames.push({ buffer: await cards.reelCta(post.colour), seconds: 3 });
+  return frames;
+}
+
+// Runs after publish() has answered: makes the video, sends it everywhere, saves what happened.
+async function finishReel(rowId, post) {
+  const st = cfg();
+  const results = {};
+  let videoUrl = null;
+  let cover = null;
+  try {
+    const frames = await reelFrames(post);
+    cover = store(frames[0].buffer).url;
+    const made = await video.buildReel(frames, path.join(DIR, "videos"));
+    videoUrl = `${IMAGE_BASE}/api/social-videos/${made.name}`;
+    const send = {
+      facebook: () => reelToFacebook(st, post, videoUrl),
+      instagram: () => reelToInstagram(st, post, videoUrl),
+      threads: () => threads.publishVideo(post, videoUrl),
+      youtube: () => youtube.publish(post, made.file),
+    };
+    // One at a time: each waits for its own processing, and a slow one doesn't hold the others' errors.
+    for (const c of post.channels) {
+      try {
+        results[c] = await send[c]();
+      } catch (e) {
+        results[c] = { ok: false, error: e.message };
+      }
+    }
+  } catch (e) {
+    for (const c of post.channels) results[c] = { ok: false, error: e.message };
+  }
+  const ok = Object.values(results).some((r) => r.ok);
+  jsonStore.update(POSTS, rowId, { results, status: ok ? "published" : "failed", video: videoUrl, ...(cover ? { image: cover, images: [cover] } : {}), finishedAt: new Date().toISOString() });
+}
+
 // Publishes to each chosen channel; one failing doesn't stop the other. Returns the saved post.
 async function publish(input, actor) {
   const post = cleanPost(input);
@@ -199,6 +294,29 @@ async function publish(input, actor) {
   if (post.channels.includes("facebook") && !(st.pageId && st.token)) throw fail(400, "Facebook isn't connected (deploy/set-meta.sh)");
   if (post.channels.includes("instagram") && !(st.igUserId && st.token)) throw fail(400, "Instagram isn't connected (deploy/set-meta.sh)");
   if (post.channels.includes("threads") && !threads.configured()) throw fail(400, "Threads isn't connected (deploy/set-threads.sh)");
+  if (post.channels.includes("youtube") && !youtube.configured()) throw fail(400, "YouTube isn't connected (deploy/set-youtube.sh)");
+  if (post.format === "reel") {
+    if (!(await video.available())) throw fail(400, "The server can't make videos yet (ffmpeg isn't installed — redeploy the server)");
+    await fetchPicture(post.imageUrl); // a bad picture fails now, not in the background
+    const row = jsonStore.insert(POSTS, {
+      format: "reel",
+      status: "publishing",
+      caption: post.caption,
+      title: post.title,
+      slides: post.slides,
+      topic: line(input.topic, 80) || null,
+      fresh: input.fresh === true,
+      imageUrl: post.imageUrl,
+      image: null,
+      images: [],
+      channels: post.channels,
+      results: {},
+      by: actor || "admin",
+      at: new Date().toISOString(),
+    });
+    finishReel(row.id, post).catch((e) => console.error("reel failed:", e.message));
+    return row;
+  }
   const images = await prepareFormat(post);
   const results = {};
   for (const [channel, send] of [["facebook", toFacebook], ["instagram", toInstagram], ["threads", (_, p, im) => threads.publish(p, im)]]) {
@@ -235,7 +353,8 @@ function score(m = {}) {
   const f = m.facebook || {};
   const i = m.instagram || {};
   const t = m.threads || {};
-  return (f.reactions || 0) + (i.likes || 0) + (t.likes || 0) + 3 * ((f.comments || 0) + (i.comments || 0) + (t.replies || 0)) + 4 * ((f.shares || 0) + (i.shares || 0) + (t.reposts || 0) + (t.quotes || 0)) + 2 * (i.saved || 0);
+  const y = m.youtube || {};
+  return (f.reactions || 0) + (i.likes || 0) + (t.likes || 0) + (y.likes || 0) + 3 * ((f.comments || 0) + (i.comments || 0) + (t.replies || 0) + (y.comments || 0)) + 4 * ((f.shares || 0) + (i.shares || 0) + (t.reposts || 0) + (t.quotes || 0)) + 2 * (i.saved || 0);
 }
 
 // Each number is asked for on its own: they need different Page permissions (reactions and
@@ -275,14 +394,14 @@ async function instagramMetrics(id) {
 
 // Reads the results of the posts from the last 30 days (not Stories: they're gone after a day).
 async function refreshMetrics({ now = Date.now() } = {}) {
-  if (!cfg().token && !threads.configured()) return { checked: 0 };
+  if (!cfg().token && !threads.configured() && !youtube.configured()) return { checked: 0 };
   await threads.renewIfDue(now);
   let checked = 0;
   for (const row of jsonStore.readAll(POSTS)) {
     if (row.format === "story" || now - Date.parse(row.at) > 30 * 24 * 3600 * 1000) continue;
     const metrics = { at: new Date(now).toISOString() };
     const errors = [];
-    for (const [channel, read] of [["facebook", facebookMetrics], ["instagram", instagramMetrics], ["threads", threads.metrics]]) {
+    for (const [channel, read] of [["facebook", facebookMetrics], ["instagram", instagramMetrics], ["threads", threads.metrics], ["youtube", youtube.metrics]]) {
       const r = row.results?.[channel];
       if (!r?.ok || !r.id) continue;
       try {
@@ -323,4 +442,4 @@ function imageLibrary({ categories = [], banners = [], services = [] }) {
   return out.slice(0, 80);
 }
 
-module.exports = { status, publish, listPosts, serveImage, imageLibrary, cleanPost, prepareImage, refreshMetrics, score, FORMATS };
+module.exports = { status, publish, listPosts, serveImage, serveVideo, imageLibrary, cleanPost, prepareImage, refreshMetrics, score, FORMATS, _finishReel: finishReel };

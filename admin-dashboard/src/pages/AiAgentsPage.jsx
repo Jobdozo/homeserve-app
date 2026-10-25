@@ -182,6 +182,10 @@ function SocialAutoPostPanel({ config, onSaved, canEdit }) {
           <input type="checkbox" className="h-4 w-4 accent-brand" checked={config.socialStories !== false} disabled={!canEdit} onChange={(e) => save({ socialStories: e.target.checked }, e.target.checked ? "Stories on" : "Stories off")} />
           A Story every evening (with Auto-post)
         </label>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" className="h-4 w-4 accent-brand" checked={config.socialReels !== false} disabled={!canEdit} onChange={(e) => save({ socialReels: e.target.checked }, e.target.checked ? "Reels on" : "Reels off")} />
+          A Reel every evening (Instagram, Facebook, Threads + YouTube Shorts)
+        </label>
         <a href="#/social" className="font-semibold text-brand">Results &amp; festival calendar →</a>
       </div>
     </div>

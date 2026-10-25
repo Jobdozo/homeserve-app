@@ -48,3 +48,38 @@ test("renewIfDue: a new token starts the clock, then it's renewed after a week",
   delete process.env.THREADS_TOKEN;
   delete process.env.THREADS_USER_ID;
 });
+
+test("Reels: points required, YouTube only for Reels, video arguments, Short title, daily limit", () => {
+  const video = require("../src/socialVideo");
+  const youtube = require("../src/socialYoutube");
+  const agents = require("../src/agents");
+  const base = { caption: "Geyser care #Jammu #Geyser", imageUrl: "https://tikdum.com/category-photos/plumbing.jpg" };
+  const r = social.cleanPost({ ...base, format: "reel", title: "Is your geyser ready?", slides: [{ title: "Slow heating" }, { title: "Leaks", text: "Fix early" }], channels: ["instagram", "youtube"] });
+  assert.equal(r.format, "reel");
+  assert.deepEqual(r.channels, ["instagram", "youtube"]);
+  assert.throws(() => social.cleanPost({ ...base, format: "reel", title: "T", slides: [{ title: "one" }] }), /A Reel needs at least 2 points/);
+  assert.deepEqual(social.cleanPost({ ...base, channels: ["facebook", "youtube"] }).channels, ["facebook"]); // a picture post doesn't go to YouTube
+  assert.throws(() => social.cleanPost({ ...base, channels: ["youtube"] }), /Choose Facebook/);
+
+  const args = video.reelArgs(["a.jpg", "b.jpg"], [3.5, 3], "out.mp4");
+  const filter = args[args.indexOf("-filter_complex") + 1];
+  assert.match(filter, /\[0:v\].*d=105:s=1080x1920.*\[v0\];\[1:v\].*d=90:/);
+  assert.match(filter, /\[v0\]\[v1\]concat=n=2:v=1:a=0,format=yuv420p\[v\]$/);
+  assert.equal(args[args.indexOf("-t") + 1], "6.5"); // the silent track is as long as the video
+  assert.equal(args.at(-1), "out.mp4");
+
+  const m = youtube.metadata({ title: "x".repeat(120), caption: "Hello #Jammu #GeyserRepair <b>" });
+  assert.ok(m.title.length <= 100 && m.title.endsWith(" #Shorts"));
+  assert.deepEqual(m.tags, ["Jammu", "GeyserRepair"]);
+  assert.doesNotMatch(m.description, /</);
+  assert.equal(youtube.configured(), false);
+
+  agents.setConfig({ socialAutoPost: true, socialReels: true }, "Owner");
+  const admin = { agentId: "mk" };
+  const reelReq = { method: "POST", body: { format: "reel" } };
+  assert.equal(agents.policy(reelReq, admin, "/admin/social/posts"), null);
+  require("../src/jsonStore").insert("socialPosts", { by: "Marketing Agent [AI agent]", format: "reel", at: new Date().toISOString() });
+  assert.match(agents.policy(reelReq, admin, "/admin/social/posts").error, /Today's Reel is done/);
+  agents.setConfig({ socialReels: false }, "Owner");
+  assert.match(agents.policy(reelReq, admin, "/admin/social/posts").error, /Reels are switched off/);
+});

@@ -84,6 +84,7 @@ app.use(express.json());
 app.use("/uploads", uploads.serveUpload);
 // Pictures prepared for Facebook/Instagram posts (social.js); public so Meta can fetch them.
 app.get("/api/social-images/:name", (req, res) => require("./social").serveImage(req, res));
+app.get("/api/social-videos/:name", (req, res) => require("./social").serveVideo(req, res));
 // Flood protection for the whole API (see rateLimit.js); /api/health is never limited.
 app.use("/api", health.countRequest, rateLimit.apiLimits);
 
@@ -3366,6 +3367,7 @@ app.get("/api/agents/self", agentOnly, crm(async (req, res) => {
     socialPostsPerDay: agents.getConfig().socialPostsPerDay,
     socialStories: agents.getConfig().socialStories,
     socialCarousels: agents.getConfig().socialCarousels,
+    socialReels: agents.getConfig().socialReels,
     blogAutoPublish: agents.getConfig().blogAutoPublish,
     blogPerDay: agents.getConfig().blogPerDay,
     kind: req.admin.kind,
@@ -3418,6 +3420,7 @@ app.patch("/api/admin/ai/config", adminOnly, crm(async (req, res) => {
       socialPostsPerDay: req.body?.socialPostsPerDay,
       socialStories: req.body?.socialStories,
       socialCarousels: req.body?.socialCarousels,
+      socialReels: req.body?.socialReels,
       blogAutoPublish: req.body?.blogAutoPublish,
       blogPerDay: req.body?.blogPerDay,
     },
@@ -3427,8 +3430,8 @@ app.patch("/api/admin/ai/config", adminOnly, crm(async (req, res) => {
     audit(req, "ai.config", "ai", "config", "Blog auto-publish", [{ field: "blogAutoPublish", from: `${before.blogAutoPublish} (${before.blogPerDay}/day)`, to: `${cfg.blogAutoPublish} (${cfg.blogPerDay}/day)` }]);
     await store.logActivity("ai", cfg.blogAutoPublish ? `SEO Agent now publishes blog articles by itself, ${cfg.blogPerDay} a day — by ${actorOf(req)}` : `Blog articles back to approval first — by ${actorOf(req)}`).catch(() => {});
   }
-  for (const k of ["socialStories", "socialCarousels"]) {
-    if (before[k] !== cfg[k]) audit(req, "ai.config", "ai", "config", k === "socialStories" ? "Social Stories" : "Social carousels", [{ field: k, from: before[k], to: cfg[k] }]);
+  for (const k of ["socialStories", "socialCarousels", "socialReels"]) {
+    if (before[k] !== cfg[k]) audit(req, "ai.config", "ai", "config", { socialStories: "Social Stories", socialCarousels: "Social carousels", socialReels: "Reels" }[k], [{ field: k, from: before[k], to: cfg[k] }]);
   }
   if (before.socialAutoPost !== cfg.socialAutoPost || before.socialPostsPerDay !== cfg.socialPostsPerDay) {
     audit(req, "ai.config", "ai", "config", "Social auto-post", [
@@ -3838,8 +3841,8 @@ app.get("/api/admin/social/images", adminOnly, crm(async (req, res) => {
 app.get("/api/admin/social/posts", adminOnly, crm(async (req, res) => res.json(social.listPosts(Number(req.query.limit) || 30))));
 app.post("/api/admin/social/posts", adminOnly, crm(async (req, res) => {
   const row = await social.publish(req.body || {}, actorOf(req));
-  const done = Object.entries(row.results).filter(([, r]) => r.ok).map(([k]) => k);
-  const what = row.format === "story" ? `a Story: "${row.storyLine}"` : `${row.format === "carousel" ? "a carousel" : ""}"${row.caption.slice(0, 60)}${row.caption.length > 60 ? "…" : ""}"`;
+  const done = row.format === "reel" ? row.channels : Object.entries(row.results).filter(([, r]) => r.ok).map(([k]) => k);
+  const what = row.format === "story" ? `a Story: "${row.storyLine}"` : row.format === "reel" ? `a Reel (publishing in the background): "${row.title}"` : `${row.format === "carousel" ? "a carousel" : ""}"${row.caption.slice(0, 60)}${row.caption.length > 60 ? "…" : ""}"`;
   await store.logActivity("social", `Posted on ${done.join(" + ")} by ${actorOf(req)}: ${what}`).catch(() => {});
   res.status(201).json(row);
 }));

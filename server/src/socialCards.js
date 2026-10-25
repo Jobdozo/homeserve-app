@@ -116,4 +116,54 @@ async function storyImage(photo, line, colour) {
     .toBuffer();
 }
 
-module.exports = { textSlide, ctaSlide, coverSlide, storyImage, deep };
+// ---- Reels (9:16 frames for socialVideo.js) ----
+// Instagram and Facebook lay their buttons over the bottom ~380 px and the right edge, and the
+// account name over the top, so text stays between 260 and 1500 px down and 90–950 px across.
+const REEL_H = 1920;
+
+// The opening frame: the photo full-height with the title low on a dark fade.
+async function reelCover(photo, title, colour) {
+  const base = await sharp()(photo).rotate().resize(SIZE, REEL_H, { fit: "cover", position: "attention" }).toBuffer();
+  const fade = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${REEL_H}"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">` +
+      `<stop offset="0.35" stop-color="#000" stop-opacity="0"/><stop offset="0.85" stop-color="${deep(colour?.hex)}" stop-opacity="0.92"/></linearGradient></defs>` +
+      `<rect width="${SIZE}" height="${REEL_H}" fill="url(#g)"/></svg>`
+  );
+  const head = await text(title, { font: DISPLAY, size: 74, weight: 800, width: 860 });
+  const headH = (await sharp()(head).metadata()).height;
+  const mark = await logo(260);
+  return sharp()(base)
+    .composite(await layers([
+      { input: fade, left: 0, top: 0 },
+      { input: mark, left: 90, top: 200 },
+      { input: head, left: 90, top: Math.max(900, 1480 - headH) },
+    ]))
+    .jpeg({ quality: 88 })
+    .toBuffer();
+}
+
+// One point: big title and a short line on the category's deep colour.
+async function reelSlide({ title, text: body, n, total, colour }) {
+  const head = await text(title, { font: DISPLAY, size: 76, weight: 800, width: 860 });
+  const headH = (await sharp()(head).metadata()).height;
+  const para = body ? await text(body, { font: BODY, size: 42, colour: "#ffffffd9", width: 860 }) : null;
+  const paraH = para ? (await sharp()(para).metadata()).height : 0;
+  const count = n && total ? await text(`${n}/${total}`, { font: BODY, size: 32, weight: 700, colour: "#ffffffb3", width: 200 }) : null;
+  const mark = await logo(240);
+  const top = Math.max(420, Math.round((REEL_H - headH - paraH - 50) / 2) - 120);
+  return sharp()(ground(SIZE, REEL_H, deep(colour?.hex), colour?.hex || "#7B63F5"))
+    .composite(await layers([
+      { input: mark, left: 90, top: 200 },
+      { input: count, left: 90, top: top - 70 },
+      { input: head, left: 90, top },
+      { input: para, left: 90, top: top + headH + 50 },
+    ]))
+    .jpeg({ quality: 88 })
+    .toBuffer();
+}
+
+async function reelCta(colour) {
+  return reelSlide({ title: "Book a verified professional", text: "On tikdum.com or the Tikdum app — at a time that suits you.", colour });
+}
+
+module.exports = { textSlide, ctaSlide, coverSlide, storyImage, reelCover, reelSlide, reelCta, deep };
