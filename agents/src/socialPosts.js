@@ -362,7 +362,7 @@ async function run(client, log, { st, office, now = Date.now() }) {
     st.socialReelDay = today; // one try a day
     try {
       const reel = await writePost(client, log, null, now, { reel: true });
-      reel.aiVideo = self?.socialAiVideo !== false;
+      reel.aiVideo = self?.socialAiVideo === true; // off unless switched on: it costs ~₹85 a day
       if (auto) {
         await client.request("POST", "/admin/social/posts", bodyFor(reel, reelChannels), SLOW);
         log.info("marketing", "reel started", { title: reel.title });

@@ -295,6 +295,7 @@ async function drawWithCloudflare(prompt, ratio) {
   if (!b64) throw fail(422, "Cloudflare AI didn't return a picture");
   let out = Buffer.from(b64, "base64");
   if (ratio === "16:9" && sharp) out = await sharp(out).resize({ width: 1344, height: 756, fit: "cover" }).jpeg({ quality: 88 }).toBuffer();
+  if (ratio === "9:16" && sharp) out = await sharp(out).resize({ width: 756, height: 1344, fit: "cover", position: "attention" }).jpeg({ quality: 88 }).toBuffer();
   return { mime: "image/jpeg", data: out };
 }
 
@@ -536,13 +537,17 @@ function enqueue(targets, actor) {
 // Blog covers (kind "blog") have their own count, BLOG_PICTURES_PER_DAY.
 const SOCIAL_PICTURES_PER_DAY = Number(process.env.SOCIAL_PICTURES_PER_DAY) || 8;
 const BLOG_PICTURES_PER_DAY = Number(process.env.BLOG_PICTURES_PER_DAY) || 10;
+// Video Studio's picture stories (kind "studio") too, STUDIO_PICTURES_PER_DAY: drawn upright or wide
+// (ratio) and without the stamped logo (the video carries it).
+const STUDIO_PICTURES_PER_DAY = Number(process.env.STUDIO_PICTURES_PER_DAY) || 24;
 const SOCIAL_USAGE = "socialPictureUsage";
-async function drawForSocial({ topic, category = "", scene = "", show = "service", colour = null, kind = "post" }) {
+const CAPS = { blog: [BLOG_PICTURES_PER_DAY, "blog cover"], studio: [STUDIO_PICTURES_PER_DAY, "video"], post: [SOCIAL_PICTURES_PER_DAY, "post"] };
+async function drawForSocial({ topic, category = "", scene = "", show = "service", colour = null, kind = "post", ratio = "1:1", stamp = true }) {
   if (!configured()) throw fail(400, NOT_SET_UP);
-  const dayId = kind === "blog" ? `blog:${istDay()}` : istDay();
-  const cap = kind === "blog" ? BLOG_PICTURES_PER_DAY : SOCIAL_PICTURES_PER_DAY;
+  const [cap, what0] = CAPS[kind] || CAPS.post;
+  const dayId = kind === "post" ? istDay() : `${kind}:${istDay()}`;
   const today = jsonStore.readAll(SOCIAL_USAGE).find((u) => u.id === dayId);
-  if ((today?.count || 0) >= cap) throw fail(429, `Today's ${cap} new ${kind === "blog" ? "blog cover" : "post"} pictures are done`);
+  if ((today?.count || 0) >= cap) throw fail(429, `Today's ${cap} new ${what0} pictures are done`);
   if (usageToday() >= DAILY_LIMIT) throw fail(429, `Daily limit of ${DAILY_LIMIT} pictures reached`);
   const list = await makers();
   if (!list.length) throw fail(400, NOT_SET_UP);
@@ -551,10 +556,10 @@ async function drawForSocial({ topic, category = "", scene = "", show = "service
   const person = found.people && show === "person";
   const expect = { audience: found.audience, people: person };
   // The scene comes from the agent's own writing; prices and numbers would be drawn as text.
-  const sceneText = String(scene || "").replace(/[₹$d]+/g, "").replace(/s+/g, " ").trim().slice(0, 400);
+  const sceneText = String(scene || "").replace(/[₹$\d]+/g, "").replace(/\s+/g, " ").trim().slice(0, 400);
   const what = person ? personLine(found.audience) : `${sceneText || builtInScene(name) || builtInScene(category) || `the room, items and tools involved in ${name}, shown clean and finished`}, in a bright, tidy Indian home. No people and no body parts.`;
   const accent = ` Accent colour ${colour?.name || "soft purple"} with white in a few small details; everything else in natural colours.`;
-  const prompt = `${STYLE} Subject — a picture for a social media post about ${name}${category ? ` (${category})` : ""}. ${person && sceneText ? `Setting: ${sceneText}. ` : ""}${what}${accent} Square composition, subject centred with breathing room.`;
+  const prompt = `${STYLE} Subject — a picture for a social media post about ${name}${category ? ` (${category})` : ""}. ${person && sceneText ? `Setting: ${sceneText}. ` : ""}${what}${accent} ${ratio === "9:16" ? "Tall upright composition, subject in the middle third" : ratio === "16:9" ? "Wide composition" : "Square composition"}, subject centred with breathing room.`;
   const checker = list.find((m) => m.name === "gemini" && m.textModel)?.textModel || null;
   let kept = null;
   let used = null;
@@ -562,10 +567,10 @@ async function drawForSocial({ topic, category = "", scene = "", show = "service
   for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
     addUsage();
     const brief = attempt === 1 ? prompt : `${prompt} Avoid these problems seen in the previous try: ${(qc?.issues || []).join("; ") || "none"}.`;
-    const { image, maker } = await draw(list, brief, "1:1");
+    const { image, maker } = await draw(list, brief, ratio);
     used = maker;
     qc = checker && !geminiResting() ? await inspect(checker, image, expect).catch(() => ({ ok: true, issues: [] })) : { ok: true, issues: [] };
-    kept = await stampLogo(image, colour);
+    kept = stamp ? await stampLogo(image, colour) : image;
     if (qc.ok) break;
   }
   if (!qc.ok) throw fail(422, `The new picture didn't pass the check (${qc.issues.join("; ").slice(0, 160)})`);

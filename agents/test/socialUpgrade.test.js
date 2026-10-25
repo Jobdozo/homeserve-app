@@ -163,7 +163,7 @@ test("Reels: one a day from 18:00, a title and 3+ points, to every channel incl.
   const answer = JSON.stringify({ format: "reel", topic: "Geyser care", category: "Appliance Repair", caption: CAPTION, title: "Is your geyser winter-ready?", slides: [{ title: "Slow heating", text: "Sediment builds up." }, { title: "Strange noises", text: "Get it checked." }, { title: "Leaks", text: "Fix drips early." }], scene: "a geyser", show: "service", picture: 1, storyLine: "x", videoScene: "A technician checks a geyser in a bathroom." });
   let prompt = "";
   global.fetch = async (url, opts) => ((prompt = JSON.parse(opts.body).messages[0].content), { ok: true, json: async () => ({ content: [{ type: "text", text: answer }], usage: {}, stop_reason: "end_turn" }) });
-  const self = { kind: "specialist", template: "marketing", budgetRemainingUsd: 1, dailyBudgetUsd: 1, instructions: "x", socialAutoPost: true, socialPostsPerDay: 5, socialStories: false, socialCarousels: true, socialReels: true };
+  const self = { kind: "specialist", template: "marketing", budgetRemainingUsd: 1, dailyBudgetUsd: 1, instructions: "x", socialAutoPost: true, socialPostsPerDay: 5, socialStories: false, socialCarousels: true, socialReels: true, socialAiVideo: true };
   const routes = {
     "GET /agents/self": self,
     "GET /agents/office": { tasks: [] },

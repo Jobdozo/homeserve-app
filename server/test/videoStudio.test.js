@@ -38,18 +38,21 @@ function deps(over = {}) {
 
 test("jobs and scripts: scene counts, lines in Latin letters, queued once the script is in", () => {
   assert.throws(() => studio.addJob({ idea: "hi" }), /Describe/);
-  const job = studio.addJob({ idea: "Sofa cleaning before winter guests", category: "Home Cleaning" }, "Owner");
+  assert.equal(studio.addJob({ idea: "A cheap picture story" }).kind, "pictures"); // the default
+  studio.remove(studio.list()[0].id);
+  const job = studio.addJob({ idea: "Sofa cleaning before winter guests", category: "Home Cleaning", kind: "ai" }, "Owner");
   assert.equal(job.status, "script");
   assert.equal(job.length, "story");
   assert.equal(job.voice, "hinglish");
-  assert.equal(job.estimateInr, studio.estimate("story"));
+  assert.equal(job.estimateInr, studio.estimate("story", "ai"));
+  assert.ok(studio.estimate("story") < 20); // a picture story costs a few rupees
   assert.throws(() => studio.setScript(job.id, { ...SCRIPT, scenes: SCRIPT.scenes.slice(0, 2) }), /3 scenes/);
   assert.throws(() => studio.setScript(job.id, { ...SCRIPT, scenes: SCRIPT.scenes.map((s) => ({ ...s, line: "" })) }), /voice \/ subtitle line/);
   assert.throws(() => studio.setScript(job.id, { ...SCRIPT, scenes: SCRIPT.scenes.map((s) => ({ ...s, line: "सर्दी आ रही है" })) }), /Latin letters/);
   const ready = studio.setScript(job.id, SCRIPT, "Video Studio Agent [AI agent]");
   assert.equal(ready.status, "queued");
   assert.equal(ready.script.scenes.length, 3);
-  const short = studio.addJob({ idea: "Quick AC tip", length: "short", aspect: "wide", voice: "none", subtitles: false });
+  const short = studio.addJob({ idea: "Quick AC tip", length: "short", aspect: "wide", voice: "none", subtitles: false, kind: "ai" });
   assert.equal(studio.setScript(short.id, { ...SCRIPT, scenes: [{ video: SCRIPT.scenes[0].video }] }).script.scenes.length, 1); // no line needed without voice or subtitles
 });
 
@@ -69,7 +72,7 @@ test("making: one at a time, every scene a clip, voice + subtitles, within the d
   assert.equal(d.made.at(-1).wide, true);
   assert.equal(deps.lastParts.voices.length, 0);
   // Limit reached: a third waits.
-  const third = studio.addJob({ idea: "Pest control before the rains", length: "short" });
+  const third = studio.addJob({ idea: "Pest control before the rains", length: "short", kind: "ai" });
   studio.setScript(third.id, { ...SCRIPT, scenes: SCRIPT.scenes.slice(0, 1) });
   assert.equal(await studio.makeNext(d), null);
   assert.equal(studio.getJob(third.id).status, "queued");
@@ -122,4 +125,26 @@ test("voice: reading the audio out of Gemini's answer, and the reading instructi
   assert.equal(tts.audioFrom({ steps: [] }), null);
   assert.match(tts.instruction("Book karo", "hinglish"), /Hinglish.*Book karo$/);
   assert.match(tts.instruction("Book now", "english"), /Indian English/);
+});
+
+test("picture stories: a picture per scene, as long as its voice line, alternating zooms; their own daily number", async () => {
+  const job = studio.addJob({ idea: "Geyser check before winter", length: "story", category: "Home Cleaning" }, "Owner");
+  studio.setScript(job.id, SCRIPT);
+  const drawn = [];
+  const stills = [];
+  const d = deps({
+    aiVideo: { makeClip: async () => { throw new Error("must not be used for a picture story"); } },
+    imageStudio: { drawForSocial: async (x) => (drawn.push(x), { url: `/uploads/p${drawn.length}.jpg` }) },
+    readUpload: (url) => Buffer.from(url),
+  });
+  d.video = { ...d.video, seconds: async () => 3.1, stillClip: async (pic, secs, opts) => (stills.push({ pic: String(pic), secs, opts }), Buffer.from("clip")) };
+  const out = await studio.makeNext(d);
+  assert.equal(out.status, "ready");
+  assert.equal(drawn.length, 3);
+  assert.deepEqual(drawn.map((x) => [x.kind, x.ratio, x.stamp]), [["studio", "9:16", false], ["studio", "9:16", false], ["studio", "9:16", false]]);
+  assert.equal(drawn[1].show, "person"); // "A Tikdum technician steam-cleans…"
+  assert.deepEqual(stills.map((s) => s.secs), [4.5, 4.5, 4.5]); // 3.1 s of voice + 1.2, at least 4.5
+  assert.deepEqual(stills.map((s) => s.opts.zoomOut), [false, true, false]);
+  assert.equal(stills[0].pic, "/uploads/p1.jpg");
+  assert.equal(studio.summary().picturesToday, 1);
 });

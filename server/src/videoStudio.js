@@ -1,4 +1,10 @@
-// Video Studio (Admin → Video Studio): real-looking AI videos for Tikdum — one 9-second scene
+// Video Studio (Admin → Video Studio): videos for Tikdum — one scene ("short") or a 3-scene story
+// ("story"), made one of two ways:
+//   pictures (the default, about ₹10–15 a video) — an AI picture per scene (Image Studio) with a slow
+//            camera move, the voice-over setting each scene's length
+//   ai       (about ₹75 a scene) — a real-looking AI video clip per scene (socialAiVideo.js)
+// Both get the voice-over, subtitles, logo, title and "book now" card. Below, the original notes:
+// real-looking AI videos for Tikdum — one 9-second scene
 // ("short") or a 3-scene story of about 30 seconds ("story": the problem, a Tikdum professional at
 // work, the happy result), upright (Reels, Shorts) or wide (YouTube, the website), with a Hinglish
 // or English voice-over, subtitles, the logo, the title and the "book now" card.
@@ -21,7 +27,9 @@ const JOBS = "videoJobs";
 const CONFIG = "videoStudioConfig";
 const SCENES = { short: 1, story: 3 };
 const USD_INR = 85;
-const PER_SCENE_USD = 0.9; // ~9 s of 720p video at ~$0.10/s
+const PER_SCENE_USD = { ai: 0.9, pictures: 0.05 }; // ~9 s of 720p AI video at ~$0.10/s; or one picture + a voice line
+// Picture stories cost little, so they have their own, larger daily number.
+const PICTURE_VIDEOS_PER_DAY = Number(process.env.PICTURE_VIDEOS_PER_DAY) || 10;
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const oneLine = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 const istDay = (ms = Date.now()) => new Date(ms + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
@@ -47,17 +55,19 @@ function setConfig(patch, actor) {
   return getConfig();
 }
 
-const estimate = (length) => Math.round(SCENES[length] * PER_SCENE_USD * USD_INR);
+const estimate = (length, kind = "pictures") => Math.max(1, Math.round(SCENES[length] * PER_SCENE_USD[kind === "ai" ? "ai" : "pictures"] * USD_INR));
 
 function addJob(input, actor, { set = null } = {}) {
   const cfg = getConfig();
   const idea = oneLine(input.idea, 400);
   if (idea.length < 5) throw fail(400, "Describe the video you want (a few words at least)");
   const length = input.length === "short" ? "short" : "story";
+  const kind = input.kind === "ai" ? "ai" : "pictures";
   const row = {
     id: `vid_${Date.now().toString(36)}${crypto.randomBytes(3).toString("hex")}`,
     idea,
     length,
+    kind,
     aspect: input.aspect === "wide" ? "wide" : "upright",
     voice: ["hinglish", "english", "none"].includes(input.voice) ? input.voice : cfg.voice,
     subtitles: input.subtitles === undefined ? cfg.subtitles : input.subtitles !== false,
@@ -65,7 +75,7 @@ function addJob(input, actor, { set = null } = {}) {
     set,
     status: "script",
     script: null,
-    estimateInr: estimate(length),
+    estimateInr: estimate(length, kind),
     by: actor || null,
     createdAt: now(),
     updatedAt: now(),
@@ -109,12 +119,20 @@ function list({ status } = {}) {
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 }
 
-const startedToday = () => jsonStore.readAll(JOBS).filter((j) => j.startedAt && istDay(Date.parse(j.startedAt)) === istDay()).length;
+// Started today, by way of making (AI videos have the strict, user-set limit).
+const startedToday = (kind = "ai") => jsonStore.readAll(JOBS).filter((j) => (j.kind === "ai" ? "ai" : "pictures") === kind && j.startedAt && istDay(Date.parse(j.startedAt)) === istDay()).length;
 
 function summary() {
   const cfg = getConfig();
   const jobs = list();
-  return { config: cfg, startedToday: startedToday(), jobs: jobs.slice(0, 100), estimates: { short: estimate("short"), story: estimate("story") } };
+  return {
+    config: cfg,
+    startedToday: startedToday("ai"),
+    picturesToday: startedToday("pictures"),
+    picturesPerDay: PICTURE_VIDEOS_PER_DAY,
+    jobs: jobs.slice(0, 100),
+    estimates: { short: estimate("short"), story: estimate("story"), aiShort: estimate("short", "ai"), aiStory: estimate("story", "ai") },
+  };
 }
 
 // "Remake": with a new script (the agent writes it again) or the same one.
@@ -131,20 +149,20 @@ function remove(id) {
 }
 
 // Ready-made sets: one video per active category, or per festival coming up.
-function addSet(kind, { categories = [], calendar = [], aspect = "upright", length = "story" } = {}, actor) {
+function addSet(setKind, { categories = [], calendar = [], aspect = "upright", length = "story", kind = "pictures" } = {}, actor) {
   const open = new Set(list().filter((j) => !["published", "failed"].includes(j.status) && j.set).map((j) => j.set));
   const made = [];
-  if (kind === "categories") {
+  if (setKind === "categories") {
     for (const c of categories.filter((x) => x.active !== false).slice(0, 20)) {
       const set = `category:${c.id}:${aspect}`;
       if (open.has(set)) continue;
-      made.push(addJob({ idea: `An advert for Tikdum's ${c.name} service: why book a verified professional, what they do, the happy result.`, length, aspect, category: c.name }, actor, { set }));
+      made.push(addJob({ idea: `An advert for Tikdum's ${c.name} service: why book a verified professional, what they do, the happy result.`, length, aspect, kind, category: c.name }, actor, { set }));
     }
-  } else if (kind === "festivals") {
+  } else if (setKind === "festivals") {
     for (const e of calendar.slice(0, 10)) {
       const set = `festival:${e.name}:${e.date}:${aspect}`;
       if (open.has(set)) continue;
-      made.push(addJob({ idea: `A ${e.name} video (${e.date}): festive greeting from Tikdum and the home services people need for it — ${e.ideas || "cleaning and repairs before the festival"}.`, length, aspect }, actor, { set }));
+      made.push(addJob({ idea: `A ${e.name} video (${e.date}): festive greeting from Tikdum and the home services people need for it — ${e.ideas || "cleaning and repairs before the festival"}.`, length, aspect, kind }, actor, { set }));
     }
   } else throw fail(400, "Choose categories or festivals");
   return made;
@@ -157,9 +175,9 @@ let busy = false;
 async function makeNext(deps) {
   if (busy) return null;
   const cfg = getConfig();
-  const next = list({ status: "queued" }).reverse()[0];
-  if (!next) return null;
-  if (startedToday() >= cfg.perDay) return null; // waits for tomorrow
+  const room = { ai: startedToday("ai") < cfg.perDay, pictures: startedToday("pictures") < PICTURE_VIDEOS_PER_DAY };
+  const next = list({ status: "queued" }).reverse().find((j) => room[j.kind === "ai" ? "ai" : "pictures"]);
+  if (!next) return null; // nothing to make, or today's limits are reached: waits for tomorrow
   busy = true;
   jsonStore.update(JOBS, next.id, { status: "making", startedAt: now(), error: null, updatedAt: now() });
   try {
@@ -168,11 +186,21 @@ async function makeNext(deps) {
     const cats = deps.categories || [];
     const cat = cats.find((c) => c.name?.toLowerCase() === String(job.category || "").toLowerCase());
     const colour = cat ? deps.imageStyle.colourFor(cat.id, cats.map((c) => c.id)) : null;
-    const clips = [];
-    for (const sc of job.script.scenes) clips.push(await deps.aiVideo.makeClip({ scene: sc.video, topic: job.script.title, category: job.category || "", wide }));
     const voices = [];
     if (job.voice !== "none") {
       for (const sc of job.script.scenes) voices.push(await deps.tts.speak(sc.line, { language: job.voice, voice: cfg.voiceGender }).catch((e) => (console.error("voice line failed:", e.message), null)));
+    }
+    const clips = [];
+    for (const [i, sc] of job.script.scenes.entries()) {
+      if (job.kind === "ai") {
+        clips.push(await deps.aiVideo.makeClip({ scene: sc.video, topic: job.script.title, category: job.category || "", wide }));
+        continue;
+      }
+      // A picture story: the scene as an AI picture, moving slowly for as long as its voice line.
+      const pic = await deps.imageStudio.drawForSocial({ topic: job.script.title, category: job.category || "", scene: sc.video, show: /\b(technician|professional|worker|cleaner|plumber|electrician|beautician|family|customer|woman|man)\b/i.test(sc.video) ? "person" : "service", colour, kind: "studio", ratio: wide ? "16:9" : "9:16", stamp: false });
+      const said = voices[i] ? await deps.video.seconds(voices[i]) : 0;
+      const length = Math.min(9, Math.max(4.5, said ? said + 1.2 : 5));
+      clips.push(await deps.video.stillClip(deps.readUpload(pic.url), length, { wide, zoomOut: i % 2 === 1 }));
     }
     const subtitles = job.subtitles ? await Promise.all(job.script.scenes.map((sc) => deps.cards.subtitlePng(sc.line, wide ? 1920 : 1080))) : [];
     const made = await deps.video.compose(

@@ -828,7 +828,7 @@ async function getCustomerById(id) {
 async function updateCustomerProfile(id, patch) {
   const fields = {};
   if (patch.name !== undefined) {
-    const name = String(patch.name).trim().replace(/s+/g, " ");
+    const name = String(patch.name).trim().replace(/\s+/g, " ");
     if (!name) throw Object.assign(new Error("Name can't be empty"), { status: 400 });
     if (name.length > 60) throw Object.assign(new Error("Name is too long (60 characters max)"), { status: 400 });
     fields.name = name;

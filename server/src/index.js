@@ -3927,7 +3927,7 @@ app.post("/api/admin/video-studio/sets", adminOnly, crm(async (req, res) => {
     .list()
     .filter((e) => e.kind === "event" && e.active !== false && e.next && e.next.daysAway <= 45)
     .map((e) => ({ name: e.name, date: e.next.date, ideas: e.ideas }));
-  const made = videoStudio.addSet(String(req.body?.kind || ""), { categories: await store.listCategories(), calendar: festivals, aspect: req.body?.aspect, length: req.body?.length }, actorOf(req));
+  const made = videoStudio.addSet(String(req.body?.kind || ""), { categories: await store.listCategories(), calendar: festivals, aspect: req.body?.aspect, length: req.body?.length, kind: req.body?.videoKind === "ai" ? "ai" : "pictures" }, actorOf(req));
   audit(req, "video.set", "videoJob", req.body?.kind || "", `${made.length} videos`);
   res.status(201).json(made);
 }));
@@ -3955,6 +3955,9 @@ setInterval(async () => {
     await videoStudio.makeNext({
       categories: await store.listCategories(),
       aiVideo: require("./socialAiVideo"),
+      imageStudio,
+      // The picture Image Studio just wrote (it may move to cloud storage later, so read it now).
+      readUpload: (url) => require("fs").readFileSync(require("path").join(require("./uploads").UPLOADS_DIR, require("path").basename(String(url)))),
       tts: require("./socialTts"),
       video: require("./socialVideo"),
       cards: require("./socialCards"),

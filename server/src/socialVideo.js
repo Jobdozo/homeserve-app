@@ -207,10 +207,51 @@ async function compose(parts, dir, { wide = false } = {}) {
   }
 }
 
+// Pure: ffmpeg arguments that turn one picture into a moving clip — a slow zoom in, or a slow
+// zoom out (alternate scenes), with silence, `seconds` long. Exported for tests.
+function stillArgs(picture, seconds, { wide = false, zoomOut = false, out }) {
+  const W = wide ? 1920 : 1080;
+  const H = wide ? 1080 : 1920;
+  const frames = Math.round(seconds * FPS);
+  const z = zoomOut ? `if(eq(on,1),1.12,max(zoom-0.0011,1.0))` : `min(zoom+0.0011,1.12)`;
+  return [
+    "-hide_banner", "-y", "-i", picture,
+    "-f", "lavfi", "-t", String(seconds), "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+    "-filter_complex", `[0:v]scale=${W * 2}:${H * 2}:force_original_aspect_ratio=increase,crop=${W * 2}:${H * 2},zoompan=z='${z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${W}x${H}:fps=${FPS},setsar=1,format=yuv420p[v]`,
+    "-map", "[v]", "-map", "1:a", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-r", String(FPS), "-c:a", "aac", "-shortest", "-movflags", "+faststart", out,
+  ];
+}
+
+// One picture as a clip (Buffer of an MP4).
+async function stillClip(picture, seconds, opts = {}) {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "tikdum-still-"));
+  try {
+    const pic = path.join(work, "pic.img");
+    fs.writeFileSync(pic, picture);
+    const out = path.join(work, "clip.mp4");
+    await run(stillArgs(pic, seconds, { ...opts, out }));
+    return fs.readFileSync(out);
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+}
+
+// How long a sound file is, in seconds (0 if it can't be read).
+async function seconds(buffer) {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "tikdum-len-"));
+  try {
+    const f = path.join(work, "a.wav");
+    fs.writeFileSync(f, buffer);
+    return (await probe(f)).seconds;
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+}
+
 // A still from 1 s into the video, for previews. Returns the file written.
 async function thumbnail(file, out) {
   await run(["-hide_banner", "-y", "-ss", "1", "-i", file, "-frames:v", "1", "-vf", "scale=540:-2", "-q:v", "4", out], 30000);
   return out;
 }
 
-module.exports = { buildReel, reelArgs, brandClip, brandArgs, compose, composeArgs, thumbnail, probe, available };
+module.exports = { buildReel, reelArgs, brandClip, brandArgs, compose, composeArgs, stillClip, stillArgs, seconds, thumbnail, probe, available };
