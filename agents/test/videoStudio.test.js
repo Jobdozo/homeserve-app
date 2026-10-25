@@ -66,3 +66,14 @@ test("Video Studio Agent: failed videos don't hold up the queue, and are tried a
   assert.deepEqual(ids({ ...failed, v1: { v: "u-old", at: now } }), ["v1", "v3"]); // remade since
   assert.deepEqual(ids({ v1: "u-v1", v2: "u-v2" }), ["v1", "v2"]); // marks from the old version: retried
 });
+
+test("reading the AI's JSON: line breaks typed inside a text are repaired; real errors still fail", () => {
+  const { parseJsonObject } = require("../src/claude");
+  const answer = 'Here you go:\n{"title": "Diwali se pehle ghar chamakao", "caption": "Diwali aa rahi hai!\nGhar ko chamkao.\n\nBook on tikdum.com or the Tikdum app. #Jammu", "scenes": [{"video": "A bright room", "line": "Say \\"hi\\""}]}';
+  const v = parseJsonObject(answer);
+  assert.equal(v.caption, "Diwali aa rahi hai!\nGhar ko chamkao.\n\nBook on tikdum.com or the Tikdum app. #Jammu");
+  assert.equal(v.scenes[0].line, 'Say "hi"');
+  assert.deepEqual(parseJsonObject('{\n  "a": 1,\n  "b": [2]\n}'), { a: 1, b: [2] }); // line breaks between fields stay fine
+  assert.equal(parseJsonObject('{"a": "unfinished}'), null);
+  assert.equal(parseJsonObject("no json here"), null);
+});

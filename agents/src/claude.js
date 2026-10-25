@@ -75,12 +75,34 @@ function parseJsonObject(text) {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start === -1 || end <= start) return null;
-  try {
-    const v = JSON.parse(text.slice(start, end + 1));
-    return v && typeof v === "object" && !Array.isArray(v) ? v : null;
-  } catch {
-    return null;
+  const raw = text.slice(start, end + 1);
+  for (const candidate of [raw, escapeBreaksInStrings(raw)]) {
+    try {
+      const v = JSON.parse(candidate);
+      return v && typeof v === "object" && !Array.isArray(v) ? v : null;
+    } catch {
+      // try the repaired text next
+    }
   }
+  return null;
+}
+
+// Pure: line breaks and tabs typed straight into JSON strings (a caption written over several
+// lines) escaped, so JSON.parse can read them; everything outside strings is left alone.
+function escapeBreaksInStrings(s) {
+  let out = "";
+  let inString = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inString && c === "\\") {
+      out += c + (s[i + 1] ?? "");
+      i++;
+      continue;
+    }
+    if (c === '"') inString = !inString;
+    out += inString && c === "\n" ? "\\n" : inString && c === "\r" ? "" : inString && c === "\t" ? "\\t" : c;
+  }
+  return out;
 }
 
 // Wraps text written by customers/providers so the model can tell it apart
