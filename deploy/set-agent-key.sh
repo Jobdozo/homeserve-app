@@ -9,7 +9,7 @@
 # Safe to run again (e.g. after making a new key): it replaces the old line.
 # SPECIALIST (Marketing, SEO, Analyst, Research …) and ENGINEERING keys share one comma-separated
 # list (AGENT_KEYS_SPECIALISTS / AGENT_KEYS_ENGINEERING): run once per agent; each run adds one key
-# and keeps the others.
+# and keeps the others that still work (an agent's old key, replaced by New key, is removed).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ENV_FILE=.env
@@ -51,6 +51,16 @@ case "$NAME" in
     # a space or an invisible character from a copy-paste would otherwise split the saved line in
     # two, and docker compose then refuses the whole .env ("unexpected character ','", 25 Oct 2026).
     OLD="$( { grep -aE "$LINES" "$ENV_FILE" || true; } | cut -d= -f2- | grep -aoE 'tkag_[A-Za-z0-9_-]+' | awk '!seen[$0]++' | paste -sd, - )"
+    # Keys the API refuses (401: replaced by a New key in Super Admin) are dropped, so the agents
+    # don't keep trying a dead one. Any other answer (switched off, API not reachable) keeps the key.
+    KEEP=""; DROPPED=0
+    for k in $(printf %s "$OLD" | tr ',' ' '); do
+      c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -X POST http://127.0.0.1:4000/api/agents/token \
+        -H "Content-Type: application/json" --data "{\"apiKey\":\"$k\"}" || echo 000)
+      if [ "$c" = 401 ]; then DROPPED=$((DROPPED + 1)); else KEEP="${KEEP:+$KEEP,}$k"; fi
+    done
+    OLD="$KEEP"; unset KEEP k
+    [ "$DROPPED" = 0 ] || echo "   ($DROPPED old key(s) that no longer work removed from the list)"
     if printf ',%s,' "$OLD" | grep -qF ",$KEY,"; then
       LIST="$OLD"
       echo "   (this key was already in the list)"
