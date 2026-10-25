@@ -160,7 +160,7 @@ test("auto-post: fresh picture, carousel with the calendar in the prompt, a Stor
 });
 
 test("Reels: one a day from 18:00, a title and 3+ points, to every channel incl. YouTube; nothing when switched off", async () => {
-  const answer = JSON.stringify({ format: "reel", topic: "Geyser care", category: "Appliance Repair", caption: CAPTION, title: "Is your geyser winter-ready?", slides: [{ title: "Slow heating", text: "Sediment builds up." }, { title: "Strange noises", text: "Get it checked." }, { title: "Leaks", text: "Fix drips early." }], scene: "a geyser", show: "service", picture: 1, storyLine: "x" });
+  const answer = JSON.stringify({ format: "reel", topic: "Geyser care", category: "Appliance Repair", caption: CAPTION, title: "Is your geyser winter-ready?", slides: [{ title: "Slow heating", text: "Sediment builds up." }, { title: "Strange noises", text: "Get it checked." }, { title: "Leaks", text: "Fix drips early." }], scene: "a geyser", show: "service", picture: 1, storyLine: "x", videoScene: "A technician checks a geyser in a bathroom." });
   let prompt = "";
   global.fetch = async (url, opts) => ((prompt = JSON.parse(opts.body).messages[0].content), { ok: true, json: async () => ({ content: [{ type: "text", text: answer }], usage: {}, stop_reason: "end_turn" }) });
   const self = { kind: "specialist", template: "marketing", budgetRemainingUsd: 1, dailyBudgetUsd: 1, instructions: "x", socialAutoPost: true, socialPostsPerDay: 5, socialStories: false, socialCarousels: true, socialReels: true };
@@ -183,6 +183,8 @@ test("Reels: one a day from 18:00, a title and 3+ points, to every channel incl.
   assert.equal(body.title, "Is your geyser winter-ready?");
   assert.equal(body.slides.length, 3);
   assert.deepEqual(body.channels, ["facebook", "instagram", "threads", "youtube"]);
+  assert.equal(body.videoScene, "A technician checks a geyser in a bathroom."); // AI video is on by default
+  assert.equal(body.category, "Appliance Repair");
   // Same day: no second Reel (the next run makes the slot's post instead).
   global.fetch = async () => ({ ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ caption: CAPTION, picture: 1 }) }], usage: {}, stop_reason: "end_turn" }) });
   await specialist.tick(c, silent, "specialist-reel", { now: at(24, 19, 3) });

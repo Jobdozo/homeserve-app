@@ -610,4 +610,4 @@ async function status() {
   return out;
 }
 
-module.exports = { audienceFor, buildBrief, pickModels, enqueue, settle, drawForSocial, SOCIAL_PICTURES_PER_DAY, listCandidates, status, MAX_QUEUE, DAILY_LIMIT, _inspect: inspect, _drawImage: drawImage, _stampLogo: stampLogo, _forFlux: forFlux, _sceneFor: sceneFor, _builtInScene: builtInScene, _resetGemini: () => { geminiRestUntil = 0; } };
+module.exports = { personLine, audienceFor, buildBrief, pickModels, enqueue, settle, drawForSocial, SOCIAL_PICTURES_PER_DAY, listCandidates, status, MAX_QUEUE, DAILY_LIMIT, _inspect: inspect, _drawImage: drawImage, _stampLogo: stampLogo, _forFlux: forFlux, _sceneFor: sceneFor, _builtInScene: builtInScene, _resetGemini: () => { geminiRestUntil = 0; } };

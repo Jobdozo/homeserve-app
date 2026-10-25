@@ -69,4 +69,57 @@ async function buildReel(frames, dir) {
   }
 }
 
-module.exports = { buildReel, reelArgs, available };
+// What ffmpeg says about a file: its length in seconds and whether it has sound.
+function probe(file) {
+  return new Promise((resolve) => {
+    const p = spawn(ffmpeg(), ["-hide_banner", "-i", file], { stdio: ["ignore", "ignore", "pipe"] });
+    let out = "";
+    p.stderr.on("data", (d) => (out += d));
+    p.on("error", () => resolve({ seconds: 0, audio: false }));
+    p.on("close", () => {
+      const m = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(out);
+      resolve({ seconds: m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : 0, audio: /Stream #\d+:\d+.*Audio:/.test(out) });
+    });
+  });
+}
+
+// Pure: ffmpeg arguments that brand an AI clip — cropped to 9:16, the logo throughout, the title
+// for the first 3.5 s — and add the "book now" card with silence after it. Exported for tests.
+function brandArgs({ clip, logo, title, cta, out, clipSeconds, clipAudio, ctaSeconds = 3 }) {
+  const args = ["-hide_banner", "-y", "-i", clip, "-i", logo, "-i", title, "-loop", "1", "-t", String(ctaSeconds), "-i", cta];
+  args.push("-f", "lavfi", "-t", String(ctaSeconds), "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
+  if (!clipAudio) args.push("-f", "lavfi", "-t", String(clipSeconds), "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
+  const clipA = clipAudio ? "[0:a]aresample=44100,aformat=channel_layouts=stereo[a0]" : "[5:a]anull[a0]";
+  const filter = [
+    `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps=${FPS}[c]`,
+    "[c][1:v]overlay=70:150[c1]",
+    "[c1][2:v]overlay=0:H-h-430:enable='between(t,0,3.5)',format=yuv420p[m]",
+    `[3:v]scale=1080:1920,setsar=1,fps=${FPS},format=yuv420p,fade=t=in:st=0:d=0.3[e]`,
+    clipA,
+    "[m][a0][e][4:a]concat=n=2:v=1:a=1[v][a]",
+  ].join(";");
+  args.push("-filter_complex", filter, "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-r", String(FPS), "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out);
+  return args;
+}
+
+// An AI clip (Buffer) made into a Tikdum Reel. parts: { logo, title, cta } image Buffers.
+async function brandClip(clipBuffer, parts, dir) {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "tikdum-reel-"));
+  try {
+    const file = (n, b) => (fs.writeFileSync(path.join(work, n), b), path.join(work, n));
+    const clip = file("clip.mp4", clipBuffer);
+    const info = await probe(clip);
+    if (!info.seconds) throw fail(502, "The AI video couldn't be read");
+    const out = path.join(work, "reel.mp4");
+    await run(brandArgs({ clip, logo: file("logo.png", parts.logo), title: file("title.png", parts.title), cta: file("cta.jpg", parts.cta), out, clipSeconds: info.seconds, clipAudio: info.audio }));
+    const data = fs.readFileSync(out);
+    fs.mkdirSync(dir, { recursive: true });
+    const name = `${crypto.createHash("sha256").update(data).digest("hex").slice(0, 32)}.mp4`;
+    fs.writeFileSync(path.join(dir, name), data);
+    return { file: path.join(dir, name), name, seconds: info.seconds + 3 };
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+}
+
+module.exports = { buildReel, reelArgs, brandClip, brandArgs, probe, available };

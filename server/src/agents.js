@@ -94,6 +94,8 @@ function getConfig() {
     socialStories: row?.socialStories !== false,
     socialCarousels: row?.socialCarousels !== false,
     socialReels: row?.socialReels !== false,
+    // The daily Reel as a real-looking AI video (Gemini, about $1 each) rather than Tikdum's frames.
+    socialAiVideo: row?.socialAiVideo !== false,
     // true: the SEO Agent publishes its blog articles itself, up to blogPerDay a day (off by
     // default: each article waits in Approvals).
     blogAutoPublish: row?.blogAutoPublish === true,
@@ -113,6 +115,7 @@ function setConfig(patch, actor) {
   if (patch.socialStories !== undefined) row.socialStories = patch.socialStories !== false;
   if (patch.socialCarousels !== undefined) row.socialCarousels = patch.socialCarousels !== false;
   if (patch.socialReels !== undefined) row.socialReels = patch.socialReels !== false;
+  if (patch.socialAiVideo !== undefined) row.socialAiVideo = patch.socialAiVideo !== false;
   if (patch.blogAutoPublish !== undefined) row.blogAutoPublish = patch.blogAutoPublish === true;
   if (patch.blogPerDay !== undefined) row.blogPerDay = clampBlog(patch.blogPerDay);
   if (patch.supportKnowledge !== undefined) {

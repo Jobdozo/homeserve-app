@@ -131,7 +131,7 @@ function promptFor({ brief, today, pictures, recent, offers, calendar, results, 
   return [
     `Today's date: ${today} (India).`,
     reel
-      ? 'Format: "reel" — a short vertical video. "title" is the hook on the first frame (max 7 words); "slides" are 3–5 quick points, each "title" max 6 words and "text" max 12 words, read in 3 seconds. Pick a topic that works as quick tips. Caption as usual.'
+      ? 'Format: "reel" — a short vertical video. "title" is the hook shown on it (max 7 words); "slides" are 3–5 quick points, each "title" max 6 words and "text" max 12 words, read in 3 seconds. Pick a topic that works as quick tips. Caption as usual. Also "videoScene": 2–3 sentences describing a real-looking 9-second video of the job — what the professional does step by step in the home, the camera moves, and a happy customer at the end if it fits (no text, no logos, no prices).'
       : carousel
         ? "Format: single or carousel (allowed today)."
         : 'Format: "single" only today.',
@@ -171,6 +171,7 @@ function cleanAnswer(raw, pictures, { carousel = false, reel = false } = {}) {
     show: raw.show === "person" ? "person" : "service",
     storyLine: latinOnly(String(raw.storyLine || "")) ? oneLine(raw.storyLine, 70) : "",
     threadsText: String(raw.threads || "").trim().slice(0, 500),
+    videoScene: oneLine(raw.videoScene, 700),
     why: String(raw.why || "").slice(0, 300),
   };
   const wants = reel ? "reel" : carousel && raw.format === "carousel" ? "carousel" : null;
@@ -187,6 +188,7 @@ function cleanAnswer(raw, pictures, { carousel = false, reel = false } = {}) {
 function bodyFor(post, channels) {
   const body = { caption: post.caption, imageUrl: post.picture.url, channels };
   if (post.format === "carousel" || post.format === "reel") Object.assign(body, { format: post.format, title: post.title, slides: post.slides });
+  if (post.format === "reel" && post.videoScene && post.aiVideo) Object.assign(body, { videoScene: post.videoScene, category: post.category });
   if (post.topic) body.topic = post.topic;
   if (post.picture.fresh) body.fresh = true;
   if (post.colour) body.colour = post.colour;
@@ -360,6 +362,7 @@ async function run(client, log, { st, office, now = Date.now() }) {
     st.socialReelDay = today; // one try a day
     try {
       const reel = await writePost(client, log, null, now, { reel: true });
+      reel.aiVideo = self?.socialAiVideo !== false;
       if (auto) {
         await client.request("POST", "/admin/social/posts", bodyFor(reel, reelChannels), SLOW);
         log.info("marketing", "reel started", { title: reel.title });

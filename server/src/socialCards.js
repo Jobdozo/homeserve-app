@@ -166,4 +166,21 @@ async function reelCta(colour) {
   return reelSlide({ title: "Book a verified professional", text: "On tikdum.com or the Tikdum app — at a time that suits you.", colour });
 }
 
-module.exports = { textSlide, ctaSlide, coverSlide, storyImage, reelCover, reelSlide, reelCta, deep };
+// Laid over an AI video (socialVideo.js brandClip): the title on a soft fade, transparent elsewhere.
+async function reelTitleOverlay(title, colour) {
+  const head = await text(title, { font: DISPLAY, size: 70, weight: 800, width: 860 });
+  const headH = (await sharp()(head).metadata()).height;
+  const h = headH + 160;
+  const fade = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${h}"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">` +
+      `<stop offset="0" stop-color="${deep(colour?.hex)}" stop-opacity="0"/><stop offset="0.45" stop-color="${deep(colour?.hex)}" stop-opacity="0.85"/></linearGradient></defs>` +
+      `<rect width="${SIZE}" height="${h}" fill="url(#g)"/></svg>`
+  );
+  return sharp()(fade).composite([{ input: head, left: 90, top: 110 }]).png().toBuffer();
+}
+
+async function logoPng(width = 230) {
+  return logo(width);
+}
+
+module.exports = { textSlide, ctaSlide, coverSlide, storyImage, reelCover, reelSlide, reelCta, reelTitleOverlay, logoPng, deep };

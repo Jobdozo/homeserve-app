@@ -7,7 +7,10 @@
 //   reel      a 9:16 video of the picture and the points (socialVideo.js) — Instagram and Facebook
 //             Reels, a Threads video and a YouTube Short (socialYoutube.js). Video takes Meta a
 //             minute or two to process, so a Reel is published in the background: the post is
-//             saved as "publishing" and updated when every channel has answered.
+//             saved as "publishing" and updated when every channel has answered. With a
+//             videoScene, the video is a real-looking AI clip (socialAiVideo.js, at most one a day)
+//             with the logo, the title and the "book now" card; otherwise, or if that fails, it's
+//             made from Tikdum's own frames.
 // Every post's results (likes, comments, shares, saves, reach) are read back twice a day
 // (refreshMetrics) for the Marketing Agent's weekly report, so it writes more of what works. Only ever called when a person posts from
 // Admin or approves a Marketing Agent proposal (agents.js "social.post") — agents can't
@@ -26,6 +29,7 @@ const jsonStore = require("./jsonStore");
 const threads = require("./socialThreads");
 const youtube = require("./socialYoutube");
 const video = require("./socialVideo");
+const aiVideo = require("./socialAiVideo");
 
 const GRAPH = (process.env.META_GRAPH_URL || "https://graph.facebook.com/v23.0").replace(/\/$/, "");
 const SITE = "https://tikdum.com";
@@ -134,7 +138,7 @@ const FORMATS = ["single", "carousel", "story", "reel"];
 const CHANNELS = ["facebook", "instagram", "threads", "youtube"];
 const line = (v, n) => String(v || "").replace(/\s+/g, " ").trim().slice(0, n);
 
-function cleanPost({ caption, imageUrl, channels, format, title, slides, storyLine, colour, threadsText } = {}) {
+function cleanPost({ caption, imageUrl, channels, format, title, slides, storyLine, colour, threadsText, videoScene } = {}) {
   const kind = FORMATS.includes(format) ? format : "single";
   const text = String(caption || "").trim();
   if (!text && kind !== "story") throw fail(400, "Write a caption");
@@ -156,6 +160,7 @@ function cleanPost({ caption, imageUrl, channels, format, title, slides, storyLi
     out.slides = (Array.isArray(slides) ? slides : []).map((sl) => ({ title: line(sl?.title, 70), text: line(sl?.text, 220) })).filter((sl) => sl.title).slice(0, kind === "reel" ? 5 : 6);
     if (out.slides.length < 2) throw fail(400, `${what} needs at least 2 points`);
   }
+  if (kind === "reel" && videoScene) out.videoScene = line(videoScene, 700);
   if (kind === "story") {
     out.storyLine = line(storyLine, 70);
     if (!out.storyLine) throw fail(400, "A Story needs one short line to show on the picture");
@@ -255,6 +260,29 @@ async function reelFrames(post) {
   return frames;
 }
 
+const AI_VIDEOS_PER_DAY = Number(process.env.AI_VIDEOS_PER_DAY) || 1;
+const istDay = (ms = Date.now()) => new Date(ms + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+
+// The AI clip, branded — or null (no scene, no key, today's AI video done, or it failed: the
+// reason is kept on the post).
+async function aiReel(rowId, post, frames) {
+  if (!post.videoScene || !aiVideo.configured()) return null;
+  const today = istDay();
+  const made = jsonStore.readAll(POSTS).filter((p) => p.videoKind === "ai" && p.at && istDay(Date.parse(p.at)) === today).length;
+  if (made >= AI_VIDEOS_PER_DAY) return null;
+  try {
+    const cards = require("./socialCards");
+    const clip = await aiVideo.makeClip({ scene: post.videoScene, topic: post.topic || post.title, category: post.category || "" });
+    const out = await video.brandClip(clip, { logo: await cards.logoPng(230), title: await cards.reelTitleOverlay(post.title, post.colour), cta: frames[frames.length - 1].buffer }, path.join(DIR, "videos"));
+    jsonStore.update(POSTS, rowId, { videoKind: "ai" });
+    return out;
+  } catch (e) {
+    console.error("AI video failed, using Tikdum's frames:", e.message);
+    jsonStore.update(POSTS, rowId, { videoError: String(e.message).slice(0, 300) });
+    return null;
+  }
+}
+
 // Runs after publish() has answered: makes the video, sends it everywhere, saves what happened.
 async function finishReel(rowId, post) {
   const st = cfg();
@@ -264,7 +292,7 @@ async function finishReel(rowId, post) {
   try {
     const frames = await reelFrames(post);
     cover = store(frames[0].buffer).url;
-    const made = await video.buildReel(frames, path.join(DIR, "videos"));
+    const made = (await aiReel(rowId, post, frames)) || (await video.buildReel(frames, path.join(DIR, "videos")));
     videoUrl = `${IMAGE_BASE}/api/social-videos/${made.name}`;
     const send = {
       facebook: () => reelToFacebook(st, post, videoUrl),
@@ -306,6 +334,7 @@ async function publish(input, actor) {
       slides: post.slides,
       topic: line(input.topic, 80) || null,
       fresh: input.fresh === true,
+      videoKind: "frames",
       imageUrl: post.imageUrl,
       image: null,
       images: [],
@@ -314,7 +343,7 @@ async function publish(input, actor) {
       by: actor || "admin",
       at: new Date().toISOString(),
     });
-    finishReel(row.id, post).catch((e) => console.error("reel failed:", e.message));
+    finishReel(row.id, { ...post, topic: line(input.topic, 80), category: line(input.category, 60) }).catch((e) => console.error("reel failed:", e.message));
     return row;
   }
   const images = await prepareFormat(post);

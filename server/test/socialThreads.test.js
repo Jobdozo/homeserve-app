@@ -83,3 +83,30 @@ test("Reels: points required, YouTube only for Reels, video arguments, Short tit
   agents.setConfig({ socialReels: false }, "Owner");
   assert.match(agents.policy(reelReq, admin, "/admin/social/posts").error, /Reels are switched off/);
 });
+
+test("AI video Reels: the prompt's rules, reading Gemini's answer, branding arguments, fallback to frames", async () => {
+  const ai = require("../src/socialAiVideo");
+  const video = require("../src/socialVideo");
+  const p = ai.promptFor({ scene: "A technician deep-cleans a sofa ₹499", topic: "Sofa cleaning", category: "Home Cleaning" });
+  assert.match(p, /9:16/);
+  assert.match(p, /plain black polo/);
+  assert.match(p, /no text, captions/);
+  assert.doesNotMatch(p, /₹/);
+  assert.match(ai.promptFor({ scene: "x", topic: "Full body waxing", category: "Salon" }), /No people and no body parts/);
+  assert.deepEqual(ai.videoFrom({ steps: [{ type: "thought" }, { type: "model_output", content: [{ type: "text" }, { type: "video", uri: "https://g/files/abc" }] }] }), { data: null, uri: "https://g/files/abc" });
+  assert.equal(ai.videoFrom({ steps: [] }), null);
+
+  const withSound = video.brandArgs({ clip: "c.mp4", logo: "l.png", title: "t.png", cta: "e.jpg", out: "o.mp4", clipSeconds: 9, clipAudio: true });
+  const f1 = withSound[withSound.indexOf("-filter_complex") + 1];
+  assert.match(f1, /\[0:a\]aresample/);
+  assert.match(f1, /enable='between\(t,0,3.5\)'/);
+  assert.match(f1, /\[m\]\[a0\]\[e\]\[4:a\]concat=n=2:v=1:a=1\[v\]\[a\]/);
+  const silent = video.brandArgs({ clip: "c.mp4", logo: "l.png", title: "t.png", cta: "e.jpg", out: "o.mp4", clipSeconds: 9, clipAudio: false });
+  assert.match(silent[silent.indexOf("-filter_complex") + 1], /\[5:a\]anull\[a0\]/);
+  assert.equal(silent.filter((a) => a.startsWith("anullsrc")).length, 2);
+
+  // cleanPost keeps the scene only for Reels.
+  const base = { caption: "x", imageUrl: "https://tikdum.com/a.jpg", title: "Title here", slides: [{ title: "a" }, { title: "b" }] };
+  assert.equal(social.cleanPost({ ...base, format: "reel", videoScene: "A scene" }).videoScene, "A scene");
+  assert.equal(social.cleanPost({ ...base, format: "carousel", videoScene: "A scene" }).videoScene, undefined);
+});
