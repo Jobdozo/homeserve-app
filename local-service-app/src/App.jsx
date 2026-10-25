@@ -8,6 +8,7 @@ import LoginScreen from "./screens/LoginScreen";
 import LogoMark from "./components/LogoMark";
 import { useAndroidBackButton } from "./utils/useAndroidBackButton";
 import { trackMeta } from "./utils/metaPixel";
+import { blogAdsFor } from "./utils/blogAds";
 
 // Route-level code splitting: only Login (needed before anything else can
 // render) ships in the initial bundle. Every other screen loads on demand
@@ -65,6 +66,8 @@ function AppRoutes() {
   useAndroidBackButton({ rootPath: "/home", atRoot: authLoading || !customer || pathname === "/home" });
   // Meta Pixel page views (website only; does nothing in the Android app).
   useEffect(() => trackMeta("PageView"), [pathname]);
+  // Google AdSense on the blog only (website only; does nothing in the Android app).
+  useEffect(() => blogAdsFor(pathname), [pathname]);
 
   useEffect(() => {
     if (!pendingNotificationBookingId) return;

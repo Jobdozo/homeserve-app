@@ -330,6 +330,8 @@ const RULES = [
   [/^\/admin\/blog\/[^/]+\/unpublish$/, () => "blog.edit"],
   [/^\/admin\/blog\/picture$/, () => "blog.add"],
   [/^\/admin\/blog(\/|$)/, (m) => `blog.${byMethod(m)}`],
+  // Ads on the blog (blogAds.js): changing them is "manage" — not the SEO Agent's to touch.
+  [/^\/admin\/blog-ads$/, (m) => (m === "GET" ? "blog.view" : "blog.manage")],
   // The Renewals Bot reads renewal dates; the list itself (/admin/paid-services) stays Super Admin only.
   [/^\/admin\/watch\/renewals$/, () => "reports.view"],
   [/^\/admin\/meta\/(status|exclusion-check)$/, () => "reports.view"],

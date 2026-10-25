@@ -105,3 +105,44 @@ test("agents: publishing only with Auto-publish on, at most the day's number; ne
   agents.setConfig({ blogPerDay: 50 }, "Owner");
   assert.equal(agents.getConfig().blogPerDay, 10);
 });
+
+test("AdSense on the blog only: the ID from what's pasted, the script on blog pages only, ads.txt, who may change it", async () => {
+  const ads = require("../src/blogAds");
+  const access = require("../src/access");
+  assert.equal(ads.clientFrom("ca-pub-1234567890123456"), "ca-pub-1234567890123456");
+  assert.equal(ads.clientFrom("pub-1234567890123456"), "ca-pub-1234567890123456");
+  assert.equal(ads.clientFrom('<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1234567890123456" crossorigin="anonymous"></script>'), "ca-pub-1234567890123456");
+  assert.equal(ads.clientFrom("G-ABC123"), null);
+  assert.throws(() => ads.set({ client: "UA-12345" }, "Owner"), /isn't an AdSense publisher ID/);
+
+  const shell = '<html><head><title>x</title></head><body><div id="root"></div></body></html>';
+  const data = { categories: [], blog: blog.listPublished() };
+  const blogPage = () => seo.injectHead(shell, seo.pageFor("/blog", data));
+  assert.doesNotMatch(blogPage(), /adsbygoogle/); // no ID yet: nothing
+  assert.equal(ads.adsTxt(), null);
+
+  ads.set({ client: "ca-pub-1234567890123456" }, "Owner");
+  assert.match(blogPage(), /<script async src="https:\/\/pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js\?client=ca-pub-1234567890123456" crossorigin="anonymous"><\/script>/);
+  assert.match(blogPage(), /<meta name="google-adsense-account" content="ca-pub-1234567890123456" \/>/);
+  const article = blog.listPublished()[0];
+  assert.match(seo.injectHead(shell, seo.pageFor(`/blog/${article.slug}`, data)), /adsbygoogle\.js/);
+  for (const other of ["/", "/home", "/categories", "/blog/nope"]) assert.doesNotMatch(seo.injectHead(shell, seo.pageFor(other, data)), /adsbygoogle|google-adsense-account/, other);
+  assert.equal(ads.adsTxt(), "google.com, pub-1234567890123456, DIRECT, f08c47fec0942fa0\n");
+
+  // Served at tikdum.com/ads.txt (the website's nginx hands unknown files to the page builder).
+  const res = { headers: {}, statusCode: 200, body: null, status(c) { this.statusCode = c; return this; }, set(h, v) { if (typeof h === "string") this.headers[h] = v; else Object.assign(this.headers, h); return this; }, type(t) { this.headers["Content-Type"] = t; return this; }, send(b) { this.body = b; return this; }, end() { return this; } };
+  await seo.route({})({ get: (h) => (h.toLowerCase() === "x-original-uri" ? "/ads.txt" : undefined) }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.headers["Content-Type"], "text/plain");
+  assert.match(res.body, /^google\.com, pub-1234567890123456, DIRECT/);
+
+  // Paused: no script anywhere, ads.txt stays.
+  assert.equal(ads.set({ on: false }, "Owner").on, false);
+  assert.doesNotMatch(blogPage(), /adsbygoogle/);
+  assert.ok(ads.adsTxt());
+  assert.equal(ads.active(), null);
+
+  // Changing it is blog.manage: not the SEO Agent's (management role: view/add/approve).
+  assert.equal(access.requiredFor("GET", "/admin/blog-ads"), "blog.view");
+  assert.equal(access.requiredFor("PUT", "/admin/blog-ads"), "blog.manage");
+});

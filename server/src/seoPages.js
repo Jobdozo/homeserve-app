@@ -318,6 +318,7 @@ function pageFor(rawPath, data = {}) {
       title: titleOf("Home Care Tips & Guides"),
       description: "Tips and guides for your home in Jammu & Kashmir — seasonal maintenance, cleaning checklists, repairs and what to ask before you book — from Tikdum.",
       canonical: "/blog",
+      ads: true, // Google AdSense, on the blog only (blogAds.js)
       jsonLd: [
         breadcrumbs([["Home", "/home"], ["Blog", "/blog"]]),
         { "@context": "https://schema.org", "@type": "Blog", name: "Tikdum Blog", url: `${SITE}/blog`, publisher: { "@id": ORG_ID }, blogPost: list.slice(0, 20).map((a) => ({ "@type": "BlogPosting", headline: a.title, url: `${SITE}/blog/${encodeURIComponent(a.slug)}`, datePublished: a.publishedAt })) },
@@ -334,6 +335,7 @@ function pageFor(rawPath, data = {}) {
       title: titleOf(a.title),
       description: a.description,
       canonical: `/blog/${a.slug}`,
+      ads: true,
       image: abs(a.coverUrl),
       ogType: "article",
       jsonLd: [
@@ -472,6 +474,7 @@ function headFor(p) {
     `<meta data-static-seo name="twitter:description" content="${esc(p.description)}" />`,
     `<meta data-static-seo name="twitter:image" content="${esc(p.image || DEFAULT_IMAGE)}" />`,
     ...(p.jsonLd || []).map((o) => `<script type="application/ld+json" data-seo-path="${esc(p.path)}">${safeJson(o)}</script>`),
+    ...(p.ads ? require("./blogAds").headTags() : []),
   ];
   return tags.filter(Boolean).join("\n    ");
 }
@@ -527,6 +530,11 @@ function route(store) {
     // Only the website's nginx sends this header; anyone else asking gets nothing.
     if (!req.get("x-original-uri")) return res.status(404).end();
     const original = String(req.get("x-original-uri"));
+    // tikdum.com/ads.txt: who may sell ads on the site (AdSense checks it).
+    if (original.split("?")[0] === "/ads.txt") {
+      const txt = require("./blogAds").adsTxt();
+      return txt ? res.type("text/plain").set("Cache-Control", "public, max-age=3600").send(txt) : res.status(404).type("text/plain").send("Not found");
+    }
     let html;
     try {
       html = await getShell();

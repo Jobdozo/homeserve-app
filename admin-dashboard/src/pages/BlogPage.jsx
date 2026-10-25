@@ -174,6 +174,57 @@ function ArticleCard({ a, open, onToggle, onEdit, run, can }) {
 }
 
 // Approval first (default), or the SEO Agent publishes by itself up to N a day.
+// Google AdSense on the blog only (server/src/blogAds.js).
+function AdsPanel() {
+  const { showToast, can } = useApp();
+  const [ads, setAds] = useState(null);
+  const [id, setId] = useState("");
+  useEffect(() => {
+    api.getBlogAds().then((a) => (setAds(a), setId(a.client || ""))).catch(() => {});
+  }, []);
+  if (!ads) return null;
+  const canEdit = can("blog.manage");
+  const save = async (patch, msg) => {
+    try {
+      const a = await api.setBlogAds(patch);
+      setAds(a);
+      setId(a.client || "");
+      showToast(msg);
+    } catch (e) {
+      showToast(e.message || "Couldn't save");
+    }
+  };
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-card">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 max-w-[620px]">
+          <h2 className="text-[14px] font-bold text-gray-900">Ads (Google AdSense)</h2>
+          <p className="text-[12px] leading-snug text-gray-500">
+            {ads.on
+              ? <>Google shows ads on <b>tikdum.com/blog</b> and its articles only — never on booking, checkout, accounts or the Android app. tikdum.com/ads.txt names publisher {ads.client}.</>
+              : ads.client
+                ? "Ads are paused: no blog page loads AdSense. ads.txt stays in place."
+                : "Paste your AdSense publisher ID (AdSense → Account → Account information, it starts with ca-pub-) to show Google ads on the blog only. You can paste AdSense's whole code; the ID is taken from it."}
+          </p>
+        </div>
+        {canEdit && (
+          <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
+            <input value={id} onChange={(e) => setId(e.target.value)} placeholder="ca-pub-1234567890123456" className="w-[230px] rounded-lg border border-gray-200 px-2.5 py-1.5 font-mono text-[12px]" />
+            <button onClick={() => save({ client: id, on: true }, "Ads on for the blog")} disabled={!id.trim() || (id.trim() === ads.client && ads.on)} className="rounded-lg bg-brand px-3 py-1.5 text-[12.5px] font-semibold text-white disabled:opacity-50">
+              Save
+            </button>
+            {ads.client && (
+              <button onClick={() => save({ on: !ads.on }, ads.on ? "Ads paused" : "Ads on for the blog")} className="rounded-lg bg-gray-100 px-3 py-1.5 text-[12.5px] font-semibold text-gray-700">
+                {ads.on ? "Pause ads" : "Turn ads on"}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AutoPublishPanel() {
   const { showToast, can } = useApp();
   const [cfg, setCfg] = useState(null);
@@ -267,6 +318,7 @@ export default function BlogPage() {
   return (
     <div className="space-y-4">
       <AutoPublishPanel />
+      <AdsPanel />
       <div className="rounded-2xl bg-white p-4 shadow-card">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <p className="max-w-[640px] text-[12px] leading-snug text-gray-500">

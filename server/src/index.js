@@ -3872,6 +3872,16 @@ app.get("/api/blog/:slug", (req, res) => {
   res.set("Cache-Control", "public, max-age=300").json(pub);
 });
 // Staff (Admin → Blog), and the SEO Agent's drafts.
+// Google AdSense on the blog only (blogAds.js): the publisher ID, for the website and the admin.
+const blogAds = require("./blogAds");
+app.get("/api/blog-ads", (req, res) => res.set("Cache-Control", "public, max-age=300").json({ client: blogAds.active() }));
+app.get("/api/admin/blog-ads", adminOnly, crm(async (req, res) => res.json(blogAds.get())));
+app.put("/api/admin/blog-ads", adminOnly, crm(async (req, res) => {
+  const before = blogAds.get();
+  const after = blogAds.set({ client: req.body?.client, on: req.body?.on }, actorOf(req));
+  audit(req, "blog.ads", "blog", "ads", "Blog ads (AdSense)", [{ field: "ads", from: before.on ? before.client : "off", to: after.on ? after.client : "off" }]);
+  res.json(after);
+}));
 app.get("/api/admin/blog", adminOnly, crm(async (req, res) => res.json(blog.listAll())));
 app.post("/api/admin/blog", adminOnly, crm(async (req, res) => {
   const row = blog.create(req.body || {}, actorOf(req), { agent: Boolean(req.admin?.agent) });
