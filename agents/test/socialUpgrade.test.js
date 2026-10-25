@@ -171,7 +171,7 @@ test("Reels: one a day from 18:00, a title and 3+ points, to every channel incl.
     "GET /admin/social/images": PICTURES,
     "GET /admin/social/posts": [],
     "GET /admin/offers": [],
-    "POST /admin/social/picture": { url: "https://api.tikdum.com/uploads/r.jpg", colour: null },
+    "POST /admin/social/picture": (b) => ((routes.lastPictureAsk = b), { url: "https://api.tikdum.com/uploads/r.jpg", colour: null }),
     "POST /admin/social/posts": { id: "r1", format: "reel", status: "publishing", results: {} },
   };
   const c = fake(routes);
@@ -180,6 +180,7 @@ test("Reels: one a day from 18:00, a title and 3+ points, to every channel incl.
   assert.match(prompt, /Format: "reel"/);
   const [[, , body]] = writes(c, "/admin/social/posts");
   assert.equal(body.format, "reel");
+  assert.equal(routes.lastPictureAsk.free, true); // a video's picture is from the free maker only
   assert.equal(body.title, "Is your geyser winter-ready?");
   assert.equal(body.slides.length, 3);
   assert.deepEqual(body.channels, ["facebook", "instagram", "threads", "youtube"]);

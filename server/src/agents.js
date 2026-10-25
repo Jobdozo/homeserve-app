@@ -96,7 +96,8 @@ function getConfig() {
     socialReels: row?.socialReels !== false,
     // The daily Reel as a real-looking AI video (Gemini, about $1 each) rather than Tikdum's frames.
     // Off unless someone switches it on (it costs real money every day).
-    socialAiVideo: row?.socialAiVideo === true,
+    socialAiVideo: process.env.ALLOW_PAID_VIDEO === "1" && row?.socialAiVideo === true,
+    paidVideo: process.env.ALLOW_PAID_VIDEO === "1",
     // true: the SEO Agent publishes its blog articles itself, up to blogPerDay a day (off by
     // default: each article waits in Approvals).
     blogAutoPublish: row?.blogAutoPublish === true,

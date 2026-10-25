@@ -23,7 +23,7 @@ const CHANNELS = [
   ["youtube", "YouTube"],
 ];
 
-function NewVideo({ estimates, categories, onMade, busy, run }) {
+function NewVideo({ estimates, categories, onMade, busy, run, paid }) {
   const [f, setF] = useState({ idea: "", kind: "pictures", length: "story", aspect: "upright", category: "", voice: "", subtitles: true });
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
   const submit = async (e) => {
@@ -42,18 +42,20 @@ function NewVideo({ estimates, categories, onMade, busy, run }) {
         <textarea className={`${inputCls} min-h-[70px]`} value={f.idea} onChange={set("idea")} placeholder="e.g. Diwali deep cleaning — a tired family, a Tikdum team cleaning the house, the home glowing for the festival" required minLength={5} maxLength={400} />
       </label>
       <div className="grid gap-3 sm:grid-cols-5">
-        <label>
-          <span className={labelCls}>Made as</span>
-          <select className={inputCls} value={f.kind} onChange={set("kind")}>
-            <option value="pictures">Picture story — cheap</option>
-            <option value="ai">AI video — real footage, costly</option>
-          </select>
-        </label>
+        {paid && (
+          <label>
+            <span className={labelCls}>Made as</span>
+            <select className={inputCls} value={f.kind} onChange={set("kind")}>
+              <option value="pictures">Picture story — free</option>
+              <option value="ai">AI video — real footage, paid</option>
+            </select>
+          </label>
+        )}
         <label>
           <span className={labelCls}>Length</span>
           <select className={inputCls} value={f.length} onChange={set("length")}>
-            <option value="story">Story, 3 scenes · ~₹{f.kind === "ai" ? estimates?.aiStory : estimates?.story}</option>
-            <option value="short">Short, 1 scene · ~₹{f.kind === "ai" ? estimates?.aiShort : estimates?.short}</option>
+            <option value="story">Story, 3 scenes{f.kind === "ai" ? ` · ~₹${estimates?.aiStory}` : " · free"}</option>
+            <option value="short">Short, 1 scene{f.kind === "ai" ? ` · ~₹${estimates?.aiShort}` : " · free"}</option>
           </select>
         </label>
         <label>
@@ -72,7 +74,7 @@ function NewVideo({ estimates, categories, onMade, busy, run }) {
             ))}
           </select>
         </label>
-        <label>
+        {paid && <label>
           <span className={labelCls}>Voice</span>
           <select className={inputCls} value={f.voice} onChange={set("voice")}>
             <option value="">As in settings</option>
@@ -80,7 +82,7 @@ function NewVideo({ estimates, categories, onMade, busy, run }) {
             <option value="english">English</option>
             <option value="none">No voice (music only)</option>
           </select>
-        </label>
+        </label>}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <label className="flex items-center gap-2 text-[13px] text-gray-700">
@@ -95,14 +97,14 @@ function NewVideo({ estimates, categories, onMade, busy, run }) {
   );
 }
 
-function Sets({ estimates, categories, run, onMade }) {
+function Sets({ estimates, categories, run, onMade, paid }) {
   const [aspect, setAspect] = useState("upright");
   const [length, setLength] = useState("story");
   const [videoKind, setVideoKind] = useState("pictures");
   const make = async (kind) => {
     const n = kind === "categories" ? categories.length : "up to 10";
     const each = (videoKind === "ai" ? estimates?.[length === "story" ? "aiStory" : "aiShort"] : estimates?.[length]) || 0;
-    if (!window.confirm(`Make ${n} ${kind === "categories" ? "category" : "festival"} videos (${videoKind === "ai" ? "AI video" : "picture story"}, ${length}, ${aspect})? About ₹${each} each, made within the daily limit over the next days.`)) return;
+    if (!window.confirm(`Make ${n} ${kind === "categories" ? "category" : "festival"} videos (${videoKind === "ai" ? "AI video" : "picture story"}, ${length}, ${aspect})? ${each ? `About ₹${each} each` : "Free"}, made a few a day over the next days.`)) return;
     if (await run(() => api.addVideoSet({ kind, aspect, length, videoKind }), "Added to the queue")) onMade();
   };
   return (
@@ -110,10 +112,12 @@ function Sets({ estimates, categories, run, onMade }) {
       <h2 className="text-[14px] font-bold text-gray-900">Ready-made sets</h2>
       <p className="mt-0.5 text-[12px] text-gray-500">One advert for every service category, or a video for each festival in the next 45 days (from the Social Media calendar). They're made a few a day, within the daily limit.</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <select className="rounded-lg border border-gray-200 px-2 py-1.5 text-[12.5px]" value={videoKind} onChange={(e) => setVideoKind(e.target.value)}>
-          <option value="pictures">Picture stories (cheap)</option>
-          <option value="ai">AI video (costly)</option>
-        </select>
+        {paid && (
+          <select className="rounded-lg border border-gray-200 px-2 py-1.5 text-[12.5px]" value={videoKind} onChange={(e) => setVideoKind(e.target.value)}>
+            <option value="pictures">Picture stories (free)</option>
+            <option value="ai">AI video (paid)</option>
+          </select>
+        )}
         <select className="rounded-lg border border-gray-200 px-2 py-1.5 text-[12.5px]" value={length} onChange={(e) => setLength(e.target.value)}>
           <option value="story">Stories (~30 s)</option>
           <option value="short">Shorts (~12 s)</option>
@@ -149,7 +153,7 @@ function JobCard({ job, connected, run, reload }) {
           <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
             <span className={`rounded-full px-2 py-0.5 ${cls}`}>{label}</span>
             <span className="text-gray-400">
-              {job.kind === "ai" ? "AI video" : "Picture story"} · {job.length === "short" ? "1 scene" : "3 scenes"} · {job.aspect === "wide" ? "16:9" : "9:16"} · voice {job.voice} · ~₹{job.estimateInr}
+              {job.kind === "ai" ? "AI video" : "Picture story"} · {job.length === "short" ? "1 scene" : "3 scenes"} · {job.aspect === "wide" ? "16:9" : "9:16"}{job.voice !== "none" ? ` · voice ${job.voice}` : ""} · {job.estimateInr ? `~₹${job.estimateInr}` : "free"}
               {job.video?.seconds ? ` · ${job.video.seconds} s` : ""}
             </span>
           </div>
@@ -251,35 +255,43 @@ export default function VideoStudioPage() {
           <div className="max-w-[620px]">
             <h2 className="text-[14px] font-bold text-gray-900">Video Studio</h2>
             <p className="mt-0.5 text-[12px] leading-snug text-gray-500">
-              Videos with a voice-over, subtitles, your logo and a "Book" card. The Video Studio Agent writes each script. <b>Picture stories</b> (AI pictures that move, about ₹{data.estimates.story} a video) are the default; <b>AI video</b> (real-looking footage, about ₹{data.estimates.aiStory} a story) is for special ones. Today: {data.picturesToday} of {data.picturesPerDay} picture stories, <b>{data.startedToday}</b> of {cfg.perDay} AI videos.
+              {data.paidAllowed ? (
+                <>Videos with subtitles, music, your logo and a "Book" card. <b>Picture stories</b> are free; <b>AI video</b> (real footage, about ₹{data.estimates.aiStory} a story) is paid. Today: {data.picturesToday} of {data.picturesPerDay} picture stories, <b>{data.startedToday}</b> of {cfg.perDay} AI videos.</>
+              ) : (
+                <><b>Free</b> videos: moving AI pictures (Cloudflare's free allowance, or Tikdum's own photos), subtitles, background music made by the server, your logo and a "Book" card. The Video Studio Agent writes each script. Nothing is paid per video. Made today: {data.picturesToday} of {data.picturesPerDay}.</>
+              )}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-[12px] text-gray-600">
-            <label className="flex items-center gap-1.5">
+            {data.paidAllowed && <label className="flex items-center gap-1.5">
               AI videos a day
               <select className="rounded-lg border border-gray-200 px-2 py-1" value={cfg.perDay} onChange={(e) => saveCfg({ perDay: Number(e.target.value) }, `Up to ${e.target.value} a day`)}>
                 {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => (
                   <option key={n} value={n}>{n}</option>
                 ))}
               </select>
-            </label>
+            </label>}
             <label className="flex items-center gap-1.5">
+              <input type="checkbox" className="h-4 w-4 accent-brand" checked={cfg.music !== false} onChange={(e) => saveCfg({ music: e.target.checked }, e.target.checked ? "Music on" : "Music off")} />
+              Music
+            </label>
+            {data.paidAllowed && <label className="flex items-center gap-1.5">
               Voice
               <select className="rounded-lg border border-gray-200 px-2 py-1" value={cfg.voice} onChange={(e) => saveCfg({ voice: e.target.value }, "Saved")}>
                 <option value="hinglish">Hinglish</option>
                 <option value="english">English</option>
                 <option value="none">None</option>
               </select>
-            </label>
-            <select className="rounded-lg border border-gray-200 px-2 py-1" value={cfg.voiceGender} onChange={(e) => saveCfg({ voiceGender: e.target.value }, "Saved")}>
+            </label>}
+            {data.paidAllowed && <select className="rounded-lg border border-gray-200 px-2 py-1" value={cfg.voiceGender} onChange={(e) => saveCfg({ voiceGender: e.target.value }, "Saved")}>
               <option value="female">Female voice</option>
               <option value="male">Male voice</option>
-            </select>
+            </select>}
           </div>
         </div>
       </div>
-      <NewVideo estimates={data.estimates} categories={categories} onMade={load} busy={busy} run={run} />
-      <Sets estimates={data.estimates} categories={categories} run={run} onMade={load} />
+      <NewVideo estimates={data.estimates} categories={categories} onMade={load} busy={busy} run={run} paid={data.paidAllowed} />
+      <Sets estimates={data.estimates} categories={categories} run={run} onMade={load} paid={data.paidAllowed} />
       {data.jobs.length === 0 ? (
         <p className="py-6 text-center text-[13px] text-gray-400">No videos yet — describe one above.</p>
       ) : (

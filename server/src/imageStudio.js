@@ -542,14 +542,16 @@ const BLOG_PICTURES_PER_DAY = Number(process.env.BLOG_PICTURES_PER_DAY) || 10;
 const STUDIO_PICTURES_PER_DAY = Number(process.env.STUDIO_PICTURES_PER_DAY) || 24;
 const SOCIAL_USAGE = "socialPictureUsage";
 const CAPS = { blog: [BLOG_PICTURES_PER_DAY, "blog cover"], studio: [STUDIO_PICTURES_PER_DAY, "video"], post: [SOCIAL_PICTURES_PER_DAY, "post"] };
-async function drawForSocial({ topic, category = "", scene = "", show = "service", colour = null, kind = "post", ratio = "1:1", stamp = true }) {
-  if (!configured()) throw fail(400, NOT_SET_UP);
+// freeOnly: only Cloudflare Workers AI (its free daily allowance), never the paid Gemini — for
+// videos, which must cost nothing. Without Cloudflare set up, it fails (callers use Tikdum's photos).
+async function drawForSocial({ topic, category = "", scene = "", show = "service", colour = null, kind = "post", ratio = "1:1", stamp = true, freeOnly = false }) {
+  if (freeOnly ? !cfReady() : !configured()) throw fail(400, freeOnly ? "No free picture maker (Cloudflare Workers AI) is set up" : NOT_SET_UP);
   const [cap, what0] = CAPS[kind] || CAPS.post;
   const dayId = kind === "post" ? istDay() : `${kind}:${istDay()}`;
   const today = jsonStore.readAll(SOCIAL_USAGE).find((u) => u.id === dayId);
   if ((today?.count || 0) >= cap) throw fail(429, `Today's ${cap} new ${what0} pictures are done`);
   if (usageToday() >= DAILY_LIMIT) throw fail(429, `Daily limit of ${DAILY_LIMIT} pictures reached`);
-  const list = await makers();
+  const list = freeOnly ? [{ name: "cloudflare", imageModel: cf().model }] : await makers();
   if (!list.length) throw fail(400, NOT_SET_UP);
   const name = String(topic || "").slice(0, 120);
   const found = audienceFor({ name, category });

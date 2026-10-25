@@ -3854,7 +3854,7 @@ app.post("/api/admin/social/picture", adminOnly, crm(async (req, res) => {
   const want = String(req.body?.category || "").toLowerCase().trim();
   const cat = cats.find((c) => c.id === want || String(c.name || "").toLowerCase() === want) || null;
   const colour = cat ? imageStyle.colourFor(cat.id, cats.map((c) => c.id)) : null;
-  const out = await imageStudio.drawForSocial({ topic: req.body?.topic, category: cat?.name || "", scene: req.body?.scene, show: req.body?.show, colour });
+  const out = await imageStudio.drawForSocial({ topic: req.body?.topic, category: cat?.name || "", scene: req.body?.scene, show: req.body?.show, colour, freeOnly: req.body?.free === true });
   // A full address, so Approvals can show it and social.js can fetch it (uploads live on the API host).
   res.json({ ...out, url: `${(process.env.SOCIAL_IMAGE_BASE || "https://api.tikdum.com").replace(/\/$/, "")}${out.url}`, colour, category: cat?.name || null });
 }));
@@ -3956,6 +3956,16 @@ setInterval(async () => {
       categories: await store.listCategories(),
       aiVideo: require("./socialAiVideo"),
       imageStudio,
+      // One of Tikdum's own photos (category photo first) when no free AI picture can be made.
+      libraryPicture: async (category, i = 0) => {
+        const [categories, services] = await Promise.all([store.listCategories(), store.listServices({ activeOnly: true })]);
+        const lib = social.imageLibrary({ categories, banners: store.listActiveBanners(), services });
+        const want = String(category || "").toLowerCase();
+        const mine = lib.filter((p) => want && p.label.toLowerCase().startsWith(want));
+        const pool = mine.length ? mine.concat(lib.filter((p) => p.kind === "service")) : lib;
+        if (!pool.length) throw new Error("No pictures to use");
+        return social.fetchPicture(pool[i % pool.length].url);
+      },
       // The picture Image Studio just wrote (it may move to cloud storage later, so read it now).
       readUpload: (url) => require("fs").readFileSync(require("path").join(require("./uploads").UPLOADS_DIR, require("path").basename(String(url)))),
       tts: require("./socialTts"),

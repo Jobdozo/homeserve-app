@@ -210,9 +210,9 @@ function proposalFor(post, channels, dedupeKey) {
 }
 
 // A fresh picture from Image Studio for this post; else the existing picture the writer picked.
-async function pictureFor(client, log, post, colours) {
+async function pictureFor(client, log, post, colours, { free = false } = {}) {
   try {
-    const r = await client.request("POST", "/admin/social/picture", { topic: post.topic || post.caption.slice(0, 60), category: post.category, scene: post.scene, show: post.show }, SLOW);
+    const r = await client.request("POST", "/admin/social/picture", { topic: post.topic || post.caption.slice(0, 60), category: post.category, scene: post.scene, show: post.show, ...(free ? { free: true } : {}) }, SLOW);
     if (r?.url) return { picture: { url: r.url, label: `New picture: ${post.topic || "this post"}${r.category ? ` (${r.category})` : ""}`, fresh: true }, colour: r.colour || null };
   } catch (e) {
     log.warn("marketing", "new picture failed — using an existing one", { error: e.message });
@@ -238,7 +238,7 @@ async function writePost(client, log, brief, now, { carousel = false, cover = nu
   if (cover) {
     const c = (Array.isArray(colours) ? colours : []).find((x) => x.category && post.category && x.category.toLowerCase() === post.category.toLowerCase());
     Object.assign(post, { picture: { url: cover, label: "The article's cover picture", fresh: true }, colour: c?.hex ? { hex: c.hex, name: c.name } : null });
-  } else Object.assign(post, await pictureFor(client, log, post, Array.isArray(colours) ? colours : []));
+  } else Object.assign(post, await pictureFor(client, log, post, Array.isArray(colours) ? colours : [], { free: reel })); // videos cost nothing
   return post;
 }
 

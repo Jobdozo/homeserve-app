@@ -31,18 +31,23 @@ const PER_SCENE_USD = { ai: 0.9, pictures: 0.05 }; // ~9 s of 720p AI video at ~
 // Picture stories cost little, so they have their own, larger daily number.
 const PICTURE_VIDEOS_PER_DAY = Number(process.env.PICTURE_VIDEOS_PER_DAY) || 10;
 const fail = (status, message) => Object.assign(new Error(message), { status });
+// Videos cost nothing unless the server is told otherwise (ALLOW_PAID_VIDEO=1): free pictures
+// (Cloudflare's free allowance, else Tikdum's own photos), music made here, subtitles. AI video
+// clips and the AI voice are paid, so they're only offered when paid video is allowed.
+const paidAllowed = () => process.env.ALLOW_PAID_VIDEO === "1";
 const oneLine = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 const istDay = (ms = Date.now()) => new Date(ms + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
 const now = () => new Date().toISOString();
 
-const DEFAULTS = { perDay: 2, voice: "hinglish", voiceGender: "female", subtitles: true };
+const DEFAULTS = { perDay: 2, voice: "none", voiceGender: "female", subtitles: true, music: true };
 function getConfig() {
   const row = jsonStore.readAll(CONFIG)[0] || {};
   return {
     perDay: Math.min(10, Math.max(1, Number(row.perDay) || DEFAULTS.perDay)),
-    voice: ["hinglish", "english", "none"].includes(row.voice) ? row.voice : DEFAULTS.voice,
+    voice: paidAllowed() && ["hinglish", "english", "none"].includes(row.voice) ? row.voice : DEFAULTS.voice,
     voiceGender: ["female", "male"].includes(row.voiceGender) ? row.voiceGender : DEFAULTS.voiceGender,
     subtitles: row.subtitles !== false,
+    music: row.music !== false,
   };
 }
 function setConfig(patch, actor) {
@@ -51,25 +56,27 @@ function setConfig(patch, actor) {
   if (["hinglish", "english", "none"].includes(patch.voice)) next.voice = patch.voice;
   if (["female", "male"].includes(patch.voiceGender)) next.voiceGender = patch.voiceGender;
   if (patch.subtitles !== undefined) next.subtitles = patch.subtitles !== false;
+  if (patch.music !== undefined) next.music = patch.music !== false;
   jsonStore.writeAll(CONFIG, [{ id: "config", ...next, updatedAt: now(), updatedBy: actor || null }]);
   return getConfig();
 }
 
-const estimate = (length, kind = "pictures") => Math.max(1, Math.round(SCENES[length] * PER_SCENE_USD[kind === "ai" ? "ai" : "pictures"] * USD_INR));
+// A picture story with free pictures and no AI voice costs nothing.
+const estimate = (length, kind = "pictures") => (kind === "ai" ? Math.round(SCENES[length] * PER_SCENE_USD.ai * USD_INR) : 0);
 
 function addJob(input, actor, { set = null } = {}) {
   const cfg = getConfig();
   const idea = oneLine(input.idea, 400);
   if (idea.length < 5) throw fail(400, "Describe the video you want (a few words at least)");
   const length = input.length === "short" ? "short" : "story";
-  const kind = input.kind === "ai" ? "ai" : "pictures";
+  const kind = paidAllowed() && input.kind === "ai" ? "ai" : "pictures";
   const row = {
     id: `vid_${Date.now().toString(36)}${crypto.randomBytes(3).toString("hex")}`,
     idea,
     length,
     kind,
     aspect: input.aspect === "wide" ? "wide" : "upright",
-    voice: ["hinglish", "english", "none"].includes(input.voice) ? input.voice : cfg.voice,
+    voice: paidAllowed() && ["hinglish", "english", "none"].includes(input.voice) ? input.voice : cfg.voice,
     subtitles: input.subtitles === undefined ? cfg.subtitles : input.subtitles !== false,
     category: oneLine(input.category, 60) || null,
     set,
@@ -130,6 +137,7 @@ function summary() {
     startedToday: startedToday("ai"),
     picturesToday: startedToday("pictures"),
     picturesPerDay: PICTURE_VIDEOS_PER_DAY,
+    paidAllowed: paidAllowed(),
     jobs: jobs.slice(0, 100),
     estimates: { short: estimate("short"), story: estimate("story"), aiShort: estimate("short", "ai"), aiStory: estimate("story", "ai") },
   };
@@ -175,7 +183,7 @@ let busy = false;
 async function makeNext(deps) {
   if (busy) return null;
   const cfg = getConfig();
-  const room = { ai: startedToday("ai") < cfg.perDay, pictures: startedToday("pictures") < PICTURE_VIDEOS_PER_DAY };
+  const room = { ai: paidAllowed() && startedToday("ai") < cfg.perDay, pictures: startedToday("pictures") < PICTURE_VIDEOS_PER_DAY };
   const next = list({ status: "queued" }).reverse().find((j) => room[j.kind === "ai" ? "ai" : "pictures"]);
   if (!next) return null; // nothing to make, or today's limits are reached: waits for tomorrow
   busy = true;
@@ -187,7 +195,7 @@ async function makeNext(deps) {
     const cat = cats.find((c) => c.name?.toLowerCase() === String(job.category || "").toLowerCase());
     const colour = cat ? deps.imageStyle.colourFor(cat.id, cats.map((c) => c.id)) : null;
     const voices = [];
-    if (job.voice !== "none") {
+    if (job.voice !== "none" && paidAllowed()) {
       for (const sc of job.script.scenes) voices.push(await deps.tts.speak(sc.line, { language: job.voice, voice: cfg.voiceGender }).catch((e) => (console.error("voice line failed:", e.message), null)));
     }
     const clips = [];
@@ -196,11 +204,20 @@ async function makeNext(deps) {
         clips.push(await deps.aiVideo.makeClip({ scene: sc.video, topic: job.script.title, category: job.category || "", wide }));
         continue;
       }
-      // A picture story: the scene as an AI picture, moving slowly for as long as its voice line.
-      const pic = await deps.imageStudio.drawForSocial({ topic: job.script.title, category: job.category || "", scene: sc.video, show: /\b(technician|professional|worker|cleaner|plumber|electrician|beautician|family|customer|woman|man)\b/i.test(sc.video) ? "person" : "service", colour, kind: "studio", ratio: wide ? "16:9" : "9:16", stamp: false });
+      // A picture story: the scene as a free AI picture (or one of Tikdum's own photos), moving
+      // slowly for as long as its voice line — or long enough to read the subtitle.
+      let picture;
+      try {
+        const pic = await deps.imageStudio.drawForSocial({ topic: job.script.title, category: job.category || "", scene: sc.video, show: /\b(technician|professional|worker|cleaner|plumber|electrician|beautician|family|customer|woman|man)\b/i.test(sc.video) ? "person" : "service", colour, kind: "studio", ratio: wide ? "16:9" : "9:16", stamp: false, freeOnly: true });
+        picture = deps.readUpload(pic.url);
+      } catch (e) {
+        console.error("free picture failed, using Tikdum's photo:", e.message);
+        picture = await deps.libraryPicture(job.category, i);
+      }
       const said = voices[i] ? await deps.video.seconds(voices[i]) : 0;
-      const length = Math.min(9, Math.max(4.5, said ? said + 1.2 : 5));
-      clips.push(await deps.video.stillClip(deps.readUpload(pic.url), length, { wide, zoomOut: i % 2 === 1 }));
+      const words = String(sc.line || "").split(/\s+/).filter(Boolean).length;
+      const length = Math.min(9, Math.max(4.5, said ? said + 1.2 : 2 + words * 0.35));
+      clips.push(await deps.video.stillClip(picture, length, { wide, zoomOut: i % 2 === 1 }));
     }
     const subtitles = job.subtitles ? await Promise.all(job.script.scenes.map((sc) => deps.cards.subtitlePng(sc.line, wide ? 1920 : 1080))) : [];
     const made = await deps.video.compose(
@@ -211,6 +228,7 @@ async function makeNext(deps) {
         cta: wide ? await deps.cards.wideCta(colour) : await deps.cards.reelCta(colour),
         subtitles,
         voices,
+        music: cfg.music ? await deps.video.musicBed(60).catch(() => null) : null,
       },
       deps.dir,
       { wide }

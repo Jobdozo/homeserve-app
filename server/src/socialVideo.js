@@ -31,11 +31,13 @@ async function available() {
 }
 
 // Pure: the ffmpeg arguments for frames shown `seconds` each, in order. Exported for tests.
-function reelArgs(files, seconds, out) {
+function reelArgs(files, seconds, out, music = null) {
   const total = seconds.reduce((a, b) => a + b, 0);
   const args = ["-hide_banner", "-y"];
   for (const f of files) args.push("-i", f);
-  args.push("-f", "lavfi", "-t", String(total), "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
+  // The free background music (musicBed) if there is one, else silence.
+  if (music) args.push("-i", music);
+  else args.push("-f", "lavfi", "-t", String(total), "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
   const parts = files.map((_, i) => {
     const frames = Math.round(seconds[i] * FPS);
     // Scaled up first so the zoom doesn't judder; a short fade in from black between frames.
@@ -48,7 +50,7 @@ function reelArgs(files, seconds, out) {
 }
 
 // frames: [{ buffer (JPEG), seconds }]. Writes the video into dir and returns { file, name, seconds }.
-async function buildReel(frames, dir) {
+async function buildReel(frames, dir, { music = null } = {}) {
   if (!frames.length) throw fail(400, "A Reel needs frames");
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "tikdum-reel-"));
   try {
@@ -58,7 +60,9 @@ async function buildReel(frames, dir) {
       return file;
     });
     const out = path.join(work, "reel.mp4");
-    await run(reelArgs(files, frames.map((f) => f.seconds), out));
+    let musicFile = null;
+    if (music) fs.writeFileSync((musicFile = path.join(work, "music.wav")), music);
+    await run(reelArgs(files, frames.map((f) => f.seconds), out, musicFile));
     const data = fs.readFileSync(out);
     fs.mkdirSync(dir, { recursive: true });
     const name = `${crypto.createHash("sha256").update(data).digest("hex").slice(0, 32)}.mp4`;
@@ -129,7 +133,7 @@ async function brandClip(clipBuffer, parts, dir) {
 // subtitle during that scene, the clips' own sound (quieter under a voice-over) with the voice
 // lines placed at their scene's start, then the "book now" card. Exported for tests.
 // clips: [{ file, seconds, audio }]; subtitles: [{ file, start, end }]; voices: [{ file, start }].
-function composeArgs({ clips, logo, title, subtitles = [], voices = [], cta, ctaSeconds = 3, wide = false, out }) {
+function composeArgs({ clips, logo, title, subtitles = [], voices = [], music = null, cta, ctaSeconds = 3, wide = false, out }) {
   const W = wide ? 1920 : 1080;
   const H = wide ? 1080 : 1920;
   const args = ["-hide_banner", "-y"];
@@ -142,6 +146,7 @@ function composeArgs({ clips, logo, title, subtitles = [], voices = [], cta, cta
   const total = clips.reduce((a, c) => a + c.seconds, 0);
   const silenceIn = input("-f", "lavfi", "-t", String(total + ctaSeconds), "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
   const voiceIn = voices.map((v) => input("-i", v.file));
+  const musicIn = music ? input("-i", music) : null;
 
   const f = [];
   clips.forEach((c, i) => f.push(`[${clipIn[i]}:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=${FPS},format=yuv420p,fade=t=in:st=0:d=0.3[c${i}]`));
@@ -164,11 +169,18 @@ function composeArgs({ clips, logo, title, subtitles = [], voices = [], cta, cta
   clips.forEach((c, i) => f.push(c.audio ? `[${clipIn[i]}:a]aresample=44100,aformat=channel_layouts=stereo,apad=whole_dur=${c.seconds}[ca${i}]` : `[${silenceIn}:a]atrim=0:${c.seconds},asetpts=N/SR/TB[ca${i}]`));
   f.push(`[${silenceIn}:a]atrim=0:${ctaSeconds},asetpts=N/SR/TB[cs]`);
   f.push(`${clips.map((_, i) => `[ca${i}]`).join("")}[cs]concat=n=${clips.length + 1}:v=0:a=1[bed]`);
+  // Background music (musicBed) under it all, quieter when someone is speaking.
+  const mix = [];
+  if (musicIn !== null) {
+    f.push(`[${musicIn}:a]aresample=44100,aformat=channel_layouts=stereo,volume=${voices.length ? 0.35 : 0.8},apad,atrim=0:${(total + ctaSeconds).toFixed(2)}[mus]`);
+    mix.push("[mus]");
+  }
   if (voices.length) {
     f.push(`[bed]volume=0.22[bedq]`);
-    voices.forEach((x, i) => f.push(`[${voiceIn[i]}:a]aresample=44100,aformat=channel_layouts=stereo,adelay=${Math.round(x.start * 1000)}|${Math.round(x.start * 1000)}[vo${i}]`));
-    f.push(`[bedq]${voices.map((_, i) => `[vo${i}]`).join("")}amix=inputs=${voices.length + 1}:duration=first:normalize=0[a]`);
-  } else f.push(`[bed]anull[a]`);
+    voices.forEach((x, i) => (f.push(`[${voiceIn[i]}:a]aresample=44100,aformat=channel_layouts=stereo,adelay=${Math.round(x.start * 1000)}|${Math.round(x.start * 1000)}[vo${i}]`), mix.push(`[vo${i}]`)));
+    f.push(`[bedq]${mix.join("")}amix=inputs=${mix.length + 1}:duration=first:normalize=0[a]`);
+  } else if (mix.length) f.push(`[bed]${mix.join("")}amix=inputs=2:duration=first:normalize=0[a]`);
+  else f.push(`[bed]anull[a]`);
 
   args.push("-filter_complex", f.join(";"), "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-r", String(FPS), "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out);
   return args;
@@ -196,7 +208,8 @@ async function compose(parts, dir, { wide = false } = {}) {
       t += c.seconds;
     });
     const out = path.join(work, "video.mp4");
-    await run(composeArgs({ clips, logo: file("logo.png", parts.logo), title: file("title.png", parts.title), subtitles, voices, cta: file("cta.jpg", parts.cta), wide, out }), 600000);
+    const music = parts.music ? file("music.wav", parts.music) : null;
+    await run(composeArgs({ clips, logo: file("logo.png", parts.logo), title: file("title.png", parts.title), subtitles, voices, music, cta: file("cta.jpg", parts.cta), wide, out }), 600000);
     const data = fs.readFileSync(out);
     fs.mkdirSync(dir, { recursive: true });
     const name = `${crypto.createHash("sha256").update(data).digest("hex").slice(0, 32)}.mp4`;
@@ -248,10 +261,52 @@ async function seconds(buffer) {
   }
 }
 
+// ---- Free background music, made here (no licence, no cost) ----
+// A warm four-chord loop (C – G – Am – F, 2.4 s each) with a soft rising-and-falling pad, a low
+// note, and a light plucked pattern on top; each chord swells in and out so the changes don't click.
+const CHORDS = [
+  [261.63, 329.63, 392.0],
+  [196.0, 246.94, 293.66],
+  [220.0, 261.63, 329.63],
+  [174.61, 220.0, 261.63],
+];
+const pick = (n) => `if(eq(k,0),${CHORDS[0][n]},if(eq(k,1),${CHORDS[1][n]},if(eq(k,2),${CHORDS[2][n]},${CHORDS[3][n]})))`;
+
+// Pure: ffmpeg arguments for `seconds` of music into `out` (WAV). Exported for tests.
+function musicArgs(seconds, out) {
+  const k = "mod(floor(t/2.4),4)";
+  const sub = (s) => s.replace(/k/g, k);
+  const [f1, f2, f3] = [0, 1, 2].map((n) => sub(pick(n)));
+  const swell = "pow(sin(PI*mod(t,2.4)/2.4),0.6)";
+  const pad = `0.055*${swell}*(sin(2*PI*${f1}*t)+sin(2*PI*${f2}*t)+sin(2*PI*${f3}*t))`;
+  const bass = `0.07*${swell}*sin(PI*${f1}*t)`;
+  const step = "mod(floor(t/0.3),3)";
+  const pluckF = `2*if(eq(${step},0),${f1},if(eq(${step},1),${f2},${f3}))`;
+  const pluck = `0.045*min(1,mod(t,0.3)*80)*exp(-12*mod(t,0.3))*sin(2*PI*${pluckF}*t)`;
+  return [
+    "-hide_banner", "-y",
+    "-f", "lavfi", "-i", `aevalsrc='${pad}+${bass}+${pluck}':s=44100:d=${seconds}`,
+    "-af", `lowpass=f=3200,aecho=0.8:0.6:80:0.25,afade=t=in:st=0:d=1,afade=t=out:st=${Math.max(0, seconds - 1.5)}:d=1.5,volume=4`,
+    "-ac", "2", out,
+  ];
+}
+
+// The music as a WAV Buffer.
+async function musicBed(seconds) {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "tikdum-music-"));
+  try {
+    const out = path.join(work, "music.wav");
+    await run(musicArgs(Math.ceil(seconds), out), 60000);
+    return fs.readFileSync(out);
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+}
+
 // A still from 1 s into the video, for previews. Returns the file written.
 async function thumbnail(file, out) {
   await run(["-hide_banner", "-y", "-ss", "1", "-i", file, "-frames:v", "1", "-vf", "scale=540:-2", "-q:v", "4", out], 30000);
   return out;
 }
 
-module.exports = { buildReel, reelArgs, brandClip, brandArgs, compose, composeArgs, stillClip, stillArgs, seconds, thumbnail, probe, available };
+module.exports = { buildReel, reelArgs, brandClip, brandArgs, compose, composeArgs, stillClip, stillArgs, seconds, musicBed, musicArgs, thumbnail, probe, available };

@@ -5,6 +5,8 @@ const os = require("os");
 const path = require("path");
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "tikdum-studio-"));
+// Most tests here cover the paid paths (AI video, AI voice); the last one turns them off again.
+process.env.ALLOW_PAID_VIDEO = "1";
 const studio = require("../src/videoStudio");
 const tts = require("../src/socialTts");
 const agents = require("../src/agents");
@@ -29,7 +31,7 @@ function deps(over = {}) {
     aiVideo: { makeClip: async (x) => (made.push(x), Buffer.from("clip")) },
     tts: { speak: async () => Buffer.from("wav") },
     cards: { subtitlePng: async () => Buffer.from("s"), logoPng: async () => Buffer.from("l"), reelTitleOverlay: async () => Buffer.from("t"), wideTitleOverlay: async () => Buffer.from("t"), reelCta: async () => Buffer.from("c"), wideCta: async () => Buffer.from("c") },
-    video: { compose: async (parts) => ((deps.lastParts = parts), { file: "/x/v.mp4", name: "a".repeat(32) + ".mp4", seconds: 30.2 }), thumbnail: async (f, out) => out },
+    video: { compose: async (parts) => ((deps.lastParts = parts), { file: "/x/v.mp4", name: "a".repeat(32) + ".mp4", seconds: 30.2 }), thumbnail: async (f, out) => out, musicBed: async () => Buffer.from("m") },
     publicBase: "https://api.tikdum.com",
     dir: os.tmpdir(),
     ...over,
@@ -38,6 +40,7 @@ function deps(over = {}) {
 
 test("jobs and scripts: scene counts, lines in Latin letters, queued once the script is in", () => {
   assert.throws(() => studio.addJob({ idea: "hi" }), /Describe/);
+  studio.setConfig({ voice: "hinglish" }, "Owner"); // the paid voice, allowed in this file
   assert.equal(studio.addJob({ idea: "A cheap picture story" }).kind, "pictures"); // the default
   studio.remove(studio.list()[0].id);
   const job = studio.addJob({ idea: "Sofa cleaning before winter guests", category: "Home Cleaning", kind: "ai" }, "Owner");
@@ -147,4 +150,33 @@ test("picture stories: a picture per scene, as long as its voice line, alternati
   assert.deepEqual(stills.map((s) => s.opts.zoomOut), [false, true, false]);
   assert.equal(stills[0].pic, "/uploads/p1.jpg");
   assert.equal(studio.summary().picturesToday, 1);
+});
+
+test("free by default: no AI video, no AI voice — free pictures, else Tikdum's photos, with music", async () => {
+  delete process.env.ALLOW_PAID_VIDEO;
+  const job = studio.addJob({ idea: "Free AC tips video", kind: "ai", voice: "hinglish", length: "short" }, "Owner");
+  assert.equal(job.kind, "pictures");
+  assert.equal(job.voice, "none");
+  assert.equal(job.estimateInr, 0);
+  assert.equal(studio.summary().paidAllowed, false);
+  studio.setScript(job.id, { ...SCRIPT, scenes: SCRIPT.scenes.slice(0, 1) });
+  for (const j of studio.list({ status: "queued" })) if (j.id !== job.id) studio.remove(j.id);
+  const asked = [];
+  let library = 0;
+  let music = 0;
+  const d = deps({
+    aiVideo: { makeClip: async () => { throw new Error("paid: must not be used"); } },
+    tts: { speak: async () => { throw new Error("paid: must not be used"); } },
+    imageStudio: { drawForSocial: async (x) => (asked.push(x), Promise.reject(new Error("No free picture maker"))) },
+    libraryPicture: async () => (library++, Buffer.from("photo")),
+    readUpload: () => Buffer.from("x"),
+  });
+  d.video = { ...d.video, seconds: async () => 0, stillClip: async () => Buffer.from("clip"), musicBed: async () => (music++, Buffer.from("music")) };
+  const out = await studio.makeNext(d);
+  assert.equal(out.status, "ready");
+  assert.equal(asked[0].freeOnly, true);
+  assert.equal(library, 1);
+  assert.equal(music, 1);
+  assert.equal(deps.lastParts.voices.length, 0);
+  assert.equal(deps.lastParts.music.toString(), "music");
 });

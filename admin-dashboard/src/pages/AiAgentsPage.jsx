@@ -186,10 +186,10 @@ function SocialAutoPostPanel({ config, onSaved, canEdit }) {
           <input type="checkbox" className="h-4 w-4 accent-brand" checked={config.socialReels !== false} disabled={!canEdit} onChange={(e) => save({ socialReels: e.target.checked }, e.target.checked ? "Reels on" : "Reels off")} />
           A Reel every evening (Instagram, Facebook, Threads + YouTube Shorts)
         </label>
-        <label className="flex items-center gap-2">
+        {config.paidVideo && <label className="flex items-center gap-2">
           <input type="checkbox" className="h-4 w-4 accent-brand" checked={config.socialAiVideo === true} disabled={!canEdit || config.socialReels === false} onChange={(e) => save({ socialAiVideo: e.target.checked }, e.target.checked ? "Reels made as AI video" : "Reels made from Tikdum's slides")} />
           Make the Reel a real-looking AI video (Gemini, about ₹85 each)
-        </label>
+        </label>}
         <a href="#/social" className="font-semibold text-brand">Results &amp; festival calendar →</a>
       </div>
     </div>

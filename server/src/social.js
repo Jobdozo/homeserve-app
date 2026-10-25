@@ -332,7 +332,7 @@ const istDay = (ms = Date.now()) => new Date(ms + 5.5 * 3600 * 1000).toISOString
 // The AI clip, branded — or null (no scene, no key, today's AI video done, or it failed: the
 // reason is kept on the post).
 async function aiReel(rowId, post, frames) {
-  if (!post.videoScene || !aiVideo.configured()) return null;
+  if (process.env.ALLOW_PAID_VIDEO !== "1" || !post.videoScene || !aiVideo.configured()) return null;
   const today = istDay();
   const made = jsonStore.readAll(POSTS).filter((p) => p.videoKind === "ai" && p.at && istDay(Date.parse(p.at)) === today).length;
   if (made >= AI_VIDEOS_PER_DAY) return null;
@@ -358,7 +358,8 @@ async function finishReel(rowId, post) {
   try {
     const frames = await reelFrames(post);
     cover = store(frames[0].buffer).url;
-    const made = (await aiReel(rowId, post, frames)) || (await video.buildReel(frames, path.join(DIR, "videos")));
+    const music = await video.musicBed(frames.reduce((a, f) => a + f.seconds, 0)).catch(() => null);
+    const made = (await aiReel(rowId, post, frames)) || (await video.buildReel(frames, path.join(DIR, "videos"), { music }));
     videoUrl = `${IMAGE_BASE}/api/social-videos/${made.name}`;
     Object.assign(results, await sendVideo(st, post, made.file, videoUrl));
   } catch (e) {
@@ -526,4 +527,4 @@ function imageLibrary({ categories = [], banners = [], services = [] }) {
 
 const VIDEO_DIR = path.join(DIR, "videos");
 
-module.exports = { VIDEO_DIR, status, publish, publishVideo, listPosts, serveImage, serveVideo, imageLibrary, cleanPost, prepareImage, refreshMetrics, score, FORMATS, _finishReel: finishReel };
+module.exports = { VIDEO_DIR, fetchPicture, status, publish, publishVideo, listPosts, serveImage, serveVideo, imageLibrary, cleanPost, prepareImage, refreshMetrics, score, FORMATS, _finishReel: finishReel };
