@@ -237,12 +237,57 @@ function stillArgs(picture, seconds, { wide = false, zoomOut = false, focusX = 0
   ];
 }
 
-// One picture as a clip (Buffer of an MP4).
+// Pure: how many lines at each end are a black band, given each line's brightest pixel (0–255).
+// Exported for tests.
+const DARK = 28;
+function bandsFrom(maxima) {
+  let a = 0;
+  while (a < maxima.length && maxima[a] < DARK) a++;
+  let b = 0;
+  while (b < maxima.length - a && maxima[maxima.length - 1 - b] < DARK) b++;
+  return [a, b];
+}
+
+// The free picture maker sometimes draws black bands into a picture (like a film frame); they're
+// cut off so the scene fills the frame. Bands under 2% are left alone, at most half is ever cut,
+// and any other picture is returned as it is. Without sharp, pictures are used as they come.
+async function trimBands(picture) {
+  let sharp;
+  try {
+    sharp = require("sharp");
+  } catch {
+    return picture;
+  }
+  try {
+    const { width, height } = await sharp(picture, { failOn: "none" }).metadata();
+    if (!width || !height) return picture;
+    const w = Math.min(160, width);
+    const h = Math.max(1, Math.round((height * w) / width));
+    const data = await sharp(picture, { failOn: "none" }).resize(w, h, { fit: "fill" }).greyscale().raw().toBuffer();
+    const rows = Array.from({ length: h }, (_, y) => Math.max(...data.subarray(y * w, (y + 1) * w)));
+    const cols = Array.from({ length: w }, (_, x) => { let m = 0; for (let y = 0; y < h; y++) m = Math.max(m, data[y * w + x]); return m; });
+    const cut = ([a, b], n) => ((a + b) / n >= 0.02 && (n - a - b) / n >= 0.5 ? [a, b] : [0, 0]);
+    const [top, bottom] = cut(bandsFrom(rows), h);
+    const [left, right] = cut(bandsFrom(cols), w);
+    if (!top && !bottom && !left && !right) return picture;
+    // One small line more at each cut edge: the shrunk copy blurs where a band ends.
+    const edge = (n, scale) => (n ? Math.ceil((n + 1) * scale) : 0);
+    const t = edge(top, height / h);
+    const l = edge(left, width / w);
+    const box = { top: t, left: l, height: height - t - edge(bottom, height / h), width: width - l - edge(right, width / w) };
+    if (box.width < 16 || box.height < 16) return picture;
+    return await sharp(picture, { failOn: "none" }).extract(box).jpeg({ quality: 92 }).toBuffer();
+  } catch {
+    return picture;
+  }
+}
+
+// One picture as a clip (Buffer of an MP4), black bands cut off first.
 async function stillClip(picture, seconds, opts = {}) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "tikdum-still-"));
   try {
     const pic = path.join(work, "pic.img");
-    fs.writeFileSync(pic, picture);
+    fs.writeFileSync(pic, await trimBands(picture));
     const out = path.join(work, "clip.mp4");
     await run(stillArgs(pic, seconds, { ...opts, out }));
     return fs.readFileSync(out);
@@ -311,4 +356,4 @@ async function thumbnail(file, out) {
   return out;
 }
 
-module.exports = { buildReel, reelArgs, brandClip, brandArgs, compose, composeArgs, stillClip, stillArgs, seconds, musicBed, musicArgs, thumbnail, probe, available };
+module.exports = { buildReel, reelArgs, brandClip, brandArgs, compose, composeArgs, stillClip, stillArgs, trimBands, bandsFrom, seconds, musicBed, musicArgs, thumbnail, probe, available };

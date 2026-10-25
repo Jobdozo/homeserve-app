@@ -210,3 +210,28 @@ test("pictures that fit: a category guessed from the idea when none was picked; 
   assert.match(crop({}), /crop=2160:3840:\(iw-ow\)\*0\.5:\(ih-oh\)\/2/);
   assert.match(crop({ focusX: 0.6 }), /\(iw-ow\)\*0\.6:/);
 });
+
+test("black bands drawn into a picture are cut off; other pictures are left as they are", async () => {
+  const video = require("../src/socialVideo");
+  const sharp = require("sharp");
+  assert.deepEqual(video.bandsFrom([0, 5, 200, 180, 3, 0]), [2, 2]);
+  assert.deepEqual(video.bandsFrom([0, 0, 0]), [3, 0]); // all dark
+  const picture = async (w, h, bars = 0, ground = { r: 200, g: 120, b: 60 }) => {
+    const base = sharp({ create: { width: w, height: h, channels: 3, background: ground } });
+    if (!bars) return base.jpeg().toBuffer();
+    const bar = await sharp({ create: { width: w, height: bars, channels: 3, background: { r: 0, g: 0, b: 0 } } }).png().toBuffer();
+    return base.composite([{ input: bar, top: 0, left: 0 }, { input: bar, top: h - bars, left: 0 }]).jpeg().toBuffer();
+  };
+  const banded = await video.trimBands(await picture(720, 1280, 160));
+  const m = await sharp(banded).metadata();
+  assert.equal(m.width, 720);
+  assert.ok(m.height >= 940 && m.height <= 960, `${m.height}`); // 1280 − 2×160, a few lines more at the edges
+  const plain = await picture(720, 1280);
+  assert.equal(await video.trimBands(plain), plain); // nothing to cut: the same picture back
+  const thin = await picture(720, 1280, 8); // under 2%
+  assert.equal(await video.trimBands(thin), thin);
+  const black = await picture(720, 1280, 0, { r: 0, g: 0, b: 0 });
+  assert.equal(await video.trimBands(black), black); // never cuts more than half
+  const night = await picture(720, 1280, 0, { r: 40, g: 40, b: 60 }); // dark, but not a band
+  assert.equal(await video.trimBands(night), night);
+});
