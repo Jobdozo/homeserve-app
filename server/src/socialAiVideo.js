@@ -15,14 +15,14 @@ const fail = (status, message) => Object.assign(new Error(message), { status });
 const configured = () => Boolean(key());
 
 // Pure: the full prompt for one clip. Exported for tests.
-function promptFor({ scene, topic = "", category = "" }) {
+function promptFor({ scene, topic = "", category = "", wide = false }) {
   const found = imageStudio.audienceFor({ name: topic, category });
   const sceneText = String(scene || "").replace(/[₹$]/g, "").replace(/\s+/g, " ").trim().slice(0, 700);
   const who = found.people
     ? `The professional is ${imageStudio.personLine(found.audience)}`
     : "No people and no body parts in the video: show the products, tools and the finished result.";
   return [
-    "A realistic, bright, 9-second vertical (9:16) video for a home-services app in Jammu & Kashmir, India, shot like a premium commercial: soft natural daylight, warm and trustworthy mood, steady smooth camera moves.",
+    `A realistic, bright, 9-second ${wide ? "wide (16:9)" : "vertical (9:16)"} video for a home-services app in Jammu & Kashmir, India, shot like a premium commercial: soft natural daylight, warm and trustworthy mood, steady smooth camera moves.`,
     `What happens: ${sceneText || `a professional doing ${topic || "a home service"} carefully in a tidy Indian home`}.`,
     who,
     "Sound: the natural sounds of the work and a light, upbeat background music; no talking, no narration.",
@@ -57,15 +57,15 @@ async function download(uri) {
 }
 
 // One clip. Returns an MP4 Buffer.
-async function makeClip({ scene, topic, category }) {
+async function makeClip({ scene, topic, category, wide = false }) {
   if (!configured()) throw fail(400, "No Gemini key on the server");
   const r = await fetch(`${API}/interactions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": key() },
     body: JSON.stringify({
       model: model(),
-      input: promptFor({ scene, topic, category }),
-      response_format: { type: "video", aspect_ratio: "9:16", resolution: "720p", delivery: "uri" },
+      input: promptFor({ scene, topic, category, wide }),
+      response_format: { type: "video", aspect_ratio: wide ? "16:9" : "9:16", resolution: "720p", delivery: "uri" },
       store: false,
     }),
     signal: AbortSignal.timeout(8 * 60 * 1000),

@@ -23,6 +23,7 @@ const TITLES = {
   "/payments": { title: "Payments & Transactions", subtitle: "Revenue, platform fees, and provider payouts" },
   "/reports": { title: "Reports & Analytics", subtitle: "Revenue, bookings, and provider performance" },
   "/audit-logs": { title: "Audit Logs", subtitle: "Every platform event, in order" },
+  "/video-studio": { title: "Video Studio", subtitle: "AI videos with voice-over and subtitles for Reels, Shorts and YouTube" },
   "/blog": { title: "Blog", subtitle: "Articles on tikdum.com/blog — drafts from the SEO Agent and your own" },
   "/social": { title: "Social Media", subtitle: "Facebook & Instagram posts, results and the festival calendar" },
   "/paid-services": { title: "Paid Services", subtitle: "Everything Tikdum pays for, and when it ends" },

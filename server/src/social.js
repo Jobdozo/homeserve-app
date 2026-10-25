@@ -115,14 +115,14 @@ async function prepareFormat(post) {
 }
 
 // GET /api/social-images/<name>: the prepared pictures, public so Meta can fetch them.
-// GET /api/social-videos/<name>: the Reels, public so Meta can fetch them.
+// GET /api/social-videos/<name>: the Reels and Studio videos (and their stills), public so Meta can fetch them.
 function serveVideo(req, res) {
   const name = String(req.params.name || "");
-  if (!/^[a-f0-9]{32}\.mp4$/.test(name)) return res.status(404).end();
+  if (!/^[a-f0-9]{32}\.(mp4|jpg)$/.test(name)) return res.status(404).end();
   const file = path.join(DIR, "videos", name);
   if (!fs.existsSync(file)) return res.status(404).end();
   res.set("Cache-Control", "public, max-age=604800, immutable");
-  res.type("mp4").sendFile(file);
+  res.type(name.endsWith(".jpg") ? "jpg" : "mp4").sendFile(file);
 }
 
 function serveImage(req, res) {
@@ -216,6 +216,72 @@ async function toInstagram(st, post, images) {
   return { ok: true, id: r.id, link: info.permalink || null };
 }
 
+// ---- Reels and videos ----
+// A wide (16:9) video on Facebook is an ordinary Page video, fetched by Facebook from our address.
+async function videoToFacebook(st, post, videoUrl) {
+  const r = await graph("POST", `/${st.pageId}/videos`, { file_url: videoUrl, description: post.caption, title: String(post.title || "").slice(0, 100) });
+  return { ok: true, id: r.id, link: `https://www.facebook.com/${st.pageId}/videos/${r.id}` };
+}
+
+// Sends a finished video to each chosen channel, one at a time (each waits for its own
+// processing, and one failing doesn't stop the others). Returns { channel: result }.
+async function sendVideo(st, post, file, videoUrl) {
+  const send = {
+    facebook: () => (post.wide ? videoToFacebook(st, post, videoUrl) : reelToFacebook(st, post, videoUrl)),
+    instagram: () => reelToInstagram(st, post, videoUrl),
+    threads: () => threads.publishVideo(post, videoUrl),
+    youtube: () => youtube.publish(post, file),
+  };
+  const results = {};
+  for (const c of post.channels) {
+    try {
+      results[c] = await send[c]();
+    } catch (e) {
+      results[c] = { ok: false, error: e.message };
+    }
+  }
+  return results;
+}
+
+// A video made in Video Studio (videoStudio.js), published from there: saved as a post now,
+// sent in the background. input: { name (the file in social/videos), cover, caption, title,
+// threadsText, channels, wide, topic }.
+async function publishVideo(input, actor) {
+  const name = String(input.name || "");
+  if (!/^[a-f0-9]{32}\.mp4$/.test(name)) throw fail(400, "Unknown video");
+  const file = path.join(DIR, "videos", name);
+  if (!fs.existsSync(file)) throw fail(404, "The video file is gone — make it again");
+  const caption = String(input.caption || "").trim().slice(0, IG_MAX);
+  if (!caption) throw fail(400, "Write a caption");
+  const st = cfg();
+  const wanted = [...new Set((Array.isArray(input.channels) ? input.channels : []).map(String))].filter((c) => CHANNELS.includes(c));
+  if (!wanted.length) throw fail(400, "Choose where to publish it");
+  const ready = { facebook: Boolean(st.pageId && st.token), instagram: Boolean(st.igUserId && st.token), threads: threads.configured(), youtube: youtube.configured() };
+  const missing = wanted.filter((c) => !ready[c]);
+  if (missing.length) throw fail(400, `Not connected: ${missing.join(", ")}`);
+  const post = { caption, title: line(input.title, 90), threadsText: input.threadsText ? String(input.threadsText).slice(0, threads.MAX_TEXT) : undefined, channels: wanted, wide: input.wide === true };
+  const videoUrl = `${IMAGE_BASE}/api/social-videos/${name}`;
+  const row = jsonStore.insert(POSTS, {
+    format: "video",
+    status: "publishing",
+    caption,
+    title: post.title,
+    topic: line(input.topic, 80) || null,
+    videoKind: "studio",
+    video: videoUrl,
+    image: input.cover || null,
+    images: input.cover ? [input.cover] : [],
+    channels: wanted,
+    results: {},
+    by: actor || "admin",
+    at: new Date().toISOString(),
+  });
+  sendVideo(st, post, file, videoUrl)
+    .then((results) => jsonStore.update(POSTS, row.id, { results, status: Object.values(results).some((r) => r.ok) ? "published" : "failed", finishedAt: new Date().toISOString() }))
+    .catch((e) => jsonStore.update(POSTS, row.id, { status: "failed", results: Object.fromEntries(wanted.map((c) => [c, { ok: false, error: e.message }])) }));
+  return row;
+}
+
 // ---- Reels ----
 async function waitForVideo(get, label) {
   for (let i = 0; i < 60; i++) {
@@ -294,20 +360,7 @@ async function finishReel(rowId, post) {
     cover = store(frames[0].buffer).url;
     const made = (await aiReel(rowId, post, frames)) || (await video.buildReel(frames, path.join(DIR, "videos")));
     videoUrl = `${IMAGE_BASE}/api/social-videos/${made.name}`;
-    const send = {
-      facebook: () => reelToFacebook(st, post, videoUrl),
-      instagram: () => reelToInstagram(st, post, videoUrl),
-      threads: () => threads.publishVideo(post, videoUrl),
-      youtube: () => youtube.publish(post, made.file),
-    };
-    // One at a time: each waits for its own processing, and a slow one doesn't hold the others' errors.
-    for (const c of post.channels) {
-      try {
-        results[c] = await send[c]();
-      } catch (e) {
-        results[c] = { ok: false, error: e.message };
-      }
-    }
+    Object.assign(results, await sendVideo(st, post, made.file, videoUrl));
   } catch (e) {
     for (const c of post.channels) results[c] = { ok: false, error: e.message };
   }
@@ -471,4 +524,6 @@ function imageLibrary({ categories = [], banners = [], services = [] }) {
   return out.slice(0, 80);
 }
 
-module.exports = { status, publish, listPosts, serveImage, serveVideo, imageLibrary, cleanPost, prepareImage, refreshMetrics, score, FORMATS, _finishReel: finishReel };
+const VIDEO_DIR = path.join(DIR, "videos");
+
+module.exports = { VIDEO_DIR, status, publish, publishVideo, listPosts, serveImage, serveVideo, imageLibrary, cleanPost, prepareImage, refreshMetrics, score, FORMATS, _finishReel: finishReel };

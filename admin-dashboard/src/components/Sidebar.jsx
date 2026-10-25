@@ -24,6 +24,7 @@ import {
   BotIcon,
   ChatIcon,
   PipelineIcon,
+  CameraIcon,
 } from "./icons";
 
 const sections = [
@@ -50,6 +51,7 @@ const sections = [
       { label: "WhatsApp Inbox", icon: ChatIcon, to: "/inbox", perm: "inbox.view" },
       { label: "Social Media", icon: ChartIcon, to: "/social", perm: "social.view" },
       { label: "Blog", icon: FileIcon, to: "/blog", perm: "blog.view" },
+      { label: "Video Studio", icon: CameraIcon, to: "/video-studio", perm: "social.view" },
     ],
   },
   {

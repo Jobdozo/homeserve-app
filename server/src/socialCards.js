@@ -167,20 +167,71 @@ async function reelCta(colour) {
 }
 
 // Laid over an AI video (socialVideo.js brandClip): the title on a soft fade, transparent elsewhere.
-async function reelTitleOverlay(title, colour) {
+// { top: true }: for the top of the frame (dark at the top, fading down), clear of subtitles.
+async function reelTitleOverlay(title, colour, { top = false } = {}) {
   const head = await text(title, { font: DISPLAY, size: 70, weight: 800, width: 860 });
   const headH = (await sharp()(head).metadata()).height;
   const h = headH + 160;
+  const [a, b] = top ? [0.85, 0] : [0, 0.85];
   const fade = Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${h}"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">` +
-      `<stop offset="0" stop-color="${deep(colour?.hex)}" stop-opacity="0"/><stop offset="0.45" stop-color="${deep(colour?.hex)}" stop-opacity="0.85"/></linearGradient></defs>` +
+      `<stop offset="${top ? 0.55 : 0}" stop-color="${deep(colour?.hex)}" stop-opacity="${a}"/><stop offset="${top ? 1 : 0.45}" stop-color="${deep(colour?.hex)}" stop-opacity="${b}"/></linearGradient></defs>` +
       `<rect width="${SIZE}" height="${h}" fill="url(#g)"/></svg>`
   );
-  return sharp()(fade).composite([{ input: head, left: 90, top: 110 }]).png().toBuffer();
+  return sharp()(fade).composite([{ input: head, left: 90, top: top ? 50 : 110 }]).png().toBuffer();
 }
 
 async function logoPng(width = 230) {
   return logo(width);
 }
 
-module.exports = { textSlide, ctaSlide, coverSlide, storyImage, reelCover, reelSlide, reelCta, reelTitleOverlay, logoPng, deep };
+// ---- Video Studio (videoStudio.js): overlays for upright (1080×1920) and wide (1920×1080) videos ----
+
+// One subtitle: white words on a dark rounded box, centred, as wide as the text needs.
+async function subtitlePng(line, frameWidth = SIZE) {
+  const wide = frameWidth > SIZE;
+  const t = await text(line, { font: BODY, size: wide ? 46 : 50, weight: 700, width: Math.round(frameWidth * 0.8), align: "centre" });
+  const m = await sharp()(t).metadata();
+  const padX = 34;
+  const padY = 20;
+  const w = m.width + padX * 2;
+  const h = m.height + padY * 2;
+  const box = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" rx="22" fill="#000" opacity="0.62"/></svg>`);
+  return sharp()(box).composite([{ input: t, left: padX, top: padY }]).png().toBuffer();
+}
+
+// The title over the first seconds of a wide video: a fade along the bottom.
+// The title over the first seconds of a wide video: along the top, under the logo.
+async function wideTitleOverlay(title, colour) {
+  const W = 1920;
+  const head = await text(title, { font: DISPLAY, size: 66, weight: 800, width: 1500 });
+  const headH = (await sharp()(head).metadata()).height;
+  const h = headH + 230;
+  const fade = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${h}"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">` +
+      `<stop offset="0.6" stop-color="${deep(colour?.hex)}" stop-opacity="0.85"/><stop offset="1" stop-color="${deep(colour?.hex)}" stop-opacity="0"/></linearGradient></defs>` +
+      `<rect width="${W}" height="${h}" fill="url(#g)"/></svg>`
+  );
+  return sharp()(fade).composite([{ input: head, left: 110, top: 140 }]).png().toBuffer();
+}
+
+// The last card of a wide video.
+async function wideCta(colour) {
+  const W = 1920;
+  const H = 1080;
+  const head = await text("Book a verified professional", { font: DISPLAY, size: 84, weight: 800, width: 1500 });
+  const headH = (await sharp()(head).metadata()).height;
+  const para = await text("On tikdum.com or the Tikdum app — at a time that suits you.", { font: BODY, size: 44, colour: "#ffffffd9", width: 1500 });
+  const mark = await logo(300);
+  const top = Math.round((H - headH - 120) / 2);
+  return sharp()(ground(W, H, deep(colour?.hex), colour?.hex || "#7B63F5"))
+    .composite(await layers([
+      { input: mark, left: 150, top: 120 },
+      { input: head, left: 150, top },
+      { input: para, left: 150, top: top + headH + 40 },
+    ]))
+    .jpeg({ quality: 88 })
+    .toBuffer();
+}
+
+module.exports = { textSlide, ctaSlide, coverSlide, storyImage, reelCover, reelSlide, reelCta, reelTitleOverlay, logoPng, subtitlePng, wideTitleOverlay, wideCta, deep };

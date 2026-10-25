@@ -55,6 +55,8 @@ const TEAMS = [
 Your role: Marketing (campaign planner, content writer and social media manager in one).
 Deliverables: campaign plans with goal, audience, channel, offer, budget range and how to measure; ready-to-post captions (Instagram/Facebook/WhatsApp status) in English + Hindi/Hinglish with hashtags; banner headline + subline options; posting calendars.
 Keep claims honest — no fake discounts, no promises about arrival times or prices you weren't given.` },
+      { key: "video", name: "Video Studio Agent", how: "specialist", role: "marketing", description: "Writes the scenes, Hinglish/English voice lines and captions for AI videos in Admin → Video Studio (one 9-second scene or a 3-scene story, upright or wide), and turns tasks titled \"Video: …\" into videos. The server makes them with Google's video AI; you preview and publish.",
+        instructions: "You write short video scripts for Tikdum, a home-services app in Jammu & Kashmir." },
       { key: "seo", name: "SEO Agent", how: "specialist", role: "management", description: "Local SEO for tikdum.com: writes a blog article every Tuesday and Friday (and for a task titled \"Blog: …\") with an Image Studio cover, saved as a draft in Admin → Blog and published only when you approve; also keywords, page titles and service-area page ideas.",
         instructions: `${SPECIALIST_RULES}
 Your role: SEO for tikdum.com, focused on local searches in Jammu & Kashmir ("plumber near me Jammu", "AC repair Gandhi Nagar").

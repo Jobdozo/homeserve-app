@@ -146,6 +146,14 @@ ffmpeg (`socialVideo.js`, installed in the server image) and publishes it in the
 Reels, Threads and — after `bash deploy/set-youtube.sh` — YouTube as a Short (`socialYoutube.js`). Google keeps
 API uploads private until the Cloud project passes YouTube's API audit. A Reel doesn't count in the daily posts.
 
+**Video Studio (Video Studio Agent).** Add the agent from Teams (template `video`, Marketing Team role) and its key with
+`bash deploy/set-agent-key.sh SPECIALIST`. In Admin → **Video Studio** you describe a video (one ~9 s scene or a 3-scene
+~30 s story, upright 9:16 or wide 16:9, Hinglish/English/no voice, subtitles) or make a set (one per category, or per
+festival in the next 45 days). The agent writes the scenes, voice lines and caption (`agents/src/videoStudio.js`); the
+server makes each scene with Gemini Omni Flash, the voice with Gemini TTS, and puts it together with the logo, title,
+subtitles and "Book" card (`server/src/videoStudio.js`), one at a time and at most N a day (default 2; ~₹75 a scene).
+A person previews, publishes (Instagram, Facebook, Threads, YouTube), remakes or deletes; the agent can't.
+
 **Blog (SEO Agent).** Give the SEO Agent the **Reporting / Management Team** role (template `seo`). Every Tuesday and
 Friday from 10:00 IST (`BLOG_DAYS_IST`, `BLOG_HOUR_IST`) and for every task titled **"Blog: …"** it writes a
 700–1,000-word article from the marketing calendar and the categories, with an Image Studio cover

@@ -335,6 +335,8 @@ const RULES = [
   [/^\/admin\/meta\/(status|exclusion-check)$/, () => "reports.view"],
   [/^\/admin\/meta\/self-test$/, () => "settings.edit"],
   [/^\/admin\/social\/posts$/, (m) => (m === "GET" ? "social.view" : "social.add")],
+  // Video Studio: making videos is "social.add" (publishing one is the person's: agents.policy).
+  [/^\/admin\/video-studio(\/|$)/, (m) => (m === "GET" ? "social.view" : "social.add")],
   // A fresh picture for a post (Image Studio) and reading results back are part of posting.
   [/^\/admin\/social\/(picture|metrics\/refresh)$/, () => "social.add"],
   // Read by the Marketing Agent and, for blog articles, the SEO Agent.

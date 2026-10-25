@@ -366,6 +366,11 @@ function policy(req, admin, path) {
   if (/^\/admin\/blog\/(?!picture$)[^/]+(\/unpublish)?$/.test(path) && req.method !== "GET") {
     return { status: 403, error: "Only a person can edit, unpublish or delete an article" };
   }
+  // Video Studio: the agent writes scripts and asks for videos; people publish, delete, remake,
+  // make sets and change the settings (each video costs real money).
+  if (/^\/admin\/video-studio\//.test(path) && req.method !== "GET" && !/^\/admin\/video-studio\/jobs(\/[^/]+\/script)?$/.test(path)) {
+    return { status: 403, error: "Only a person can publish, remake or delete videos, make sets or change Video Studio settings" };
+  }
   // The calendar is the people's: the agent reads it, never changes it.
   if (req.method !== "GET" && /^\/admin\/social\/calendar(\/|$)/.test(path)) {
     return { status: 403, error: "Only a person can change the marketing calendar" };

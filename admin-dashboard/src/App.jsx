@@ -26,6 +26,7 @@ const AuditLogsPage = lazy(() => import("./pages/AuditLogsPage"));
 const PaidServicesPage = lazy(() => import("./pages/PaidServicesPage"));
 const SocialMediaPage = lazy(() => import("./pages/SocialMediaPage"));
 const BlogPage = lazy(() => import("./pages/BlogPage"));
+const VideoStudioPage = lazy(() => import("./pages/VideoStudioPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsHubPage"));
 const DataManagementPage = lazy(() => import("./pages/DataManagementPage"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
@@ -90,6 +91,7 @@ function AppRoutes() {
     ["/inbox", <InboxPage />, "inbox.view"],
     ["/social", <SocialMediaPage />, "social.view"],
     ["/blog", <BlogPage />, "blog.view"],
+    ["/video-studio", <VideoStudioPage />, "social.view"],
     ["/accounting", <AccountingPage />, "accounting.view"],
   ];
   const landing = routes.find(([, , perm]) => can(perm))?.[0];

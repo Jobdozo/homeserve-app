@@ -3910,6 +3910,63 @@ app.post("/api/admin/blog/picture", adminOnly, crm(async (req, res) => {
   res.json({ ...out, url: `${(process.env.UPLOADS_PUBLIC_BASE || "https://api.tikdum.com").replace(/\/$/, "")}${out.url}`, category: cat?.name || null });
 }));
 
+// ---- Video Studio (videoStudio.js): AI videos with voice-over and subtitles ----
+const videoStudio = require("./videoStudio");
+app.get("/api/admin/video-studio", adminOnly, crm(async (req, res) => {
+  if (req.query.status) return res.json(videoStudio.list({ status: String(req.query.status) }));
+  res.json({ ...videoStudio.summary(), connected: await social.status() });
+}));
+app.post("/api/admin/video-studio/jobs", adminOnly, crm(async (req, res) => {
+  const job = videoStudio.addJob(req.body || {}, actorOf(req));
+  audit(req, "video.add", "videoJob", job.id, job.idea.slice(0, 80));
+  res.status(201).json(job);
+}));
+app.post("/api/admin/video-studio/sets", adminOnly, crm(async (req, res) => {
+  // Festivals in the next 45 days (marketingCalendar.js).
+  const festivals = marketingCalendar
+    .list()
+    .filter((e) => e.kind === "event" && e.active !== false && e.next && e.next.daysAway <= 45)
+    .map((e) => ({ name: e.name, date: e.next.date, ideas: e.ideas }));
+  const made = videoStudio.addSet(String(req.body?.kind || ""), { categories: await store.listCategories(), calendar: festivals, aspect: req.body?.aspect, length: req.body?.length }, actorOf(req));
+  audit(req, "video.set", "videoJob", req.body?.kind || "", `${made.length} videos`);
+  res.status(201).json(made);
+}));
+app.patch("/api/admin/video-studio/jobs/:id/script", adminOnly, crm(async (req, res) => res.json(videoStudio.setScript(req.params.id, req.body || {}, actorOf(req)))));
+app.post("/api/admin/video-studio/jobs/:id/remake", adminOnly, crm(async (req, res) => res.json(videoStudio.remake(req.params.id, { newScript: req.body?.newScript === true }, actorOf(req)))));
+app.post("/api/admin/video-studio/jobs/:id/publish", adminOnly, crm(async (req, res) => {
+  const job = await videoStudio.publish(req.params.id, { channels: req.body?.channels, caption: req.body?.caption }, actorOf(req), social);
+  audit(req, "video.publish", "videoJob", job.id, job.script?.title || job.idea.slice(0, 80));
+  await store.logActivity("social", `Video "${job.script?.title}" published on ${(job.channels || []).join(" + ")} by ${actorOf(req)} (sending in the background)`).catch(() => {});
+  res.json(job);
+}));
+app.delete("/api/admin/video-studio/jobs/:id", adminOnly, crm(async (req, res) => {
+  videoStudio.remove(req.params.id);
+  audit(req, "video.delete", "videoJob", req.params.id, "");
+  res.json({ ok: true });
+}));
+app.patch("/api/admin/video-studio/config", adminOnly, crm(async (req, res) => {
+  const cfg = videoStudio.setConfig(req.body || {}, actorOf(req));
+  audit(req, "video.config", "videoStudio", "config", "Video Studio settings", [{ field: "settings", from: null, to: JSON.stringify(cfg) }]);
+  res.json(cfg);
+}));
+// One video at a time, every minute, within the day's limit.
+setInterval(async () => {
+  try {
+    await videoStudio.makeNext({
+      categories: await store.listCategories(),
+      aiVideo: require("./socialAiVideo"),
+      tts: require("./socialTts"),
+      video: require("./socialVideo"),
+      cards: require("./socialCards"),
+      imageStyle,
+      publicBase: (process.env.SOCIAL_IMAGE_BASE || "https://api.tikdum.com").replace(/\/$/, ""),
+      dir: social.VIDEO_DIR,
+    });
+  } catch (e) {
+    console.error("Video Studio:", e.message);
+  }
+}, 60 * 1000).unref();
+
 // The Marketing Agent's festival and season calendar (marketingCalendar.js).
 const marketingCalendar = require("./marketingCalendar");
 app.get("/api/admin/social/calendar", adminOnly, crm(async (req, res) => {

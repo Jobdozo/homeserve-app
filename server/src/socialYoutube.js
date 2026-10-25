@@ -42,7 +42,8 @@ async function accessToken() {
 // Pure: the video's title and description. Exported for tests.
 function metadata(post) {
   const base = String(post.title || post.topic || String(post.caption || "").split("\n")[0] || "Home care tip").replace(/[<>]/g, "").trim();
-  const title = `${base.slice(0, 100 - " #Shorts".length).trim()} #Shorts`;
+  // An upright video up to 60 s is a Short; a wide one is an ordinary video.
+  const title = post.wide ? base.slice(0, 100) : `${base.slice(0, 100 - " #Shorts".length).trim()} #Shorts`;
   const caption = String(post.caption || "").replace(/[<>]/g, "").trim();
   const description = `${caption}\n\nBook verified home services in Jammu & Kashmir: https://tikdum.com`.slice(0, 4900);
   const tags = [...new Set((caption.match(/#[\p{L}\p{N}_]+/gu) || []).map((t) => t.slice(1)))].slice(0, 12);

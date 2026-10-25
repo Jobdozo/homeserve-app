@@ -13,11 +13,14 @@
 // posts: on schedule and for tasks titled "Post: …" (socialPosts.js), and scheduled
 // push notification campaigns for tasks titled "Push: …" (pushPlans.js). The SEO Agent (template
 // "seo") writes tikdum.com blog articles twice a week and for tasks titled "Blog: …" (blogPosts.js).
+// The Video Studio Agent (template "video") writes the scripts for Admin → Video Studio and turns
+// tasks titled "Video: …" into videos (videoStudio.js).
 const state = require("./state");
 const { complete, untrusted, BudgetExceeded } = require("./claude");
 const socialPosts = require("./socialPosts");
 const pushPlans = require("./pushPlans");
 const blogPosts = require("./blogPosts");
+const videoStudio = require("./videoStudio");
 
 const MAX_PER_RUN = 2;
 // Room for the draft (~1,000 words) on top of Claude's thinking room (config.anthropic.thinkingRoom).
@@ -61,13 +64,17 @@ async function tick(client, log, name = "specialist", { now = Date.now() } = {})
   const pushed = marketing ? await pushPlans.run(client, log, { st, office, now }) : 0;
   const seo = st.template === "seo";
   const drafted = seo ? await blogPosts.run(client, log, { st, office, now }) : 0;
+  const videoAgent = st.template === "video";
+  const scripted = videoAgent ? await videoStudio.run(client, log, { st, office }) : 0;
   const mine = marketing
     ? office.tasks.filter((t) => !pushPlans.isPushTask(t) && !(st.socialConnected && socialPosts.isPostTask(t)))
     : seo
       ? office.tasks.filter((t) => !blogPosts.isBlogTask(t))
-      : office.tasks;
+      : videoAgent
+        ? office.tasks.filter((t) => !videoStudio.isVideoTask(t))
+        : office.tasks;
   const work = tasksToWork(mine, st.failed);
-  const proposals = [posted && `${posted} social post(s) ${st.socialMode || "proposed for approval"}`, pushed && `${pushed} push campaign(s) proposed for approval`, drafted && `${drafted} blog article(s) ${st.blogMode || "drafted for approval"}`];
+  const proposals = [posted && `${posted} social post(s) ${st.socialMode || "proposed for approval"}`, pushed && `${pushed} push campaign(s) proposed for approval`, drafted && `${drafted} blog article(s) ${st.blogMode || "drafted for approval"}`, scripted && `${scripted} video script(s) written`];
   if (!work.length) {
     state.save(`specialist-${name}`, st);
     const parts = proposals.filter(Boolean);
