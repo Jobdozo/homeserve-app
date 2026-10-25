@@ -48,6 +48,7 @@ server {
 server {
     listen 80;
     server_name api.tikdum.com;
+    client_max_body_size 20m; # music tracks for Video Studio; nginx allows 1 MB otherwise
     location / {
         proxy_pass http://127.0.0.1:4000;
         proxy_http_version 1.1;
