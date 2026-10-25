@@ -9,8 +9,10 @@
 # the check fails. Safe to run again.
 set -euo pipefail
 SIZE=20m
-file="$(grep -rl 'server_name api\.tikdum\.com' /etc/nginx/sites-enabled/ 2>/dev/null | head -1 || true)"
-[ -n "$file" ] || { echo "No nginx site for api.tikdum.com in /etc/nginx/sites-enabled. Nothing was changed."; exit 1; }
+# -R, not -r: sites-enabled holds links to the files in sites-available, and -r doesn't follow them.
+file="$(grep -Rl 'server_name api\.tikdum\.com' /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null | head -1 || true)"
+[ -n "$file" ] || file="$(grep -Rl 'server_name api\.tikdum\.com' /etc/nginx/sites-available/ 2>/dev/null | head -1 || true)"
+[ -n "$file" ] || { echo "No nginx site for api.tikdum.com in /etc/nginx. Nothing was changed."; exit 1; }
 file="$(readlink -f "$file")"
 backup="/root/nginx-$(basename "$file")-$(date +%Y%m%d-%H%M%S).bak"
 cp -p "$file" "$backup"
