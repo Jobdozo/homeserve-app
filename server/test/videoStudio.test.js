@@ -180,3 +180,33 @@ test("free by default: no AI video, no AI voice — free pictures, else Tikdum's
   assert.equal(deps.lastParts.voices.length, 0);
   assert.equal(deps.lastParts.music.toString(), "music");
 });
+
+test("pictures that fit: a category guessed from the idea when none was picked; Tikdum's photos cropped clear of their logo", async () => {
+  const cats = [{ id: "plumbing", name: "Plumbing" }, { id: "ac-repair", name: "AC Repair" }, { id: "water-tank", name: "Water Tank Cleaning" }, { id: "ro", name: "RO/Water Purifier Services" }, { id: "home-cleaning", name: "Home Cleaning" }];
+  assert.equal(studio.guessCategory("AC service before summer Garmi se pehle AC service karwayein", cats).id, "ac-repair");
+  assert.equal(studio.guessCategory("Clean water tank before the rains", cats).id, "water-tank"); // more words beat "water" alone
+  assert.equal(studio.guessCategory("Happy Diwali from Tikdum", cats), null);
+  assert.equal(studio.guessCategory("Home services you need", cats), null); // generic words don't count
+
+  const job = studio.addJob({ idea: "AC service before summer", length: "short" }, "Owner");
+  studio.setScript(job.id, { ...SCRIPT, scenes: SCRIPT.scenes.slice(0, 1) });
+  for (const j of studio.list({ status: "queued" })) if (j.id !== job.id) studio.remove(j.id);
+  studio.setConfig({ perDay: 10 }, "Owner");
+  const asked = [];
+  const stills = [];
+  const d = deps({
+    categories: cats,
+    imageStudio: { drawForSocial: async () => Promise.reject(new Error("No free picture maker")) },
+    libraryPicture: async (category) => (asked.push(category), Buffer.from("photo")),
+    readUpload: () => Buffer.from("x"),
+  });
+  d.video = { ...d.video, seconds: async () => 0, stillClip: async (p, s, opts) => (stills.push(opts), Buffer.from("clip")) };
+  assert.equal((await studio.makeNext(d)).status, "ready");
+  assert.deepEqual(asked, ["AC Repair"]);
+  assert.equal(stills[0].focusX, 0.6);
+
+  const video = require("../src/socialVideo");
+  const crop = (o) => video.stillArgs("p.jpg", 5, { out: "o.mp4", ...o }).find((a) => String(a).includes("zoompan"));
+  assert.match(crop({}), /crop=2160:3840:\(iw-ow\)\*0\.5:\(ih-oh\)\/2/);
+  assert.match(crop({ focusX: 0.6 }), /\(iw-ow\)\*0\.6:/);
+});

@@ -179,6 +179,22 @@ function addSet(setKind, { categories = [], calendar = [], aspect = "upright", l
 // ---- making ----
 let busy = false;
 
+// Pure: the category a video is about when none was picked — the one whose name's words appear
+// most in the idea and title ("AC service before summer" → AC Repair), so its pictures and
+// colour fit. Exported for tests.
+const GENERIC = new Set(["service", "services", "repair", "repairs", "home", "and", "at"]);
+function guessCategory(text, cats = []) {
+  const said = new Set(String(text || "").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
+  let best = null;
+  let bestHits = 0;
+  for (const c of cats) {
+    const words = String(c.name || "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1 && !GENERIC.has(w));
+    const hits = words.filter((w) => said.has(w)).length;
+    if (hits > bestHits) [best, bestHits] = [c, hits];
+  }
+  return best;
+}
+
 // Makes the oldest queued video if today's limit allows. deps: { categories, aiVideo, tts, video, cards, imageStyle, publicBase, dir }.
 async function makeNext(deps) {
   if (busy) return null;
@@ -192,7 +208,8 @@ async function makeNext(deps) {
     const job = getJob(next.id);
     const wide = job.aspect === "wide";
     const cats = deps.categories || [];
-    const cat = cats.find((c) => c.name?.toLowerCase() === String(job.category || "").toLowerCase());
+    const cat = cats.find((c) => c.name?.toLowerCase() === String(job.category || "").toLowerCase()) || (job.category ? null : guessCategory(`${job.idea} ${job.script.title}`, cats));
+    const category = cat?.name || job.category || "";
     const colour = cat ? deps.imageStyle.colourFor(cat.id, cats.map((c) => c.id)) : null;
     const voices = [];
     if (job.voice !== "none" && paidAllowed()) {
@@ -207,17 +224,19 @@ async function makeNext(deps) {
       // A picture story: the scene as a free AI picture (or one of Tikdum's own photos), moving
       // slowly for as long as its voice line — or long enough to read the subtitle.
       let picture;
+      let focusX;
       try {
-        const pic = await deps.imageStudio.drawForSocial({ topic: job.script.title, category: job.category || "", scene: sc.video, show: /\b(technician|professional|worker|cleaner|plumber|electrician|beautician|family|customer|woman|man)\b/i.test(sc.video) ? "person" : "service", colour, kind: "studio", ratio: wide ? "16:9" : "9:16", stamp: false, freeOnly: true });
+        const pic = await deps.imageStudio.drawForSocial({ topic: job.script.title, category, scene: sc.video, show: /\b(technician|professional|worker|cleaner|plumber|electrician|beautician|family|customer|woman|man)\b/i.test(sc.video) ? "person" : "service", colour, kind: "studio", ratio: wide ? "16:9" : "9:16", stamp: false, freeOnly: true });
         picture = deps.readUpload(pic.url);
       } catch (e) {
         console.error("free picture failed, using Tikdum's photo:", e.message);
-        picture = await deps.libraryPicture(job.category, i);
+        picture = await deps.libraryPicture(category, i);
+        focusX = 0.6; // Tikdum's wide photos carry the logo at the left: crop to the right of it
       }
       const said = voices[i] ? await deps.video.seconds(voices[i]) : 0;
       const words = String(sc.line || "").split(/\s+/).filter(Boolean).length;
       const length = Math.min(9, Math.max(4.5, said ? said + 1.2 : 2 + words * 0.35));
-      clips.push(await deps.video.stillClip(picture, length, { wide, zoomOut: i % 2 === 1 }));
+      clips.push(await deps.video.stillClip(picture, length, { wide, zoomOut: i % 2 === 1, focusX }));
     }
     const subtitles = job.subtitles ? await Promise.all(job.script.scenes.map((sc) => deps.cards.subtitlePng(sc.line, wide ? 1920 : 1080))) : [];
     const made = await deps.video.compose(
@@ -261,4 +280,4 @@ async function publish(id, { channels, caption }, actor, social) {
   return jsonStore.update(JOBS, id, { status: "published", postId: row.id, publishedAt: now(), publishedBy: actor || null, channels, updatedAt: now() });
 }
 
-module.exports = { getConfig, setConfig, addJob, cleanScript, setScript, getJob, list, summary, remake, remove, addSet, makeNext, publish, estimate, SCENES };
+module.exports = { getConfig, setConfig, addJob, cleanScript, setScript, getJob, list, summary, remake, remove, addSet, makeNext, publish, estimate, SCENES, guessCategory };

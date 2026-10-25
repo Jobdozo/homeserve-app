@@ -3956,13 +3956,13 @@ setInterval(async () => {
       categories: await store.listCategories(),
       aiVideo: require("./socialAiVideo"),
       imageStudio,
-      // One of Tikdum's own photos (category photo first) when no free AI picture can be made.
+      // One of Tikdum's own photos when no free AI picture can be made: the category's photo and
+      // its services' photos (not other categories'), else any.
       libraryPicture: async (category, i = 0) => {
         const [categories, services] = await Promise.all([store.listCategories(), store.listServices({ activeOnly: true })]);
-        const lib = social.imageLibrary({ categories, banners: store.listActiveBanners(), services });
-        const want = String(category || "").toLowerCase();
-        const mine = lib.filter((p) => want && p.label.toLowerCase().startsWith(want));
-        const pool = mine.length ? mine.concat(lib.filter((p) => p.kind === "service")) : lib;
+        const cat = categories.find((c) => c.name?.toLowerCase() === String(category || "").toLowerCase());
+        const mine = cat ? social.imageLibrary({ categories: [cat], services: services.filter((s) => s.categoryId === cat.id) }) : [];
+        const pool = mine.length ? mine : social.imageLibrary({ categories, banners: store.listActiveBanners(), services });
         if (!pool.length) throw new Error("No pictures to use");
         return social.fetchPicture(pool[i % pool.length].url);
       },

@@ -222,15 +222,17 @@ async function compose(parts, dir, { wide = false } = {}) {
 
 // Pure: ffmpeg arguments that turn one picture into a moving clip — a slow zoom in, or a slow
 // zoom out (alternate scenes), with silence, `seconds` long. Exported for tests.
-function stillArgs(picture, seconds, { wide = false, zoomOut = false, out }) {
+// focusX: where the frame sits across a picture wider than it, 0 (left) … 0.5 (middle) … 1 (right).
+function stillArgs(picture, seconds, { wide = false, zoomOut = false, focusX = 0.5, out }) {
   const W = wide ? 1920 : 1080;
   const H = wide ? 1080 : 1920;
   const frames = Math.round(seconds * FPS);
+  const fx = Math.min(1, Math.max(0, Number.isFinite(focusX) ? focusX : 0.5));
   const z = zoomOut ? `if(eq(on,1),1.12,max(zoom-0.0011,1.0))` : `min(zoom+0.0011,1.12)`;
   return [
     "-hide_banner", "-y", "-i", picture,
     "-f", "lavfi", "-t", String(seconds), "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
-    "-filter_complex", `[0:v]scale=${W * 2}:${H * 2}:force_original_aspect_ratio=increase,crop=${W * 2}:${H * 2},zoompan=z='${z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${W}x${H}:fps=${FPS},setsar=1,format=yuv420p[v]`,
+    "-filter_complex", `[0:v]scale=${W * 2}:${H * 2}:force_original_aspect_ratio=increase,crop=${W * 2}:${H * 2}:(iw-ow)*${fx}:(ih-oh)/2,zoompan=z='${z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${W}x${H}:fps=${FPS},setsar=1,format=yuv420p[v]`,
     "-map", "[v]", "-map", "1:a", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-r", String(FPS), "-c:a", "aac", "-shortest", "-movflags", "+faststart", out,
   ];
 }
