@@ -474,7 +474,7 @@ function headFor(p) {
     `<meta data-static-seo name="twitter:description" content="${esc(p.description)}" />`,
     `<meta data-static-seo name="twitter:image" content="${esc(p.image || DEFAULT_IMAGE)}" />`,
     ...(p.jsonLd || []).map((o) => `<script type="application/ld+json" data-seo-path="${esc(p.path)}">${safeJson(o)}</script>`),
-    ...(p.ads ? require("./blogAds").headTags() : []),
+    ...require("./blogAds").headTags({ blog: Boolean(p.ads) }),
   ];
   return tags.filter(Boolean).join("\n    ");
 }

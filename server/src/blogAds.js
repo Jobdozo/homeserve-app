@@ -41,14 +41,14 @@ const active = () => {
   return g.on ? g.client : null;
 };
 
-// For the head of a blog page.
-function headTags() {
+// For the head of a page: on every page the ownership tag AdSense checks on the home page (it loads
+// no ads); on a blog page (blog: true) also the AdSense script.
+function headTags({ blog = false } = {}) {
   const c = active();
   if (!c) return [];
-  return [
-    `<meta name="google-adsense-account" content="${c}" />`,
-    `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${c}" crossorigin="anonymous"></script>`,
-  ];
+  const tags = [`<meta name="google-adsense-account" content="${c}" />`];
+  if (blog) tags.push(`<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${c}" crossorigin="anonymous"></script>`);
+  return tags;
 }
 
 // tikdum.com/ads.txt (whenever an ID is set, so a pause doesn't drop it), else null (a 404).

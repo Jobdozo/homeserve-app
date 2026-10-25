@@ -126,7 +126,11 @@ test("AdSense on the blog only: the ID from what's pasted, the script on blog pa
   assert.match(blogPage(), /<meta name="google-adsense-account" content="ca-pub-1234567890123456" \/>/);
   const article = blog.listPublished()[0];
   assert.match(seo.injectHead(shell, seo.pageFor(`/blog/${article.slug}`, data)), /adsbygoogle\.js/);
-  for (const other of ["/", "/home", "/categories", "/blog/nope"]) assert.doesNotMatch(seo.injectHead(shell, seo.pageFor(other, data)), /adsbygoogle|google-adsense-account/, other);
+  for (const other of ["/", "/home", "/categories", "/blog/nope"]) {
+    const html = seo.injectHead(shell, seo.pageFor(other, data));
+    assert.doesNotMatch(html, /adsbygoogle/, other); // no ads off the blog
+    assert.match(html, /<meta name="google-adsense-account" content="ca-pub-1234567890123456" \/>/, other); // only the ownership tag AdSense checks on the home page
+  }
   assert.equal(ads.adsTxt(), "google.com, pub-1234567890123456, DIRECT, f08c47fec0942fa0\n");
 
   // Served at tikdum.com/ads.txt (the website's nginx hands unknown files to the page builder).
@@ -138,7 +142,7 @@ test("AdSense on the blog only: the ID from what's pasted, the script on blog pa
 
   // Paused: no script anywhere, ads.txt stays.
   assert.equal(ads.set({ on: false }, "Owner").on, false);
-  assert.doesNotMatch(blogPage(), /adsbygoogle/);
+  assert.doesNotMatch(blogPage(), /adsbygoogle|google-adsense-account/);
   assert.ok(ads.adsTxt());
   assert.equal(ads.active(), null);
 
