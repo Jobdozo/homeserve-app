@@ -65,7 +65,7 @@ async function tick(client, log, name = "specialist", { now = Date.now() } = {})
   const seo = st.template === "seo";
   const drafted = seo ? await blogPosts.run(client, log, { st, office, now }) : 0;
   const videoAgent = st.template === "video";
-  const scripted = videoAgent ? await videoStudio.run(client, log, { st, office }) : 0;
+  const scripted = videoAgent ? await videoStudio.run(client, log, { st, office, now }) : 0;
   const mine = marketing
     ? office.tasks.filter((t) => !pushPlans.isPushTask(t) && !(st.socialConnected && socialPosts.isPostTask(t)))
     : seo

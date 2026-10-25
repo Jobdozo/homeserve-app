@@ -53,3 +53,16 @@ test("Video Studio Agent: writes the script for a waiting video, and turns a 'Vi
   assert.deepEqual(writes(c, "/agents/office/tasks/t1/status").map(([, , b]) => b.status), ["review"]);
   assert.equal(videoStudio.isVideoTask({ title: "Video - festival greeting" }), true);
 });
+
+test("Video Studio Agent: failed videos don't hold up the queue, and are tried again after 6 hours or a Remake", () => {
+  const now = Date.parse("2026-10-25T16:00:00Z");
+  // Newest first, as the server lists them.
+  const waiting = ["v5", "v4", "v3", "v2", "v1"].map((id) => ({ id, updatedAt: `u-${id}` }));
+  const ids = (failed, at = now) => videoStudio.jobsToScript(waiting, failed, at).map((j) => j.id);
+  assert.deepEqual(ids({}), ["v1", "v2"]); // oldest first, two a run
+  const failed = { v1: { v: "u-v1", at: now - 60000 }, v2: { v: "u-v2", at: now - 60000 } };
+  assert.deepEqual(ids(failed), ["v3", "v4"]); // the two failures are skipped, not blocking
+  assert.deepEqual(ids(failed, now + 6 * 3600 * 1000), ["v1", "v2"]); // tried again later
+  assert.deepEqual(ids({ ...failed, v1: { v: "u-old", at: now } }), ["v1", "v3"]); // remade since
+  assert.deepEqual(ids({ v1: "u-v1", v2: "u-v2" }), ["v1", "v2"]); // marks from the old version: retried
+});

@@ -39,18 +39,34 @@ async function writeScript(client, job) {
   return client.request("PATCH", `/admin/video-studio/jobs/${encodeURIComponent(job.id)}/script`, raw);
 }
 
+// Pure: the waiting videos to write scripts for now, oldest first. A failed one waits
+// RETRY_FAILED_MS (or a Remake) and is left out before picking, so failures can't hold up the
+// rest of the queue (25 Oct 2026: the two oldest failed once and blocked all 17). Exported for tests.
+const RETRY_FAILED_MS = 6 * 3600 * 1000;
+function jobsToScript(waiting, failed = {}, now = Date.now()) {
+  return [...(Array.isArray(waiting) ? waiting : [])]
+    .reverse()
+    .filter((job) => {
+      const f = failed[job.id];
+      return !(f && typeof f === "object" && f.v === job.updatedAt && now - f.at < RETRY_FAILED_MS);
+    })
+    .slice(0, MAX_PER_RUN);
+}
+
 // Scripts for waiting videos, and "Video: …" tasks. Returns how many scripts were written.
-async function run(client, log, { st, office }) {
+async function run(client, log, { st, office, now = Date.now() }) {
   let written = 0;
   st.videoFailed = st.videoFailed || {};
-  const waiting = await client.get("/admin/video-studio?status=script").catch(() => []);
-  for (const job of (Array.isArray(waiting) ? waiting : []).reverse().slice(0, MAX_PER_RUN)) {
-    if (st.videoFailed[job.id] === job.updatedAt) continue; // failed on this version: wait for a remake
+  const waiting = await client.get("/admin/video-studio?status=script").catch((e) => (log.warn("video", "couldn't read the waiting videos", { error: e.message }), []));
+  const waitingIds = new Set((Array.isArray(waiting) ? waiting : []).map((j) => j.id));
+  for (const id of Object.keys(st.videoFailed)) if (!waitingIds.has(id)) delete st.videoFailed[id];
+  for (const job of jobsToScript(waiting, st.videoFailed, now)) {
     try {
       await writeScript(client, job);
       written++;
+      delete st.videoFailed[job.id];
     } catch (e) {
-      st.videoFailed[job.id] = job.updatedAt;
+      st.videoFailed[job.id] = { v: job.updatedAt, at: now };
       log.warn("video", "script failed", { id: job.id, error: e.message });
     }
   }
@@ -64,7 +80,7 @@ async function run(client, log, { st, office }) {
       const wide = /\b(wide|youtube|16:9|website)\b/i.test(idea);
       const short = /\b(short|9 ?sec|one scene)\b/i.test(idea);
       const job = await client.post("/admin/video-studio/jobs", { idea, aspect: wide ? "wide" : "upright", length: short ? "short" : "story" });
-      const text = `Added to Video Studio (${job.length === "short" ? "one scene" : "3-scene story"}, ${job.aspect}, about ₹${job.estimateInr}). I'll write the script; the server makes it within the day's limit — preview and publish it in Admin → Video Studio.`;
+      const text = `Added to Video Studio (${job.length === "short" ? "one scene" : "3-scene story"}, ${job.aspect}, ${job.estimateInr ? `about ₹${job.estimateInr}` : "free"}). I'll write the script; the server makes it within the day's limit — preview and publish it in Admin → Video Studio.`;
       await client.post(`/agents/office/tasks/${id}/messages`, { text });
       await client.post(`/agents/office/tasks/${id}/status`, { status: "review", result: text });
     } catch (e) {
@@ -77,4 +93,4 @@ async function run(client, log, { st, office }) {
   return written;
 }
 
-module.exports = { run, isVideoTask, promptFor, SYSTEM };
+module.exports = { run, isVideoTask, promptFor, jobsToScript, SYSTEM };
