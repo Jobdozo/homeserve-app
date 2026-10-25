@@ -46,11 +46,13 @@ tmp="$(mktemp)"
 case "$NAME" in
   SPECIALIST|ENGINEERING)
     # Keys an earlier version of this script saved as AGENT_KEYS_ENGINEERINGS (a typo) are moved over.
-    if [ "$NAME" = SPECIALIST ]; then VAR=AGENT_KEYS_SPECIALISTS; LINES="^AGENT_KEYS_SPECIALISTS="; else VAR=AGENT_KEYS_ENGINEERING; LINES="^AGENT_KEYS_ENGINEERINGS?="; fi
+    # Not called LINES: bash sets LINES to the terminal's height after each command (checkwinsize),
+    # and on 25 Oct 2026 that turned the pattern into a number and removed every .env line with it.
+    if [ "$NAME" = SPECIALIST ]; then VAR=AGENT_KEYS_SPECIALISTS; KEY_PATTERN="^AGENT_KEYS_SPECIALISTS="; else VAR=AGENT_KEYS_ENGINEERING; KEY_PATTERN="^AGENT_KEYS_ENGINEERINGS?="; fi
     # Only the keys themselves are kept (tkag_ + letters, digits, _ and -): a Windows line ending,
     # a space or an invisible character from a copy-paste would otherwise split the saved line in
     # two, and docker compose then refuses the whole .env ("unexpected character ','", 25 Oct 2026).
-    OLD="$( { grep -aE "$LINES" "$ENV_FILE" || true; } | cut -d= -f2- | grep -aoE 'tkag_[A-Za-z0-9_-]+' | awk '!seen[$0]++' | paste -sd, - )"
+    OLD="$( { grep -aE "$KEY_PATTERN" "$ENV_FILE" || true; } | cut -d= -f2- | grep -aoE 'tkag_[A-Za-z0-9_-]+' | awk '!seen[$0]++' | paste -sd, - )"
     # Keys the API refuses (401: replaced by a New key in Super Admin) are dropped, so the agents
     # don't keep trying a dead one. Any other answer (switched off, API not reachable) keeps the key.
     KEEP=""; DROPPED=0
@@ -67,7 +69,7 @@ case "$NAME" in
     else
       LIST="${OLD:+$OLD,}$KEY"
     fi
-    grep -vE "$LINES" "$ENV_FILE" > "$tmp" || true
+    grep -vE "$KEY_PATTERN" "$ENV_FILE" > "$tmp" || true
     printf '%s=%s\n' "$VAR" "$LIST" >> "$tmp"
     SAVED="${VAR} ($(printf %s "$LIST" | tr ',' '\n' | grep -c .) key(s) in the list)"
     unset OLD LIST

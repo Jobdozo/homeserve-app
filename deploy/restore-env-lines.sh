@@ -75,6 +75,20 @@ else
   unset secret
 fi
 
+# A setting written twice: keep the last line (the one docker compose uses).
+dups="$(tr -d '\r' < "$ENV_FILE" | grep -aoE '^[A-Za-z_][A-Za-z0-9_]*=' | sort | uniq -d | tr -d '=' | paste -sd' ' - || true)"
+if [ -n "$dups" ]; then
+  tmp="$(mktemp)"
+  awk -v names=" $dups " '
+    { n = $0; sub(/=.*/, "", n) }
+    NR == FNR { last[n] = FNR; next }
+    !(index(names, " " n " ") && last[n] != FNR)' "$ENV_FILE" "$ENV_FILE" > "$tmp"
+  cat "$tmp" > "$ENV_FILE"
+  rm -f "$tmp"
+  changed=yes
+  echo "== in .env twice: $dups — kept the newest line"
+fi
+
 # Anything else that was in .env at the last deploy (deploy/build-images.sh keeps those copies).
 last="$(ls -t "$ENV_FILE".deploy-* 2>/dev/null | head -1 || true)"
 if [ -n "$last" ]; then
