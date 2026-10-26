@@ -323,6 +323,12 @@ const waLog = new Map(); // agentId -> [timestamps] of /admin/inbox/send
 
 function policy(req, admin, path) {
   const body = req.body || {};
+  // What the customer booked is changed by a person only (Call bookings → Change service, or
+  // confirming a provider with a different service), never by an agent.
+  if (req.method === "POST" && /^\/admin\/call-desk\/bookings\/[^/]+\/service$/.test(path)) return { status: 403, error: "An agent can't change a booking's service" };
+  if (req.method === "POST" && /^\/admin\/(bookings\/[^/]+\/assign|call-desk\/bookings\/[^/]+\/provider)$/.test(path) && body.allowOtherService) {
+    return { status: 403, error: "An agent can't change a booking's service — pick a provider who offers it" };
+  }
   if (req.method === "POST" && path === "/admin/notifications/broadcast") {
     if (body.audience !== "single") return { status: 403, error: "AI agents can only message one person at a time — propose a broadcast for approval instead" };
     const now = Date.now();

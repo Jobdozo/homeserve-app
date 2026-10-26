@@ -113,8 +113,14 @@ function saveBookingLines(bookingId, lines) {
   if (byBooking) byBooking.set(bookingId, lines);
 }
 
+// The booking's service changed (Admin → Call bookings → Change service): its options were for the old one.
+function clearBookingLines(bookingId) {
+  jsonStore.remove("bookingOptions", bookingId);
+  if (byBooking) byBooking.delete(bookingId);
+}
+
 function bookingLines(bookingId) {
   return loadBookings().get(bookingId) || null;
 }
 
-module.exports = { normalizeGroups, getOptions, setOptions, priceSelection, saveBookingLines, bookingLines, MAX_GROUPS, MAX_CHOICES };
+module.exports = { normalizeGroups, getOptions, setOptions, priceSelection, saveBookingLines, clearBookingLines, bookingLines, MAX_GROUPS, MAX_CHOICES };

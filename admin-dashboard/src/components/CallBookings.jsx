@@ -4,7 +4,7 @@ import { useApp } from "../context/AppContext";
 import { inputCls, labelCls, btnCls, ghostCls } from "./CrmKit";
 
 // Provider CRM → Call bookings: book a service for a customer who phoned in, and
-// complete, reschedule or cancel open bookings (server/src/callDesk.js). Bookings
+// complete, reschedule, cancel, change the provider or change the service of open bookings (server/src/callDesk.js). Bookings
 // made here go to providers exactly like app bookings.
 
 const SLOTS = ["08:00 AM – 10:00 AM", "10:00 AM – 12:00 PM", "12:00 PM – 02:00 PM", "02:00 PM – 04:00 PM", "04:00 PM – 06:00 PM"];
@@ -344,12 +344,15 @@ function OpenBookings({ tick, onChanged, canEdit }) {
                 {b.status !== "Pending" && <button onClick={() => setActing({ id: b.id, kind: "complete" })} className={`${ghostCls} py-1`}>Mark completed</button>}
                 {b.status !== "In Progress" && <button onClick={() => setActing({ id: b.id, kind: "reschedule" })} className={`${ghostCls} py-1`}>Reschedule</button>}
                 {b.status !== "In Progress" && <button onClick={() => setActing({ id: b.id, kind: "provider" })} className={`${ghostCls} py-1`}>Change provider</button>}
+                {b.status !== "In Progress" && <button onClick={() => setActing({ id: b.id, kind: "service" })} className={`${ghostCls} py-1`}>Change service</button>}
                 <button onClick={() => setActing({ id: b.id, kind: "cancel" })} className={`${ghostCls} py-1 text-red-600`}>Cancel</button>
               </div>
             )}
             {acting?.id === b.id &&
               (acting.kind === "provider" ? (
                 <ChangeProvider booking={b} currentName={providerName(b.providerId)} onDone={() => { setActing(null); onChanged(); }} onClose={() => setActing(null)} />
+              ) : acting.kind === "service" ? (
+                <ChangeService booking={b} currentName={providerName(b.providerId)} onDone={() => { setActing(null); onChanged(); }} onClose={() => setActing(null)} />
               ) : (
                 <BookingAction booking={b} kind={acting.kind} onDone={() => { setActing(null); onChanged(); }} onClose={() => setActing(null)} />
               ))}
@@ -444,6 +447,95 @@ Go ahead?`)) return;
       {error && <p className="text-[12px] text-red-600">{error}</p>}
       <div className="flex gap-2">
         <button onClick={move} disabled={busy || !picked} className={btnCls}>{busy ? "Moving…" : "Move to this provider"}</button>
+        <button onClick={onClose} className={ghostCls}>Back</button>
+      </div>
+    </div>
+  );
+}
+
+// The customer booked the wrong service (or it was changed by mistake): another of the same
+// provider's services in the same category. The price follows the service unless typed in.
+const SERVICE_REASONS = ["Customer booked the wrong service", "Wrong service after reassignment", "Customer asked for a different service"];
+function ChangeService({ booking, currentName, onDone, onClose }) {
+  const { showToast } = useApp();
+  const [data, setData] = useState(null);
+  const [picked, setPicked] = useState("");
+  const [price, setPrice] = useState("");
+  const [reason, setReason] = useState(SERVICE_REASONS[0]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let off = false;
+    api
+      .callDeskServices(booking.id)
+      .then((d) => !off && setData(d))
+      .catch((e) => !off && (setData({ choices: [] }), setError(e.message)));
+    return () => {
+      off = true;
+    };
+  }, [booking.id]);
+  const choice = data?.choices.find((c) => c.serviceId === picked);
+  const total = price.trim() !== "" ? Math.round(Number(price)) : choice?.total;
+  const save = async () => {
+    if (!choice) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.callDeskChangeService(booking.id, { serviceId: picked, ...(price.trim() !== "" ? { amount: Number(price) } : {}), reason });
+      showToast(`#${booking.ref} is now ${choice.name}${choice.quantity > 1 ? ` × ${choice.quantity}` : ""}, ${inr(total)} — customer and provider told`);
+      onDone();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
+      <p className="text-[12px] text-gray-600">
+        Now <b>{booking.service?.name || "Service"}</b>, {inr(booking.amount)}, with <b>{currentName}</b>. Pick another of their services in the same category — if they don't offer the right one, use Change provider.
+      </p>
+      {!data && <p className="text-[12px] text-gray-400">Loading their services…</p>}
+      {data?.choices.length === 0 && !error && <p className="text-[12px] text-gray-500">{currentName} has no other service in this category. Use Change provider.</p>}
+      {data?.choices.length > 0 && (
+        <ul className="max-h-56 space-y-1 overflow-y-auto">
+          {data.choices.map((c) => (
+            <li key={c.serviceId}>
+              <label className={`flex cursor-pointer items-center gap-2 rounded-lg border bg-white p-2 text-[12px] ${picked === c.serviceId ? "border-brand" : "border-gray-100"}`}>
+                <input type="radio" name={`svc-${booking.id}`} checked={picked === c.serviceId} onChange={() => (setPicked(c.serviceId), setPrice(""))} className="accent-brand" />
+                <span className="min-w-0 flex-1 font-semibold text-gray-800">{c.name}</span>
+                <span className="tabular-nums text-gray-500">
+                  {inr(c.price)}{c.quantity > 1 ? ` × ${c.quantity} = ${inr(c.total)}` : ""}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+      {choice && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="text-[12px] text-gray-600">
+            Price the customer pays
+            <input value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder={String(choice.total)} className={`${inputCls} mt-1`} />
+          </label>
+          <label className="text-[12px] text-gray-600">
+            Reason (the customer and provider see it)
+            <select value={reason} onChange={(e) => setReason(e.target.value)} className={`${inputCls} mt-1`}>
+              {SERVICE_REASONS.map((r) => (
+                <option key={r}>{r}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      {choice && (
+        <p className="text-[12px] text-gray-700">
+          New booking: <b>{choice.name}{choice.quantity > 1 ? ` × ${choice.quantity}` : ""}</b> at <b>{inr(total)}</b>{price.trim() === "" ? " (their price)" : " (your price)"}. A fee already charged on acceptance stays as it is.
+        </p>
+      )}
+      {error && <p className="text-[12px] text-red-600">{error}</p>}
+      <div className="flex gap-2">
+        <button onClick={save} disabled={busy || !choice} className={btnCls}>{busy ? "Saving…" : "Change service"}</button>
         <button onClick={onClose} className={ghostCls}>Back</button>
       </div>
     </div>

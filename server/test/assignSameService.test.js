@@ -39,3 +39,14 @@ test("an agent can't propose changing a booking's service", () => {
   const req = (body) => ({ title: "Assign", request: { method: "POST", path: "/admin/bookings/b1/assign", body } });
   assert.throws(() => agents.propose(admin, req({ providerId: "p1", allowOtherService: true })), /can't change a booking's service/);
 });
+
+test("Change service (Call bookings): a person with bookings.edit only, never an agent", () => {
+  const access = require("../src/access");
+  assert.equal(access.requiredFor("POST", "/admin/call-desk/bookings/b1/service"), "bookings.edit");
+  assert.equal(access.requiredFor("GET", "/admin/call-desk/bookings/b1/services"), "bookings.edit");
+  const agent = { agentId: "d1" };
+  assert.match(agents.policy({ method: "POST", body: { serviceId: "s1", reason: "x" } }, agent, "/admin/call-desk/bookings/b1/service").error, /can't change a booking's service/);
+  assert.match(agents.policy({ method: "POST", body: { providerId: "p1", allowOtherService: true } }, agent, "/admin/bookings/b1/assign").error, /can't change a booking's service/);
+  assert.match(agents.policy({ method: "POST", body: { providerId: "p1", allowOtherService: true } }, agent, "/admin/call-desk/bookings/b1/provider").error, /can't change a booking's service/);
+  assert.equal(agents.policy({ method: "POST", body: { providerId: "p1" } }, agent, "/admin/bookings/b1/assign"), null); // a same-service assignment is fine
+});

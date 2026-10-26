@@ -292,6 +292,8 @@ export const api = {
   callDeskReschedule: (id, body) => request(`/admin/call-desk/bookings/${encodeURIComponent(id)}/reschedule`, { method: "POST", body: JSON.stringify(body) }),
   callDeskProviders: (id) => request(`/admin/call-desk/bookings/${encodeURIComponent(id)}/providers`),
   callDeskChangeProvider: (id, providerId, allowOtherService = false) => request(`/admin/call-desk/bookings/${encodeURIComponent(id)}/provider`, { method: "POST", body: JSON.stringify({ providerId, ...(allowOtherService ? { allowOtherService: true } : {}) }) }),
+  callDeskServices: (id) => request(`/admin/call-desk/bookings/${encodeURIComponent(id)}/services`),
+  callDeskChangeService: (id, body) => request(`/admin/call-desk/bookings/${encodeURIComponent(id)}/service`, { method: "POST", body: JSON.stringify(body) }),
   callDeskClose: (id, body) => request(`/admin/call-desk/bookings/${encodeURIComponent(id)}/close`, { method: "POST", body: JSON.stringify(body) }),
   getBookingMessages: (id) => request(`/messages/${id}`),
   getBookingPhotos: (id) => request(`/bookings/${id}/photos`),

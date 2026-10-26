@@ -2953,6 +2953,64 @@ async function assignBookingTo(bookingId, providerId, actor, { allowOtherService
   return { booking: updated, tried: assignments.queued(bookingId)?.tried || [] };
 }
 
+// ---- Admin's call desk: change a booking's service (the customer booked the wrong one, or it was
+// changed by mistake) to another of the same provider's services in the same category. The
+// price is that service's price × the quantity unless a person sets it (agreed on the phone).
+// No money moves: a fee already charged on acceptance stays as it is, as with Change provider.
+
+// The current provider's other services this booking could become.
+async function serviceChoices(bookingId) {
+  const fail = (status, message) => Object.assign(new Error(message), { status });
+  const booking = await fetchBookingWithRelations(bookingId);
+  if (!booking) throw fail(404, "Booking not found");
+  const categoryUuid = booking.service?.categoryId ? await getCategoryUuidBySlug(booking.service.categoryId) : null;
+  if (!categoryUuid || !booking.providerId) return { booking, choices: [] };
+  const { services } = await query(
+    `query($categoryId: UUID!) {
+      services(where: { category: { id: { eq: $categoryId } }, status: { eq: "active" } }) { id name price provider { id } }
+    }`,
+    { categoryId: categoryUuid }
+  );
+  const qty = bookingQuantity(bookingId);
+  const choices = services
+    .filter((s) => s.provider?.id === booking.providerId && s.id !== booking.serviceId)
+    .map((s) => ({ serviceId: s.id, name: s.name, price: s.price, quantity: qty, total: s.price * qty }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return { booking, choices };
+}
+
+async function changeBookingService(bookingId, serviceId, actor, { amount, reason } = {}) {
+  const fail = (status, message) => Object.assign(new Error(message), { status });
+  const why = String(reason || "").trim().slice(0, 200);
+  if (!why) throw fail(400, "Say why the service is changing (the customer and provider see it)");
+  const { booking, choices } = await serviceChoices(bookingId);
+  if (!["Pending", "Accepted"].includes(booking.status)) throw fail(409, `A ${String(booking.status).toLowerCase()} booking's service can't be changed`);
+  const pick = choices.find((c) => c.serviceId === serviceId);
+  if (!pick) throw fail(404, "Pick one of this provider's services in the same category — or use Change provider");
+  let total = pick.total;
+  if (amount !== undefined && amount !== null && amount !== "") {
+    total = Math.round(Number(amount));
+    if (!Number.isFinite(total) || total < 0 || total > 1000000) throw fail(400, "Enter the price in rupees");
+  }
+  await mutate(
+    `mutation($id: UUID!, $serviceId: UUID!, $amount: Int!) {
+      booking_update(id: $id, data: { serviceId: $serviceId, amount: $amount })
+    }`,
+    { id: bookingId, serviceId, amount: total }
+  );
+  serviceOptions.clearBookingLines(bookingId);
+  cacheClear("openBookings");
+  const ref = bookingRef(refBookingId(booking));
+  const before = booking.service?.name || "Service";
+  const after = pick.quantity > 1 ? `${pick.name} × ${pick.quantity}` : pick.name;
+  await logActivity("booking", `Booking #${ref}: service changed from ${before} (₹${booking.amount}) to ${after} (₹${total}) by ${actor || "Admin"} — ${why}`);
+  const updated = await fetchBookingWithRelations(bookingId);
+  const message = `Booking #${ref} is now ${after}, ₹${total} (was ${before}, ₹${booking.amount}). Reason: ${why}`;
+  if (booking.customerId) await addNotification({ recipientType: "customer", recipientId: booking.customerId, type: "booking", title: "Your booking was updated", message, bookingId });
+  await addNotification({ recipientType: "provider", recipientId: booking.providerId, type: "booking", title: "Booking service changed", message, bookingId });
+  return { booking: updated, before: { service: before, amount: booking.amount }, after: { service: after, amount: total } };
+}
+
 // Admin's call desk moves a Pending or Accepted booking to another provider (the customer asked,
 // or the provider can't make it). The new provider gets it as a fresh request to accept. The
 // customer never pays more than agreed, and nobody is charged a difference (Admin chose the move:
@@ -5462,6 +5520,8 @@ async function listCustomersPage({ q, offset = 0, limit = 50 } = {}) {
 
 module.exports = {
   _withOptions: withOptions,
+  serviceChoices,
+  changeBookingService,
   _sameServiceKind: sameServiceKind,
   _otherServiceCheck: otherServiceCheck,
   rescheduleBooking,

@@ -3014,6 +3014,34 @@ app.post("/api/admin/call-desk/bookings/:id/provider", auth.requireAuth("admin")
   dispatchBooking(booking, [...new Set([previousProviderId, booking.providerId].filter(Boolean))]).catch((e) => console.error("dispatchBooking failed", e));
   res.json(booking);
 }));
+// Change service: another of the same provider's services in the same category (store.changeBookingService).
+app.get("/api/admin/call-desk/bookings/:id/services", auth.requireAuth("admin"), ah(async (req, res) => {
+  try {
+    const { booking, choices } = await store.serviceChoices(req.params.id);
+    res.json({ current: { service: booking.service?.name || "", amount: booking.amount, quantity: booking.quantity || 1, status: booking.status }, choices });
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ error: e.message });
+    throw e;
+  }
+}));
+app.post("/api/admin/call-desk/bookings/:id/service", auth.requireAuth("admin"), ah(async (req, res) => {
+  const serviceId = typeof req.body?.serviceId === "string" ? req.body.serviceId : "";
+  if (!serviceId) return res.status(400).json({ error: "Choose the service" });
+  let out;
+  try {
+    out = await store.changeBookingService(req.params.id, serviceId, actorOf(req), { amount: req.body?.amount, reason: req.body?.reason });
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ error: e.message });
+    throw e;
+  }
+  rt.booking("booking:updated", out.booking);
+  audit(req, "booking.change-service", "booking", out.booking.id, out.after.service, [
+    { field: "service", from: out.before.service, to: out.after.service },
+    { field: "amount", from: out.before.amount, to: out.after.amount },
+  ]);
+  rt.activity((await store.listActivities(1))[0]);
+  res.json(out.booking);
+}));
 app.post("/api/admin/call-desk/bookings/:id/close", auth.requireAuth("admin"), ah(async (req, res) => {
   const booking = await callDesk.close(req.params.id, req.body || {});
   rt.booking("booking:updated", booking);
