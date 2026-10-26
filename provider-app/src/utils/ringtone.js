@@ -29,9 +29,44 @@ function beep(ctx, startTime, duration, freq, peakGain) {
   osc.stop(startTime + duration + 0.02);
 }
 
-// volume: 0-1, from the provider's Ring Volume preference — scales the peak
-// gain of each beep so "silent" (0) is a real option, not just quieter.
-export function startRingtone(volume = 0.8) {
+// The Tikdum tune (public/sounds/tikdum-request.mp3, a cut of "Rising Horizon" — the same sound
+// the closed app rings with, res/raw/tikdum_request.ogg), played again after a short gap until
+// stopped. If the browser won't play it, the classic ring takes over.
+const TUNE_URL = "/sounds/tikdum-request.mp3";
+const TUNE_GAP_MS = 700;
+function startTune(volume) {
+  const audio = new Audio(TUNE_URL);
+  audio.volume = Math.max(0, Math.min(1, volume));
+  let stopped = false;
+  let timeoutId;
+  let stopBeeps = null;
+  const fallBack = () => {
+    if (!stopped && !stopBeeps) stopBeeps = startBeeps(volume);
+  };
+  audio.addEventListener("ended", () => {
+    if (stopped) return;
+    timeoutId = setTimeout(() => !stopped && audio.play().catch(fallBack), TUNE_GAP_MS);
+  });
+  audio.addEventListener("error", fallBack);
+  audio.play().catch(fallBack);
+  return () => {
+    stopped = true;
+    clearTimeout(timeoutId);
+    audio.pause();
+    if (stopBeeps) stopBeeps();
+  };
+}
+
+// volume: 0-1, from the provider's Ring Volume preference — "silent" (0) is a real option.
+// sound: "tikdum" (the Tikdum tune, the default) or "phone" (the classic two-tone ring), from
+// Notification Settings → Ring sound.
+export function startRingtone(volume = 0.8, sound = "tikdum") {
+  if (sound !== "phone" && typeof Audio !== "undefined") return startTune(volume);
+  return startBeeps(volume);
+}
+
+// Scales the peak gain of each beep with the volume.
+function startBeeps(volume) {
   const ctx = getContext();
   if (!ctx) return () => {};
   if (ctx.state === "suspended") ctx.resume().catch(() => {});

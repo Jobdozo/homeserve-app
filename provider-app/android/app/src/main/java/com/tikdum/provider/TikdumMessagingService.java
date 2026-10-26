@@ -27,6 +27,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class TikdumMessagingService extends FirebaseMessagingService {
 
   private static final String CHANNEL_ID = "tikdum_booking_requests";
+  // The same requests with the Tikdum tune (res/raw/tikdum_request, a cut of
+  // "Rising Horizon") — the default; CHANNEL_ID above keeps the phone's own
+  // ringtone for providers who choose it (RingSoundPlugin). Two channels
+  // because Android fixes a channel's sound when it's created.
+  private static final String TUNE_CHANNEL_ID = "tikdum_booking_requests_tune";
   // Everything else (announcements from Admin, approvals, reviews, payouts):
   // a normal notification. The server also sends these with a notification
   // block on this channel, so Android shows them itself while the app is in
@@ -69,7 +74,9 @@ public class TikdumMessagingService extends FirebaseMessagingService {
   private void showRingingNotification(String bookingId, String title, String body) {
     Log.e("TikdumFcm", "showRingingNotification bookingId=" + bookingId);
     Context ctx = getApplicationContext();
-    ensureChannel(ctx);
+    boolean tune = RingSoundPlugin.TUNE.equals(RingSoundPlugin.current(ctx));
+    if (tune) ensureTuneChannel(ctx);
+    else ensureChannel(ctx);
 
     Intent fullScreenIntent = new Intent(ctx, MainActivity.class);
     fullScreenIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -79,7 +86,7 @@ public class TikdumMessagingService extends FirebaseMessagingService {
     int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0);
     PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(ctx, bookingId != null ? bookingId.hashCode() : 0, fullScreenIntent, flags);
 
-    NotificationCompat.Builder builder = new NotificationCompat.Builder(ctx, CHANNEL_ID)
+    NotificationCompat.Builder builder = new NotificationCompat.Builder(ctx, tune ? TUNE_CHANNEL_ID : CHANNEL_ID)
         .setSmallIcon(R.drawable.ic_stat_tikdum)
         // The small icon is just a white silhouette (Android's own rule for
         // status-bar icons); without an explicit color, OEM notification
@@ -128,6 +135,23 @@ public class TikdumMessagingService extends FirebaseMessagingService {
     NotificationChannel channel = new NotificationChannel(UPDATES_CHANNEL_ID, "Updates and announcements", NotificationManager.IMPORTANCE_HIGH);
     channel.setDescription("Messages from Tikdum, approvals, reviews and payouts");
     channel.enableVibration(true);
+    manager.createNotificationChannel(channel);
+  }
+
+  private void ensureTuneChannel(Context ctx) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+    NotificationManager manager = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+    if (manager.getNotificationChannel(TUNE_CHANNEL_ID) != null) return;
+    NotificationChannel channel = new NotificationChannel(TUNE_CHANNEL_ID, "Booking requests (Tikdum tune)", NotificationManager.IMPORTANCE_HIGH);
+    channel.setDescription("New booking requests that need an immediate response, with the Tikdum tune");
+    channel.enableVibration(true);
+    channel.setVibrationPattern(new long[] { 0, 400, 200, 400, 200, 400 });
+    channel.setBypassDnd(true);
+    Uri tuneUri = Uri.parse("android.resource://" + ctx.getPackageName() + "/" + R.raw.tikdum_request);
+    channel.setSound(tuneUri, new android.media.AudioAttributes.Builder()
+        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+        .build());
     manager.createNotificationChannel(channel);
   }
 

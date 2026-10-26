@@ -17,6 +17,9 @@ const DEFAULTS = {
   ...Object.fromEntries(NOTIFICATION_TYPES.map((t) => [t.type, true])),
   ringVolume: 0.8,
   vibrate: true,
+  // "tikdum" (the Tikdum tune) or "phone" (the phone's ringtone / the classic ring): see utils/ringtone.js
+  // and, for the closed app, RingSoundPlugin.java.
+  ringSound: "tikdum",
 };
 
 export function loadNotificationPrefs() {

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, useCallback, u
 import { api, setAuthToken } from "../api";
 import { socket, setSocketToken } from "../socket";
 import { loadNotificationPrefs, saveNotificationPrefs } from "../utils/notificationPrefs";
+import { syncRingSound } from "../utils/ringSound";
 import { ensurePushSubscribed, onNativeRing } from "../utils/pushNotifications";
 import { readSnap, writeSnap, clearSnaps, newest } from "../utils/snapshot";
 import { AGREEMENT_VERSION } from "../data/providerAgreement";
@@ -95,6 +96,11 @@ export function AppProvider({ children }) {
       window.removeEventListener("online", onOnline);
     };
   }, []);
+
+  // The closed app reads the ring sound natively (RingSoundPlugin): keep it in step with this device's choice.
+  useEffect(() => {
+    syncRingSound(notificationPrefs.ringSound);
+  }, [notificationPrefs.ringSound]);
 
   const dismissRinging = useCallback(() => setRingingRequest(null), []);
 

@@ -66,12 +66,12 @@ export default function NotificationSettingsScreen() {
   const testRing = () => {
     if (testingRing) return;
     setTestingRing(true);
-    const stop = startRingtone(notificationPrefs.ringVolume);
+    const stop = startRingtone(notificationPrefs.ringVolume, notificationPrefs.ringSound);
     if (notificationPrefs.vibrate && navigator.vibrate) navigator.vibrate([400, 200, 400]);
     setTimeout(() => {
       stop();
       setTestingRing(false);
-    }, 2500);
+    }, notificationPrefs.ringSound === "phone" ? 2500 : 8500); // the whole tune once
   };
 
   return (
@@ -99,6 +99,25 @@ export default function NotificationSettingsScreen() {
         <div className="space-y-2">
           <SectionLabel>Ring settings</SectionLabel>
           <div className="divide-y divide-gray-50 rounded-2xl border border-gray-100">
+            <div className="px-4 py-3.5">
+              <p className="text-[13px] font-semibold text-gray-800">Ring sound</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {[
+                  ["tikdum", "Tikdum tune"],
+                  ["phone", "Phone ringtone"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => updateNotificationPref("ringSound", value)}
+                    className={`rounded-xl border px-3 py-2 text-[13px] font-semibold ${(notificationPrefs.ringSound || "tikdum") === value ? "border-brand bg-brand/5 text-brand" : "border-gray-200 text-gray-600"}`}
+                    aria-pressed={(notificationPrefs.ringSound || "tikdum") === value}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-[11px] text-gray-400">What a new booking request rings with — in the app, and when the app is closed</p>
+            </div>
             <div className="px-4 py-3.5">
               <div className="flex items-center justify-between">
                 <p className="text-[13px] font-semibold text-gray-800">Ring volume</p>

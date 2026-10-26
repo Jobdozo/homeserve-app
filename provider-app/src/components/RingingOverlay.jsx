@@ -30,7 +30,7 @@ export default function RingingOverlay() {
 
   useEffect(() => {
     if (!ringingRequest) return;
-    const stopRingtone = startRingtone(notificationPrefs.ringVolume);
+    const stopRingtone = startRingtone(notificationPrefs.ringVolume, notificationPrefs.ringSound);
     return stopRingtone;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ringingRequest]);

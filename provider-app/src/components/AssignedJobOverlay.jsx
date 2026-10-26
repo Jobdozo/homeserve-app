@@ -16,7 +16,7 @@ export default function AssignedJobOverlay() {
 
   useEffect(() => {
     if (!assignedJob) return undefined;
-    const stopRingtone = startRingtone(notificationPrefs.ringVolume);
+    const stopRingtone = startRingtone(notificationPrefs.ringVolume, notificationPrefs.ringSound);
     const stopAfter = setTimeout(stopRingtone, RING_SECONDS * 1000);
     let buzz;
     if (notificationPrefs.vibrate && navigator.vibrate) {

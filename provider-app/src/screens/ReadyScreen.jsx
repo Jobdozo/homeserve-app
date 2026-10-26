@@ -30,12 +30,12 @@ export default function ReadyScreen() {
       setRinging(false);
       return;
     }
-    stopRef.current = startRingtone(volume);
+    stopRef.current = startRingtone(volume, notificationPrefs?.ringSound);
     setRinging(true);
     setTimeout(() => {
       stopRef.current?.();
       setRinging(false);
-    }, 4500);
+    }, notificationPrefs?.ringSound === "phone" ? 4500 : 8500); // the whole tune once
   };
 
   const fixNotifications = async () => {
