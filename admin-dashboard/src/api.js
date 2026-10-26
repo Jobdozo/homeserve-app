@@ -280,7 +280,8 @@ export const api = {
   // The Admin app's phone, so it rings for bookings that need a provider.
   saveAdminFcmToken: (token) => request("/admin/fcm-token", { method: "POST", body: JSON.stringify({ token }) }),
   removeAdminFcmToken: (token) => request("/admin/fcm-token/remove", { method: "POST", body: JSON.stringify({ token }) }),
-  assignBooking: (id, providerId) => request(`/admin/bookings/${id}/assign`, { method: "POST", body: JSON.stringify({ providerId }) }),
+  // allowOtherService: confirmed giving it to a provider without the booked service (it changes the booking's service).
+  assignBooking: (id, providerId, allowOtherService = false) => request(`/admin/bookings/${id}/assign`, { method: "POST", body: JSON.stringify({ providerId, ...(allowOtherService ? { allowOtherService: true } : {}) }) }),
   giveUpBooking: (id) => request(`/admin/bookings/${id}/give-up`, { method: "POST" }),
   // One page of bookings, newest first, filtered on the server: { items, total }.
   listBookingsPage: ({ status, provider, customer, from, to, q, offset = 0, limit = 50 } = {}) =>
@@ -290,7 +291,7 @@ export const api = {
   callDeskBook: (body) => request("/admin/call-desk/bookings", { method: "POST", body: JSON.stringify(body) }),
   callDeskReschedule: (id, body) => request(`/admin/call-desk/bookings/${encodeURIComponent(id)}/reschedule`, { method: "POST", body: JSON.stringify(body) }),
   callDeskProviders: (id) => request(`/admin/call-desk/bookings/${encodeURIComponent(id)}/providers`),
-  callDeskChangeProvider: (id, providerId) => request(`/admin/call-desk/bookings/${encodeURIComponent(id)}/provider`, { method: "POST", body: JSON.stringify({ providerId }) }),
+  callDeskChangeProvider: (id, providerId, allowOtherService = false) => request(`/admin/call-desk/bookings/${encodeURIComponent(id)}/provider`, { method: "POST", body: JSON.stringify({ providerId, ...(allowOtherService ? { allowOtherService: true } : {}) }) }),
   callDeskClose: (id, body) => request(`/admin/call-desk/bookings/${encodeURIComponent(id)}/close`, { method: "POST", body: JSON.stringify(body) }),
   getBookingMessages: (id) => request(`/messages/${id}`),
   getBookingPhotos: (id) => request(`/bookings/${id}/photos`),

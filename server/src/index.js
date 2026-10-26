@@ -2944,9 +2944,10 @@ app.post("/api/admin/bookings/:id/assign", auth.requireAuth("admin"), ah(async (
   }
   let result;
   try {
-    result = await store.assignBookingTo(req.params.id, providerId, actorOf(req));
+    // allowOtherService: a person confirmed giving it to a provider without the booked kind of service.
+    result = await store.assignBookingTo(req.params.id, providerId, actorOf(req), { allowOtherService: req.body?.allowOtherService === true });
   } catch (e) {
-    if (e.status) return res.status(e.status).json({ error: e.message });
+    if (e.status) return res.status(e.status).json({ error: e.message, ...(e.code ? { code: e.code } : {}) });
     throw e;
   }
   const { booking, tried } = result;
@@ -2998,7 +2999,14 @@ app.get("/api/admin/call-desk/bookings/:id/providers", auth.requireAuth("admin")
 app.post("/api/admin/call-desk/bookings/:id/provider", auth.requireAuth("admin"), ah(async (req, res) => {
   const providerId = typeof req.body?.providerId === "string" ? req.body.providerId : "";
   if (!providerId) return res.status(400).json({ error: "Choose a provider" });
-  const { booking, previousProviderId } = await store.changeBookingProvider(req.params.id, providerId, actorOf(req));
+  let moved;
+  try {
+    moved = await store.changeBookingProvider(req.params.id, providerId, actorOf(req), { allowOtherService: req.body?.allowOtherService === true });
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ error: e.message, ...(e.code ? { code: e.code } : {}) });
+    throw e;
+  }
+  const { booking, previousProviderId } = moved;
   rt.booking("booking:updated", booking, { previous: previousProviderId ? [previousProviderId] : [] });
   rt.booking("booking:created", booking);
   audit(req, "booking.change-provider", "booking", booking.id, booking.service?.name || "", [{ field: "provider", from: previousProviderId, to: booking.providerId }]);

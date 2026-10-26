@@ -492,6 +492,8 @@ function propose(admin, input) {
   if (!type) throw fail(400, "That action can't be proposed by an agent");
   const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
   if (JSON.stringify(body).length > 5000) throw fail(400, "Proposed request body is too large");
+  // Changing what the customer booked is a person's decision in Admin, never inside an agent's proposal.
+  if (type === "booking.assign" && body.allowOtherService) throw fail(403, "An agent can't change a booking's service — propose a provider who offers it");
   // An agent may only propose what its own role could do with a person's sign-off.
   const needed = access.requiredFor(method, path, body);
   if (needed === "super" || (needed !== null && !access.permits(admin.rolePermissions, needed))) {

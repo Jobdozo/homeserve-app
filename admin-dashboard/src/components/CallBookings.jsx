@@ -380,12 +380,22 @@ function ChangeProvider({ booking, currentName, onDone, onClose }) {
     };
   }, [booking.id]);
 
+  const [showOther, setShowOther] = useState(false);
+  const booked = booking.service?.name || "the booked service";
   const choice = options?.find((o) => o.providerId === picked);
+  // Providers who offer the booked service first; the others only on request, and after a confirm.
+  const listed = (options || []).filter((o) => o.sameService || showOther);
+  const otherCount = (options || []).filter((o) => !o.sameService).length;
   const move = async () => {
+    if (choice && !choice.sameService && !window.confirm(`${choice.name} doesn't offer ${booked}.
+
+Moving it changes the customer's booking to "${choice.serviceName}". The customer will be told.
+
+Go ahead?`)) return;
     setBusy(true);
     setError("");
     try {
-      await api.callDeskChangeProvider(booking.id, picked);
+      await api.callDeskChangeProvider(booking.id, picked, Boolean(choice && !choice.sameService));
       showToast(`#${booking.ref} sent to ${choice?.name || "the new provider"} — waiting for them to accept`);
       onDone();
     } catch (e) {
@@ -402,9 +412,15 @@ function ChangeProvider({ booking, currentName, onDone, onClose }) {
       </p>
       {!options && <p className="text-[12px] text-gray-400">Finding providers…</p>}
       {options?.length === 0 && !error && <p className="text-[12px] text-gray-500">No other provider offers this kind of service.</p>}
-      {options?.length > 0 && (
+      {options?.length > 0 && listed.length === 0 && <p className="text-[12px] text-gray-500">No other provider offers <b>{booked}</b>.</p>}
+      {otherCount > 0 && (
+        <button onClick={() => setShowOther((v) => !v)} className="text-[12px] font-semibold text-amber-700">
+          {showOther ? "Hide" : "Show"} {otherCount} provider{otherCount === 1 ? "" : "s"} who don't offer {booked}
+        </button>
+      )}
+      {listed.length > 0 && (
         <ul className="max-h-64 space-y-1 overflow-y-auto">
-          {options.map((o) => (
+          {listed.map((o) => (
             <li key={o.providerId}>
               <label className={`flex cursor-pointer items-start gap-2 rounded-lg border bg-white p-2 text-[12px] ${picked === o.providerId ? "border-brand" : "border-gray-100"}`}>
                 <input type="radio" name={`prov-${booking.id}`} checked={picked === o.providerId} onChange={() => setPicked(o.providerId)} className="mt-0.5 accent-brand" />
@@ -415,7 +431,7 @@ function ChangeProvider({ booking, currentName, onDone, onClose }) {
                     <span className="font-normal text-gray-400"> · {o.jobsDone} jobs</span>
                   </span>
                   <span className="block text-gray-500">
-                    {o.serviceName}{o.sameService ? "" : " (similar service)"} · their price {inr(o.price)} · customer pays {inr(o.customerPays)}
+                    {o.sameService ? o.serviceName : <span className="font-semibold text-amber-700">Different service: {o.serviceName} — the customer's booking changes to it</span>} · their price {inr(o.price)} · customer pays {inr(o.customerPays)}
                   </span>
                   {!o.available && <span className="block text-amber-700">⚠ {o.issues.join(", ")}</span>}
                   {o.passed && <span className="block text-gray-400">Already passed on this booking</span>}

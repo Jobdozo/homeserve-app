@@ -2657,7 +2657,17 @@ async function explainProviderVisibility(providerId, pincode) {
 
 // Another provider's copy of the SAME service (same name) who can take the booking at the customer's PIN.
 // A provider who already took another service of this order comes first, so an order stays with one provider.
-async function findAlternativeProviderService(categorySlug, excludeProviderIds, { name, pincode, preferProviderId } = {}) {
+// The same kind of service as the one booked: the same name, or both in the same sub-category
+// ("Sofa cleaning") whatever each provider calls theirs. A booking is only ever moved to another
+// provider's service of the same kind unless a person confirms the change (26 Oct 2026: a Sofa
+// Cleaning booking became the new provider's cheapest Home Cleaning service).
+function sameServiceKind(svId, svName, wantedId, wantedName) {
+  if (sameServiceName(svName, wantedName)) return true;
+  const want = wantedId ? subcategories.subcategoryOf(wantedId) : null;
+  return Boolean(want) && subcategories.subcategoryOf(svId) === want;
+}
+
+async function findAlternativeProviderService(categorySlug, excludeProviderIds, { name, serviceId, pincode, preferProviderId } = {}) {
   const vctx = await buildVisibilityContext();
   const categoryUuid = await getCategoryUuidBySlug(categorySlug);
   if (!categoryUuid) return null;
@@ -2673,7 +2683,7 @@ async function findAlternativeProviderService(categorySlug, excludeProviderIds, 
     (s) =>
       s.provider &&
       !excludeProviderIds.includes(s.provider.id) &&
-      sameServiceName(s.name, name) &&
+      sameServiceKind(s.id, s.name, serviceId, name) &&
       providerVisibilityIssues(s.provider.id, vctx, pincode ? { pincode } : {}).length === 0
   );
   // Everyone here passes the same rules; ring the best match first (dispatchRank.js).
@@ -2727,6 +2737,7 @@ async function reassignBooking(bookingId, excludeProviderIds, opts = {}) {
     categorySlug && current
       ? await findAlternativeProviderService(categorySlug, excludeIds, {
           name: current.name,
+          serviceId: current.id,
           pincode: pincodeFromLine(booking.address?.line),
           preferProviderId: opts.preferProviderId,
         })
@@ -2804,7 +2815,10 @@ async function assignmentOptions(booking) {
   const jobs = await getProviderJobCounts().catch(() => ({}));
   const qty = bookingQuantity(booking.id);
   const pincode = pincodeFromLine(booking.address?.line);
-  const wanted = booking.service?.name || "";
+  // The booked service's own name: the booking's copy carries the count ("Sofa Cleaning (1 Seat) × 5",
+  // mapBooking), which no provider's service is called — so every provider used to look like
+  // "another service".
+  const wanted = (booking.serviceId ? (await getService(booking.serviceId))?.name : null) || String(booking.service?.name || "").replace(/ × \d+$/, "");
   const tried = new Set(assignments.queued(booking.id)?.tried || []);
   const quoted = assignments.coverFor(booking.id)?.quoted ?? booking.amount;
   const charged = assignments.coverFor(booking.id)?.chargedProviderId || booking.providerId;
@@ -2813,7 +2827,7 @@ async function assignmentOptions(booking) {
   for (const sv of services) {
     if (!sv.provider) continue;
     const had = best.get(sv.provider.id);
-    const same = sameServiceName(sv.name, wanted);
+    const same = sameServiceKind(sv.id, sv.name, booking.serviceId || booking.service?.id, wanted);
     if (!had || (same && !had.same) || (same === had.same && sv.price < had.price)) best.set(sv.provider.id, { serviceId: sv.id, serviceName: sv.name, price: sv.price, same });
   }
   const out = [];
@@ -2884,13 +2898,37 @@ async function listNeedsAssignment() {
 
 // Admin gives a waiting booking to one provider (at the price promise's price).
 // It rings them as a new request; if they don't take it, it comes back to the queue.
-async function assignBookingTo(bookingId, providerId, actor) {
+// A provider without the booked kind of service: refused unless a person confirmed the change
+// (allowOtherService). Returns the change's notice for the customer, or null.
+function otherServiceCheck(booking, option, allowOtherService) {
+  if (option.sameService) return null;
+  const booked = booking.service?.name || "the booked service";
+  if (!allowOtherService) {
+    throw Object.assign(new Error(`${option.name} doesn't offer ${booked}. Assigning them changes the customer's service to ${option.serviceName} — confirm that change to go ahead.`), { status: 409, code: "other_service" });
+  }
+  return { from: booked, to: option.serviceName };
+}
+
+async function tellCustomerServiceChanged(booking, change, ref) {
+  if (!change || !booking.customerId) return;
+  await addNotification({
+    recipientType: "customer",
+    recipientId: booking.customerId,
+    type: "booking",
+    title: "Your booking's service changed",
+    message: `Booking #${ref}: no provider was free for ${change.from}, so Tikdum booked ${change.to} for you instead. Not what you wanted? Cancel it from the booking, or call us.`,
+    bookingId: booking.id,
+  });
+}
+
+async function assignBookingTo(bookingId, providerId, actor, { allowOtherService = false } = {}) {
   const fail = (status, message) => Object.assign(new Error(message), { status });
   const booking = await fetchBookingWithRelations(bookingId);
   if (!booking) throw fail(404, "Booking not found");
   if (booking.status !== "Pending") throw fail(409, `This booking is already ${String(booking.status).toLowerCase()}`);
   const option = (await assignmentOptions(booking)).find((o) => o.providerId === providerId);
   if (!option) throw fail(404, "That provider doesn't offer a service in this category");
+  const change = otherServiceCheck(booking, option, allowOtherService);
   const { amount } = assignments.priceForMove(booking, option.price, providerId);
   await mutate(
     `mutation($id: UUID!, $serviceId: UUID!, $providerId: UUID!, $amount: Int!) {
@@ -2900,8 +2938,9 @@ async function assignBookingTo(bookingId, providerId, actor) {
   );
   assignments.removeFromQueue(bookingId);
   cacheClear("openBookings");
-  await logActivity("booking", `Booking #${bookingRef(bookingId)} assigned to ${option.name} by ${actor || "Admin"}`);
+  await logActivity("booking", `Booking #${bookingRef(bookingId)} assigned to ${option.name} by ${actor || "Admin"}${change ? ` — service changed from ${change.from} to ${change.to}` : ""}`);
   const updated = await fetchBookingWithRelations(bookingId);
+  await tellCustomerServiceChanged(booking, change, bookingRef(bookingId));
   await addNotification({
     recipientType: "provider",
     recipientId: providerId,
@@ -2919,7 +2958,7 @@ async function assignBookingTo(bookingId, providerId, actor) {
 // customer never pays more than agreed, and nobody is charged a difference (Admin chose the move:
 // cover 0). No money moves: a fee already charged on acceptance stays charged, exactly as when a
 // provider swaps an order themselves, and the next acceptance isn't charged again (bookingFees).
-async function changeBookingProvider(bookingId, providerId, actor) {
+async function changeBookingProvider(bookingId, providerId, actor, { allowOtherService = false } = {}) {
   const fail = (status, message) => Object.assign(new Error(message), { status });
   const booking = await fetchBookingWithRelations(bookingId);
   if (!booking) throw fail(404, "Booking not found");
@@ -2927,6 +2966,7 @@ async function changeBookingProvider(bookingId, providerId, actor) {
   if (booking.providerId === providerId) throw fail(400, "That provider already has this booking");
   const option = (await assignmentOptions(booking)).find((o) => o.providerId === providerId);
   if (!option) throw fail(404, "That provider doesn't offer a service in this category");
+  const change = otherServiceCheck(booking, option, allowOtherService);
   const { amount } = assignments.priceForMove(booking, option.price, providerId, { chargedProviderId: providerId });
   const now = new Date().toISOString();
   await mutate(
@@ -2952,8 +2992,9 @@ async function changeBookingProvider(bookingId, providerId, actor) {
   cacheClear("openBookings");
   const ref = bookingRef(refBookingId(booking));
   const serviceName = booking.service?.name || "Service";
-  await logActivity("booking", `Booking #${ref} (${serviceName}) moved to ${option.name} by ${actor || "Admin"}`);
+  await logActivity("booking", `Booking #${ref} (${serviceName}) moved to ${option.name} by ${actor || "Admin"}${change ? ` — service changed to ${change.to}` : ""}`);
   const updated = await fetchBookingWithRelations(bookingId);
+  await tellCustomerServiceChanged(booking, change, ref);
   await addNotification({
     recipientType: "provider",
     recipientId: providerId,
@@ -3067,20 +3108,18 @@ async function findSwapCandidate(booking, excludeIds) {
     { categoryId: categoryUuid }
   );
   const pin = (String(booking.address?.line || "").match(/\b\d{6}\b/) || [])[0];
-  const wantedName = String(booking.service?.name || "").trim().toLowerCase();
+  const wantedName = (booking.serviceId ? (await getService(booking.serviceId))?.name : null) || "";
+  // Only the same kind of service (sameServiceKind): a swap never turns the customer's booking into
+  // something else. Nobody with it: the swap is refused and the order stays with its provider.
   const eligible = services.filter(
     (s) =>
       s.provider &&
       !excludeIds.includes(s.provider.id) &&
+      sameServiceKind(s.id, s.name, booking.serviceId, wantedName) &&
       providerVisibilityIssues(s.provider.id, vctx, { pincode: pin }).length === 0
   );
-  // Same service first, then real (live) providers, then best rated.
-  eligible.sort(
-    (a, b) =>
-      Number(String(b.name || "").trim().toLowerCase() === wantedName) - Number(String(a.name || "").trim().toLowerCase() === wantedName) ||
-      Number(Boolean(b.provider.live)) - Number(Boolean(a.provider.live)) ||
-      (b.rating || 0) - (a.rating || 0)
-  );
+  // Real (live) providers first, then best rated.
+  eligible.sort((a, b) => Number(Boolean(b.provider.live)) - Number(Boolean(a.provider.live)) || (b.rating || 0) - (a.rating || 0));
   const best = eligible[0];
   return best ? { serviceId: best.id, providerId: best.provider.id, serviceName: best.name } : null;
 }
@@ -5423,6 +5462,8 @@ async function listCustomersPage({ q, offset = 0, limit = 50 } = {}) {
 
 module.exports = {
   _withOptions: withOptions,
+  _sameServiceKind: sameServiceKind,
+  _otherServiceCheck: otherServiceCheck,
   rescheduleBooking,
   changeBookingProvider,
   markProviderLive,

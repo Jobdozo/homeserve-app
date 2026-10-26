@@ -57,7 +57,7 @@ function Option({ o, responsible, onAssign, busy, canEdit, best }) {
           <span className="ml-1.5 text-[11.5px] font-medium text-gray-400">{o.jobsDone} jobs</span>
         </p>
         <p className="text-[11.5px] text-gray-500">
-          {o.sameService ? o.serviceName : <span>Other service: {o.serviceName}</span>}
+          {o.sameService ? o.serviceName : <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-amber-800">Different service: {o.serviceName}</span>}
           {o.passed && <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">Passed on it</span>}
           {o.issues.slice(0, 2).map((i) => (
             <span key={i} className="ml-1.5 rounded-full bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600">
@@ -98,12 +98,23 @@ function WaitingBooking({ item, canEdit, onDone }) {
   const [showAll, setShowAll] = useState(false);
   const [confirmGiveUp, setConfirmGiveUp] = useState(false);
   const b = item.booking;
-  const shown = showAll ? item.options : item.options.slice(0, 6);
+  const [showOther, setShowOther] = useState(false);
+  const booked = b.service?.name || "the booked service";
+  // Providers who offer the booked service; the others only on request, and only after a confirm —
+  // assigning one changes the customer's booking to that provider's service.
+  const same = item.options.filter((o) => o.sameService);
+  const other = item.options.filter((o) => !o.sameService);
+  const shown = showAll ? same : same.slice(0, 6);
 
   const assign = async (o) => {
+    if (!o.sameService && !window.confirm(`${o.name} doesn't offer ${booked}.
+
+Assigning them changes the customer's booking to "${o.serviceName}". The customer will be told.
+
+Go ahead?`)) return;
     setBusy(o.providerId);
     try {
-      await api.assignBooking(b.id, o.providerId);
+      await api.assignBooking(b.id, o.providerId, !o.sameService);
       showToast(`Sent to ${o.name} — their phone is ringing`);
       onDone();
     } catch (e) {
@@ -159,12 +170,29 @@ function WaitingBooking({ item, canEdit, onDone }) {
         {shown.map((o) => (
           <Option key={o.providerId} o={o} responsible={item.responsible} onAssign={assign} busy={busy === o.providerId} canEdit={canEdit} best={o.providerId === item.suggestedProviderId} />
         ))}
-        {item.options.length === 0 && <p className="py-3 text-center text-[12.5px] text-gray-400">No provider offers a service in this category.</p>}
+        {same.length === 0 && (
+          <p className="py-3 text-center text-[12.5px] text-gray-500">
+            No provider offers <b>{booked}</b>{other.length ? " — call the customer before giving them a different service." : "."}
+          </p>
+        )}
+        {other.length > 0 && (
+          <button onClick={() => setShowOther((v) => !v)} className="text-[12px] font-semibold text-amber-700">
+            {showOther ? "Hide" : "Show"} {other.length} provider{other.length === 1 ? "" : "s"} who don't offer {booked}
+          </button>
+        )}
+        {showOther && (
+          <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/40 p-2">
+            <p className="text-[11.5px] text-amber-800">These providers don't offer {booked}. Assigning one changes the customer's booking to their service, and the customer is told.</p>
+            {other.map((o) => (
+              <Option key={o.providerId} o={o} responsible={item.responsible} onAssign={assign} busy={busy === o.providerId} canEdit={canEdit} best={false} />
+            ))}
+          </div>
+        )}
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        {item.options.length > 6 ? (
+        {same.length > 6 ? (
           <button onClick={() => setShowAll((v) => !v)} className="text-[12px] font-semibold text-brand">
-            {showAll ? "Show fewer" : `Show all ${item.options.length} providers`}
+            {showAll ? "Show fewer" : `Show all ${same.length} providers`}
           </button>
         ) : (
           <span />
