@@ -1206,11 +1206,15 @@ async function imageTarget(targetType, id) {
   } else if (targetType === "category") {
     const c = cats.find((x) => x.id === id);
     if (c) t = { name: c.name, slug: c.id, type: "", currentUrl: c.bannerUrl };
+  } else if (targetType === "categoryTile") {
+    // The square tile photo on the app's home screen (the category's imageUrl, not its banner).
+    const c = cats.find((x) => x.id === id);
+    if (c) t = { name: c.name, slug: c.id, type: "", currentUrl: c.imageUrl };
   }
   if (!t) return null;
   return {
     ...t,
-    category: targetType === "category" ? "" : catName(t.slug),
+    category: targetType === "category" || targetType === "categoryTile" ? "" : catName(t.slug),
     colour: imageStyle.colourFor(t.slug, cats.map((c) => c.id), { shade: t.shade }),
   };
 }

@@ -85,6 +85,9 @@ const KINDS = {
   catalog: { ratio: "1:1", label: "a service" },
   subcategory: { ratio: "1:1", label: "a type of service" },
   category: { ratio: "16:9", label: "a service category banner (wide)" },
+  // The small square photo on the app's home screen grid: what the category is about at a glance,
+  // with no logo stamped on (it's 72 px wide there; the name is written under it).
+  categoryTile: { ratio: "1:1", label: "a service category, as a small square tile photo on an app's home screen", stamp: false },
 };
 
 // What the picture shows:
@@ -471,7 +474,7 @@ async function processJob(job) {
       : { ok: true, issues: [], checked: false };
     if (last) deleteFile(last.url);
     // The check looks at the picture as drawn; the logo goes on the copy that is kept.
-    const kept = await stampLogo(image, job.colour);
+    const kept = job.stamp === false ? image : await stampLogo(image, job.colour);
     const file = `${crypto.randomBytes(16).toString("hex")}${extFor(kept.mime)}`;
     fs.writeFileSync(path.join(UPLOADS_DIR, file), kept.data);
     last = { url: `/uploads/${file}`, logo: Boolean(kept.logo), size: kept.width ? `${kept.width}×${kept.height}` : null };
@@ -522,7 +525,7 @@ function enqueue(targets, actor) {
     });
     // A "service" picture gets its own scene (sceneFor) when it's drawn: that can call a text model.
     const brief = { kind: t.targetType, name: t.name, category: t.category, type: t.type, tagline: t.tagline, ...who, show, ...facts };
-    queue.push({ id: row.id, prompt, ratio: KINDS[t.targetType].ratio, expect: who, brief: show === "service" ? brief : null, colour, checks });
+    queue.push({ id: row.id, prompt, ratio: KINDS[t.targetType].ratio, stamp: KINDS[t.targetType].stamp !== false, expect: who, brief: show === "service" ? brief : null, colour, checks });
     made.push(row);
     open.add(k);
   }

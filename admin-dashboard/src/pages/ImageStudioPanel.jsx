@@ -23,6 +23,7 @@ async function shrink(file, maxSide) {
 const KINDS = [
   ["subcategory", "Types"],
   ["category", "Category banners"],
+  ["categoryTile", "Category tiles"],
   ["catalog", "Catalog"],
   ["service", "Services"],
 ];
@@ -35,7 +36,7 @@ const AUDIENCES = [
 ];
 
 export default function ImageStudioPanel() {
-  const { categories, services, setServiceImage, setCategoryBanner, showToast } = useApp();
+  const { categories, services, setServiceImage, setCategoryBanner, setCategoryPhoto, showToast } = useApp();
   const subs = useSubcategories();
   const [status, setStatus] = useState(null);
   const [kind, setKind] = useState("subcategory");
@@ -79,6 +80,8 @@ export default function ImageStudioPanel() {
     if (kind === "subcategory")
       rows = subs.map((s) => ({ id: s.id, name: s.name, category: catName(s.categoryId), type: "", has: Boolean(s.imageUrl), thumb: s.imageUrl }));
     else if (kind === "category") rows = categories.map((c) => ({ id: c.id, name: c.name, category: "", type: "", has: Boolean(c.bannerUrl), thumb: c.bannerUrl }));
+    // The square photo on the app's home screen grid (no logo stamped on it).
+    else if (kind === "categoryTile") rows = categories.map((c) => ({ id: c.id, name: c.name, category: "", type: "", has: Boolean(c.imageUrl), thumb: c.imageUrl }));
     else if (kind === "catalog")
       rows = catalog.map((i) => ({ id: i.id, name: i.name, category: catName(i.categorySlug), type: typeName(i.subcategoryId), tagline: i.tagline, has: Boolean(i.imageUrl), thumb: i.imageUrl }));
     else rows = services.map((s) => ({ id: s.id, name: s.name, category: catName(s.categoryId), type: typeName(s.subcategoryId), tagline: s.tagline, has: Boolean(s.imageUrl), thumb: s.imageUrl }));
@@ -131,6 +134,7 @@ export default function ImageStudioPanel() {
       const file = await shrink(new File([blob], "ai.png", { type: blob.type || "image/png" }), c.targetType === "category" ? 1800 : 1000);
       if (c.targetType === "service") await setServiceImage(c.targetId, file);
       else if (c.targetType === "category") await setCategoryBanner(c.targetId, file);
+      else if (c.targetType === "categoryTile") await setCategoryPhoto(c.targetId, file);
       else if (c.targetType === "catalog") await api.uploadServiceCatalogImage(c.targetId, file);
       else if (c.targetType === "subcategory") {
         await api.uploadSubcategoryImage(c.targetId, file);

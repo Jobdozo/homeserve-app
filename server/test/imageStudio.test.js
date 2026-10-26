@@ -371,3 +371,18 @@ test("each service gets its own scene — not the same AC or chimney for every o
   delete process.env.CF_AI_ACCOUNT_ID;
   delete process.env.CF_AI_TOKEN;
 });
+
+test("a category tile: square, objects only, no logo stamped on (it's tiny on the home screen)", async () => {
+  process.env.GEMINI_API_KEY = "test-key-123";
+  installFetch();
+  calls.image.length = 0;
+  const made = studio.enqueue([{ targetType: "categoryTile", targetId: "ac-repair", name: "AC Repair", show: "service" }], "owner");
+  assert.equal(made.length, 1);
+  assert.match(made[0].prompt, /small square tile photo/);
+  assert.match(made[0].prompt, /no text/i);
+  const done = await wait(() => studio.listCandidates().find((c) => c.targetId === "ac-repair" && c.status !== "generating"));
+  assert.equal(done.status, "pending");
+  assert.equal(calls.image[0].ratio, "1:1");
+  assert.equal(done.checks.logo, false); // no logo stamped on
+  studio.settle(done.id, "rejected", "owner");
+});
