@@ -13,9 +13,10 @@
 // Normally a post is PROPOSED in Admin → AI Agents → Approvals and goes live when a person
 // approves it; with Auto-post on, the agent publishes it itself (server/src/social.js), and
 // the server refuses more than the day's number (agents.js policy).
-// Once a day from 18:00 IST (Admin's "Reels" switch) it also makes a Reel: a title and 3–5 quick
+// It also makes Reels (Admin's "Reels" switch and "Reels a day", 1–6): a title and 3–5 quick
 // points the server turns into a 12–18 second vertical video for Instagram and Facebook Reels,
-// Threads and YouTube Shorts (whichever are connected). It's published (or proposed) like a post.
+// Threads and YouTube Shorts (whichever are connected), published (or proposed) like a post.
+// One a day comes from 18:00 IST; more are spread over the day (six: 9, 11, 13, 15, 17, 19).
 // Mondays from 11:00 IST: a results report for the last 7 days (weeklyReport).
 const config = require("./config");
 const { istDay, istHour } = require("./time");
@@ -27,6 +28,15 @@ const weekdayIst = (ms) => new Date(ms + IST_MS).getUTCDay();
 const isPostTask = (t) => /^\s*post\s*[:\-–]/i.test(t.title || "");
 const STORY_FROM_HOUR = 16; // Stories are watched most in the evening
 const REEL_FROM_HOUR = 18;
+const REEL_FIRST_HOUR = 9;
+const REEL_LAST_HOUR = 19;
+
+// Pure: the IST hours from which each of the day's Reels is made. Exported for tests.
+function reelSlots(n) {
+  const count = Math.max(1, Math.min(6, Math.round(Number(n) || 1)));
+  if (count === 1) return [REEL_FROM_HOUR];
+  return Array.from({ length: count }, (_, i) => Math.round(REEL_FIRST_HOUR + (i * (REEL_LAST_HOUR - REEL_FIRST_HOUR)) / (count - 1)));
+}
 const REPORT_WEEKDAY = 1; // Monday
 const REPORT_HOUR = 11;
 // Publishing a carousel or drawing a picture takes longer than an ordinary request; never retried
@@ -357,9 +367,13 @@ async function run(client, log, { st, office, now = Date.now() }) {
     if (post.format === "carousel") st.socialCarouselDay = today;
   };
   const postingDay = config.social.daysIst.includes(weekdayIst(now));
-  // The day's Reel, from 18:00 — a run that makes it doesn't also make a post (the next run does).
-  if (postingDay && reelsOn(self) && istHour(now) >= REEL_FROM_HOUR && st.socialReelDay !== today) {
-    st.socialReelDay = today; // one try a day
+  // The day's Reels, each from its hour — a run that makes one doesn't also make a post (the next run does).
+  if (!st.socialReels || st.socialReels.day !== today) st.socialReels = { day: today, done: st.socialReelDay === today ? 1 : 0 };
+  const slots = reelSlots(self?.socialReelsPerDay);
+  const reelNo = st.socialReels.done;
+  if (postingDay && reelsOn(self) && reelNo < slots.length && istHour(now) >= slots[reelNo]) {
+    st.socialReels.done = reelNo + 1; // one try per slot
+    st.socialReelDay = today;
     try {
       const reel = await writePost(client, log, null, now, { reel: true });
       reel.aiVideo = self?.socialAiVideo === true; // off unless switched on: it costs ~₹85 a day
@@ -367,7 +381,7 @@ async function run(client, log, { st, office, now = Date.now() }) {
         await client.request("POST", "/admin/social/posts", bodyFor(reel, reelChannels), SLOW);
         log.info("marketing", "reel started", { title: reel.title });
       } else {
-        await client.propose(proposalFor(reel, reelChannels, `social:reel:${today}`));
+        await client.propose(proposalFor(reel, reelChannels, `social:reel:${today}${reelNo ? `:${reelNo + 1}` : ""}`));
       }
       return proposed + 1;
     } catch (e) {
@@ -459,4 +473,4 @@ async function run(client, log, { st, office, now = Date.now() }) {
   return proposed;
 }
 
-module.exports = { run, isPostTask, cleanAnswer, proposalFor, promptFor, bodyFor, dueSlots, chooseSlots, hourStats, resultsFor, weeklyNumbers, AUTO_SLOTS };
+module.exports = { run, isPostTask, cleanAnswer, proposalFor, promptFor, bodyFor, dueSlots, chooseSlots, hourStats, resultsFor, weeklyNumbers, reelSlots, AUTO_SLOTS };

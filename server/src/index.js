@@ -3433,6 +3433,7 @@ app.get("/api/agents/self", agentOnly, crm(async (req, res) => {
     socialStories: agents.getConfig().socialStories,
     socialCarousels: agents.getConfig().socialCarousels,
     socialReels: agents.getConfig().socialReels,
+    socialReelsPerDay: agents.getConfig().socialReelsPerDay,
     socialAiVideo: agents.getConfig().socialAiVideo,
     blogAutoPublish: agents.getConfig().blogAutoPublish,
     blogPerDay: agents.getConfig().blogPerDay,
@@ -3487,6 +3488,7 @@ app.patch("/api/admin/ai/config", adminOnly, crm(async (req, res) => {
       socialStories: req.body?.socialStories,
       socialCarousels: req.body?.socialCarousels,
       socialReels: req.body?.socialReels,
+      socialReelsPerDay: req.body?.socialReelsPerDay,
       socialAiVideo: req.body?.socialAiVideo,
       blogAutoPublish: req.body?.blogAutoPublish,
       blogPerDay: req.body?.blogPerDay,
@@ -3497,8 +3499,8 @@ app.patch("/api/admin/ai/config", adminOnly, crm(async (req, res) => {
     audit(req, "ai.config", "ai", "config", "Blog auto-publish", [{ field: "blogAutoPublish", from: `${before.blogAutoPublish} (${before.blogPerDay}/day)`, to: `${cfg.blogAutoPublish} (${cfg.blogPerDay}/day)` }]);
     await store.logActivity("ai", cfg.blogAutoPublish ? `SEO Agent now publishes blog articles by itself, ${cfg.blogPerDay} a day — by ${actorOf(req)}` : `Blog articles back to approval first — by ${actorOf(req)}`).catch(() => {});
   }
-  for (const k of ["socialStories", "socialCarousels", "socialReels", "socialAiVideo"]) {
-    if (before[k] !== cfg[k]) audit(req, "ai.config", "ai", "config", { socialStories: "Social Stories", socialCarousels: "Social carousels", socialReels: "Reels", socialAiVideo: "AI video Reels" }[k], [{ field: k, from: before[k], to: cfg[k] }]);
+  for (const k of ["socialStories", "socialCarousels", "socialReels", "socialReelsPerDay", "socialAiVideo"]) {
+    if (before[k] !== cfg[k]) audit(req, "ai.config", "ai", "config", { socialStories: "Social Stories", socialCarousels: "Social carousels", socialReels: "Reels", socialReelsPerDay: "Reels a day", socialAiVideo: "AI video Reels" }[k], [{ field: k, from: before[k], to: cfg[k] }]);
   }
   if (before.socialAutoPost !== cfg.socialAutoPost || before.socialPostsPerDay !== cfg.socialPostsPerDay) {
     audit(req, "ai.config", "ai", "config", "Social auto-post", [

@@ -184,7 +184,20 @@ function SocialAutoPostPanel({ config, onSaved, canEdit }) {
         </label>
         <label className="flex items-center gap-2">
           <input type="checkbox" className="h-4 w-4 accent-brand" checked={config.socialReels !== false} disabled={!canEdit} onChange={(e) => save({ socialReels: e.target.checked }, e.target.checked ? "Reels on" : "Reels off")} />
-          A Reel every evening (Instagram, Facebook, Threads + YouTube Shorts)
+          Reels on Instagram, Facebook, Threads + YouTube Shorts
+        </label>
+        <label className="flex items-center gap-1.5">
+          <select
+            value={config.socialReelsPerDay || 1}
+            disabled={!canEdit || config.socialReels === false}
+            onChange={(e) => save({ socialReelsPerDay: Number(e.target.value) }, Number(e.target.value) === 1 ? "1 Reel a day, from 6 PM" : `${e.target.value} Reels a day, spread from 9 AM to 7 PM`)}
+            className="rounded-lg border border-gray-200 px-2 py-1 text-[12px]"
+          >
+            {[1, 2, 3, 4, 5, 6].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+          {(config.socialReelsPerDay || 1) === 1 ? "Reel a day (from 6 PM)" : "Reels a day (9 AM – 7 PM)"}
         </label>
         {config.paidVideo && <label className="flex items-center gap-2">
           <input type="checkbox" className="h-4 w-4 accent-brand" checked={config.socialAiVideo === true} disabled={!canEdit || config.socialReels === false} onChange={(e) => save({ socialAiVideo: e.target.checked }, e.target.checked ? "Reels made as AI video" : "Reels made from Tikdum's slides")} />

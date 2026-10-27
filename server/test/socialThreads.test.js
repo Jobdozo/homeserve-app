@@ -147,3 +147,40 @@ test("publish: Meta's passing errors are tried again, but never the final publis
     delete process.env.THREADS_RETRY_MS;
   }
 });
+
+test("Reels a day (1–6): the server allows that many, and YouTube takes at most 6 uploads a Pacific day", async () => {
+  const agents = require("../src/agents");
+  const jsonStore = require("../src/jsonStore");
+  const youtube = require("../src/socialYoutube");
+  agents.setConfig({ socialAutoPost: true, socialReels: true, socialReelsPerDay: 9 }, "Owner");
+  assert.equal(agents.getConfig().socialReelsPerDay, 6, "at most 6");
+  const admin = { agentId: "mk" };
+  const reelReq = { method: "POST", body: { format: "reel" } };
+  for (const r of jsonStore.readAll("socialPosts")) jsonStore.remove("socialPosts", r.id);
+  for (let i = 0; i < 6; i++) {
+    assert.equal(agents.policy(reelReq, admin, "/admin/social/posts"), null, `Reel ${i + 1}`);
+    jsonStore.insert("socialPosts", { by: "Marketing Agent [AI agent]", format: "reel", at: new Date().toISOString() });
+  }
+  assert.match(agents.policy(reelReq, admin, "/admin/social/posts").error, /Today's 6 Reels are done/);
+
+  // YouTube: the 7th upload of the day is stopped before it reaches YouTube.
+  process.env.YOUTUBE_CLIENT_ID = "id";
+  process.env.YOUTUBE_CLIENT_SECRET = "secret";
+  process.env.YOUTUBE_REFRESH_TOKEN = "refresh";
+  for (let i = 0; i < youtube.UPLOADS_PER_DAY; i++) jsonStore.insert("youtubeUploads", { id: `v${i}`, day: youtube.pacificDay(), at: new Date().toISOString() });
+  assert.equal(youtube.uploadsToday(), 6);
+  const realFetch = global.fetch;
+  let called = 0;
+  global.fetch = async () => (called++, { ok: false, status: 500, json: async () => ({}) });
+  try {
+    await assert.rejects(youtube.publish({ title: "T", caption: "C" }, __filename), /6 uploads for today are used/);
+    assert.equal(called, 0, "YouTube isn't asked at all");
+  } finally {
+    global.fetch = realFetch;
+    delete process.env.YOUTUBE_CLIENT_ID;
+    delete process.env.YOUTUBE_CLIENT_SECRET;
+    delete process.env.YOUTUBE_REFRESH_TOKEN;
+  }
+  assert.match(youtube.pacificDay(Date.parse("2026-10-27T06:30:00Z")), /^2026-10-26$/, "11:30 PM Pacific is still the 26th there");
+  agents.setConfig({ socialReelsPerDay: 1 }, "Owner");
+});

@@ -201,3 +201,12 @@ test("Reels: one a day from 18:00, a title and 3+ points, to every channel incl.
   global.fetch = realFetch;
   assert.equal(writes(off, "/admin/social/posts").filter(([, , b]) => b.format === "reel").length, 0);
 });
+
+test("Reels a day: one from 6 PM, or spread from 9 AM to 7 PM", () => {
+  const { reelSlots } = require("../src/socialPosts");
+  assert.deepEqual(reelSlots(1), [18]);
+  assert.deepEqual(reelSlots(undefined), [18]);
+  assert.deepEqual(reelSlots(3), [9, 14, 19]);
+  assert.deepEqual(reelSlots(6), [9, 11, 13, 15, 17, 19]);
+  assert.deepEqual(reelSlots(10), [9, 11, 13, 15, 17, 19], "at most 6");
+});

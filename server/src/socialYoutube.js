@@ -12,6 +12,21 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status";
 const fail = (status, message) => Object.assign(new Error(message), { status });
 
+// YouTube's API allows 10,000 "units" a day and an upload costs 1,600, so 6 uploads a day at
+// most (Reels from the Marketing Agent and Video Studio together). The 7th would be refused by
+// YouTube; it's stopped here instead, and the video still goes to the other platforms. The
+// allowance starts again at midnight Pacific time (about 12:30 PM in India).
+const UPLOADS_PER_DAY = Number(process.env.YOUTUBE_UPLOADS_PER_DAY) || 6;
+const pacificDay = (t = Date.now()) => new Date(t).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+function uploadsToday(now = Date.now()) {
+  const jsonStore = require("./jsonStore");
+  return jsonStore.readAll("youtubeUploads").filter((r) => r.day === pacificDay(now)).length;
+}
+function noteUpload(id, now = Date.now()) {
+  const jsonStore = require("./jsonStore");
+  jsonStore.insert("youtubeUploads", { id: String(id), day: pacificDay(now), at: new Date(now).toISOString() });
+}
+
 const cfg = () => ({
   id: String(process.env.YOUTUBE_CLIENT_ID || "").trim(),
   secret: String(process.env.YOUTUBE_CLIENT_SECRET || "").trim(),
@@ -52,6 +67,7 @@ function metadata(post) {
 
 // Uploads the video file. Returns { ok, id, link, privacy }.
 async function publish(post, videoFile) {
+  if (uploadsToday() >= UPLOADS_PER_DAY) throw fail(429, `YouTube's ${UPLOADS_PER_DAY} uploads for today are used — this one went to the other platforms; YouTube takes more from about 12:30 PM`);
   const c = cfg();
   const meta = metadata(post);
   const token = await accessToken();
@@ -70,6 +86,7 @@ async function publish(post, videoFile) {
   const put = await fetch(where, { method: "PUT", headers: { "Content-Type": "video/mp4", "Content-Length": String(size) }, body: fs.readFileSync(videoFile), signal: AbortSignal.timeout(180000) });
   const v = await put.json().catch(() => ({}));
   if (!put.ok || !v.id) throw fail(502, `YouTube: ${v.error?.message || `HTTP ${put.status}`}`);
+  noteUpload(v.id);
   return { ok: true, id: v.id, link: `https://youtube.com/shorts/${v.id}`, privacy: v.status?.privacyStatus || c.privacy };
 }
 
@@ -83,4 +100,4 @@ async function metrics(id) {
   return { views: Number(s.viewCount) || 0, likes: Number(s.likeCount) || 0, comments: Number(s.commentCount) || 0 };
 }
 
-module.exports = { configured, publish, metrics, metadata };
+module.exports = { configured, publish, metrics, metadata, uploadsToday, pacificDay, UPLOADS_PER_DAY };
