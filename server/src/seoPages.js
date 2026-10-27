@@ -18,7 +18,7 @@ const SITE = "https://tikdum.com";
 const SITE_NAME = "Tikdum";
 const DEFAULT_TITLE = `${SITE_NAME} — Book Trusted Home Services Near You`;
 const DEFAULT_DESCRIPTION =
-  "Book trusted home services near you on Tikdum — cleaning, pest control, AC repair, and more. Compare verified local providers and book instantly over WhatsApp.";
+  "Book trusted home services in Jammu on Tikdum — cleaning, pest control, AC repair, electricians and more. Compare verified local providers, see the price, and book on tikdum.com or the Tikdum app.";
 const DEFAULT_IMAGE = `${SITE}/pwa-512.png`;
 const AREA = { "@type": "AdministrativeArea", name: "Jammu and Kashmir, India" };
 const ORG_ID = `${SITE}/#organization`;
@@ -51,7 +51,7 @@ function serviceDescription(s, providerName) {
   const note = String(s.tagline || "").trim().replace(/[.\s]+$/, "");
   const useful = note && !name.toLowerCase().startsWith(note.toLowerCase()) && note.toLowerCase() !== name.toLowerCase();
   const price = Number(s.price) > 0 ? ` from ${inr(s.price)}` : "";
-  const text = `${name}${price}${providerName ? ` with ${providerName}` : ""} in Jammu & Kashmir.${useful ? ` ${note}.` : ""} Verified local professionals — book instantly on Tikdum over WhatsApp.`;
+  const text = `${name}${price}${providerName ? ` with ${providerName}` : ""} in Jammu & Kashmir.${useful ? ` ${note}.` : ""} Verified local professionals — book on tikdum.com or the Tikdum app.`;
   return text.length > 300 ? `${text.slice(0, 297).trimEnd()}…` : text;
 }
 
@@ -66,15 +66,31 @@ function breadcrumbs(items) {
   };
 }
 
+// Who Tikdum is, for search engines and AI assistants (Google, Bing, ChatGPT): the same name,
+// phone and place as on the privacy page and the business listings, and the official social
+// profiles, so they can tell it's one real business.
+const PHONE = "+91-94191-49336";
+const SOCIAL = [
+  "https://www.facebook.com/296258930232735",
+  "https://www.instagram.com/tikdum_com/",
+  "https://www.threads.com/@tikdum_com",
+  "https://www.youtube.com/channel/UCn0rlzKfOomyi-g0oUOZDzg",
+];
 const organization = () => ({
   "@context": "https://schema.org",
   "@type": "Organization",
   "@id": ORG_ID,
   name: SITE_NAME,
+  legalName: "OAIA Electronics Private Limited",
   url: SITE,
   logo: `${SITE}/pwa-512.png`,
   description: DEFAULT_DESCRIPTION,
-  areaServed: AREA,
+  telephone: PHONE,
+  email: "support@tikdum.com",
+  address: { "@type": "PostalAddress", addressLocality: "Jammu", addressRegion: "Jammu and Kashmir", addressCountry: "IN" },
+  areaServed: [{ "@type": "City", name: "Jammu", containedInPlace: AREA }, AREA],
+  contactPoint: { "@type": "ContactPoint", telephone: PHONE, email: "support@tikdum.com", contactType: "customer support", areaServed: "IN", availableLanguage: ["English", "Hindi"] },
+  sameAs: SOCIAL,
 });
 
 // Prices of a set of services as one AggregateOffer (lowest, highest, how many).
@@ -184,7 +200,7 @@ function pageFor(rawPath, data = {}) {
     const offers = priceRange(inCat);
     const rating = ratingOf(inCat);
     const description = inCat.length
-      ? `Book ${asServices(category.name)} near you on Tikdum — compare ${plural(providerCount, "trusted local provider")}${offers ? `, from ${inr(offers.lowPrice)}` : ""}, and book instantly over WhatsApp.`
+      ? `Book ${asServices(category.name)} near you on Tikdum — compare ${plural(providerCount, "trusted local provider")}${offers ? `, from ${inr(cityPages.fromPrice(inCat))}` : ""}, and book on tikdum.com or the Tikdum app.`
       : `${category.name} on Tikdum is coming soon in your area. Book other trusted home services near you.`;
     return page({
       title: titleOf(category.name),
@@ -260,7 +276,7 @@ function pageFor(rawPath, data = {}) {
     const same = services.filter((x) => x.categoryId === anchor.categoryId && String(x.name).trim().toLowerCase() === String(anchor.name).trim().toLowerCase());
     return page({
       title: titleOf(`${anchor.name} Providers`),
-      description: `Compare ${plural(same.length, "trusted provider")} for ${anchor.name}${category ? ` in ${category.name}` : ""} on Tikdum. Book instantly over WhatsApp.`,
+      description: `Compare ${plural(same.length, "trusted provider")} for ${anchor.name}${category ? ` in ${category.name}` : ""} on Tikdum. Book on tikdum.com or the Tikdum app.`,
       canonical: `/find-service/${anchor.id}`,
       image: abs(anchor.imageUrl || categoryImage(category)),
       jsonLd: [breadcrumbs([["Home", "/home"], ...(category ? [[category.name, `/category/${category.id}`]] : []), [`${anchor.name} providers`, `/find-service/${anchor.id}`]])],
@@ -362,14 +378,28 @@ function pageFor(rawPath, data = {}) {
 
   if (PRIVATE.some((re) => re.test(path))) return page({ title: DEFAULT_TITLE, canonical: null, noindex: true });
 
-  // City pages: /jammu and /jammu/ac-repair (cityPages.js), only where providers really serve.
-  m = /^\/([^/]+)(?:\/([^/]+))?$/.exec(path);
+  // City pages: /jammu, /jammu/ac-repair and /jammu/home-cleaning/sofa-cleaning (cityPages.js),
+  // only where providers really serve.
+  m = /^\/([^/]+)(?:\/([^/]+))?(?:\/([^/]+))?$/.exec(path);
   if (m && data.tree) {
-    const c = m[2] ? cityPages.cityCategoryPage(m[1], m[2], data) : cityPages.cityPage(m[1], data);
-    if (c) return page(m[2] ? cityCategoryHead(c, categories) : cityHead(c));
+    if (m[3]) {
+      const c = cityPages.cityServicePage(m[1], m[2], m[3], data);
+      if (c) return page(cityServiceHead(c, categories));
+    } else {
+      const c = m[2] ? cityPages.cityCategoryPage(m[1], m[2], data) : cityPages.cityPage(m[1], data);
+      if (c) return page(m[2] ? cityCategoryHead(c, categories) : cityHead(c));
+    }
   }
   return notFound(path);
 }
+
+// The page's words in its HTML too (as the blog does), for search engines and AI assistants that
+// don't run the app; the app replaces them when it starts.
+const faqsHtml = (faqs) => (faqs?.length ? `<h2>Common questions</h2>${faqs.map((f) => `<h3>${esc(f.q)}</h3><p>${esc(f.a)}</p>`).join("")}` : "");
+const areasHtml = (c) => (c.areas?.length ? `<h2>Areas we cover in ${esc(c.city.name)}</h2><p>${c.areas.map((a) => `${esc(a.name)} (${esc(a.pincodes.join(", "))})`).join(" · ")}</p>` : "");
+const ratingHtml = (r) => (r ? ` Rated ${r.rating}★ from ${plural(r.reviews, "review")}.` : "");
+const reviewsHtml = (list) =>
+  list?.length ? `<h2>What customers say</h2><ul>${list.map((r) => `<li>“${esc(r.text)}” — ${esc(r.name)}${r.service ? `, ${esc(r.service)}` : ""}</li>`).join("")}</ul>` : "";
 
 const cityPlace = (c) => ({ "@type": "City", name: c.city.name, containedInPlace: AREA });
 const faqLd = (faqs) => ({
@@ -399,6 +429,9 @@ function cityHead(c) {
       },
       faqLd(c.faqs),
     ],
+    bodyHtml: `<main><h1>Home services in ${esc(c.city.name)}</h1><p>${plural(c.providers, "verified provider")} on Tikdum serve ${plural(c.areas.length, "area")} of ${esc(c.city.name)}.${ratingHtml(c.rating)}</p><h2>What you can book</h2><ul>${c.categories
+      .map((x) => `<li><a href="${path}/${esc(x.id)}">${esc(x.name)} in ${esc(c.city.name)}</a> — ${plural(x.providers, "provider")}${x.from ? `, from ${inr(x.from)}` : ""}</li>`)
+      .join("")}</ul>${reviewsHtml(c.reviews)}${areasHtml(c)}${faqsHtml(c.faqs)}</main>`,
   };
 }
 
@@ -430,6 +463,47 @@ function cityCategoryHead(c, categories) {
       },
       faqLd(c.faqs),
     ],
+    bodyHtml: `<main><h1>${esc(name)}</h1><p>${plural(c.providers.length, "verified provider")}, ${plural(c.serviceCount, "service")}${c.from ? `, from ${inr(c.from)}` : ""}.${ratingHtml(c.rating)} See the price before you book.</p><h2>Services &amp; prices</h2><ul>${c.services
+      .map((s) => `<li><a href="${path}/${esc(s.slug)}">${esc(s.name)}</a> — from ${inr(s.price)}, ${plural(s.providers, "provider")}${s.include ? `. ${esc(s.include)}` : ""}</li>`)
+      .join("")}</ul><h2>${esc(c.category.name)} providers in ${esc(c.city.name)}</h2><ul>${c.providers
+      .map((p) => `<li><a href="/provider/${esc(p.id)}">${esc(p.name)}</a> — ${plural(p.services, "service")}${p.from ? `, from ${inr(p.from)}` : ""}${p.rating ? `, ${p.rating}★ (${p.reviews})` : ""}</li>`)
+      .join("")}</ul>${reviewsHtml(c.reviews)}${c.category.about ? `<h2>About ${esc(c.category.name)}</h2><p>${esc(c.category.about)}</p>` : ""}${areasHtml(c)}${faqsHtml(c.faqs)}</main>`,
+  };
+}
+
+// tikdum.com/<city>/<category>/<service>: "Sofa Cleaning in Jammu".
+function cityServiceHead(c, categories) {
+  const path = `/${c.city.slug}/${c.category.id}/${c.service.slug}`;
+  const name = `${c.service.name} in ${c.city.name}`;
+  const n = new Set(c.offers.map((o) => o.provider?.id).filter(Boolean)).size;
+  return {
+    title: titleOf(`${name}${c.from ? ` — from ${inr(c.from)}` : ""}`),
+    description: `${c.service.name} in ${c.city.name} on Tikdum: ${plural(n, "verified local provider")}${c.from ? `, from ${inr(c.from)}` : ""}${c.rating ? `, rated ${c.rating.rating}★` : ""}. See the price before you book and choose a time that suits you — serving ${c.areas.slice(0, 3).map((a) => a.name).join(", ")}${c.areas.length > 3 ? " and more" : ""}.`,
+    canonical: path,
+    image: abs(c.offers.find((o) => o.imageUrl)?.imageUrl || categoryImage(categories.find((x) => x.id === c.category.id))),
+    jsonLd: [
+      breadcrumbs([["Home", "/home"], [c.city.name, `/${c.city.slug}`], [c.category.name, `/${c.city.slug}/${c.category.id}`], [c.service.name, path]]),
+      {
+        "@context": "https://schema.org",
+        "@type": "Service",
+        name,
+        serviceType: c.service.name,
+        category: c.category.name,
+        url: `${SITE}${path}`,
+        provider: { "@id": ORG_ID },
+        areaServed: cityPlace(c),
+        ...(c.from ? { offers: { "@type": "AggregateOffer", priceCurrency: "INR", lowPrice: c.from, highPrice: c.to, offerCount: c.offers.length } } : {}),
+        ...(c.rating ? { aggregateRating: { "@type": "AggregateRating", ratingValue: c.rating.rating, reviewCount: c.rating.reviews, bestRating: 5, worstRating: 1 } } : {}),
+      },
+      faqLd(c.faqs),
+    ],
+    bodyHtml: `<main><h1>${esc(name)}</h1><p>${plural(n, "verified provider")} on Tikdum${c.from ? `, from ${inr(c.from)}` : ""}.${ratingHtml(c.rating)} See the price before you book; the work starts only with your one-time code.</p>${
+      c.includes.length ? `<h2>What's included</h2><ul>${c.includes.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""
+    }<h2>Who offers ${esc(c.service.name.toLowerCase())} in ${esc(c.city.name)}</h2><ul>${c.offers
+      .map((o) => `<li><a href="/service/${esc(o.id)}">${esc(o.name)}</a>${o.provider ? ` with ${esc(o.provider.name)}` : ""} — ${inr(o.price)}${o.rating ? `, ${o.rating}★ (${o.reviews})` : ""}</li>`)
+      .join("")}</ul>${reviewsHtml(c.reviews)}${areasHtml(c)}${faqsHtml(c.faqs)}${
+      c.others.length ? `<h2>More ${esc(c.category.name)} in ${esc(c.city.name)}</h2><ul>${c.others.map((o) => `<li><a href="/${esc(c.city.slug)}/${esc(c.category.id)}/${esc(o.slug)}">${esc(o.name)} in ${esc(c.city.name)}</a></li>`).join("")}</ul>` : ""
+    }</main>`,
   };
 }
 
@@ -530,6 +604,9 @@ function route(store) {
     // Only the website's nginx sends this header; anyone else asking gets nothing.
     if (!req.get("x-original-uri")) return res.status(404).end();
     const original = String(req.get("x-original-uri"));
+    // tikdum.com/<key>.txt: IndexNow's check that the site is Tikdum's (indexNow.js).
+    const indexNowKey = /^\/[a-f0-9]{32}\.txt$/.test(original.split("?")[0]) ? require("./indexNow").keyFile(original.split("?")[0]) : null;
+    if (indexNowKey) return res.type("text/plain").set("Cache-Control", "public, max-age=86400").send(indexNowKey);
     // tikdum.com/ads.txt: who may sell ads on the site (AdSense checks it).
     if (original.split("?")[0] === "/ads.txt") {
       const txt = require("./blogAds").adsTxt();

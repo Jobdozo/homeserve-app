@@ -68,7 +68,8 @@ export const api = {
   // The blog (tikdum.com/blog).
   blogList: () => request("/blog"),
   blogArticle: (slug) => request(`/blog/${encodeURIComponent(slug)}`),
-  cityPage: (city, category) => request(`/city-pages/${encodeURIComponent(city)}${category ? `/${encodeURIComponent(category)}` : ""}`),
+  cityPage: (city, category, service) =>
+    request(`/city-pages/${encodeURIComponent(city)}${category ? `/${encodeURIComponent(category)}` : ""}${category && service ? `/${encodeURIComponent(service)}` : ""}`),
   listBookings: () => request("/bookings"),
   createBooking: (data) => request("/bookings", { method: "POST", body: JSON.stringify(data) }),
   createOrder: (data) => request("/orders", { method: "POST", body: JSON.stringify(data) }),

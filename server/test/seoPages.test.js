@@ -71,13 +71,13 @@ test("category: real numbers, price range and rating from real reviews; empty or
 test("service, providers list and provider pages; 404 for anything not bookable", () => {
   const s = seo.pageFor("/service/s1", data);
   assert.equal(s.status, 200);
-  assert.equal(s.description, "AC Gas Refill from ₹1,499 with Ravi Cooling in Jammu & Kashmir. Full gas top-up. Verified local professionals — book instantly on Tikdum over WhatsApp.");
+  assert.equal(s.description, "AC Gas Refill from ₹1,499 with Ravi Cooling in Jammu & Kashmir. Full gas top-up. Verified local professionals — book on tikdum.com or the Tikdum app.");
   assert.equal(s.image, "https://api.tikdum.com/uploads/s1.webp");
   const plain = seo.pageFor("/service/s3", data);
   assert.ok(!/\. \./.test(plain.description) && !plain.description.includes("AC Service. AC Service"), "no note → no repeat");
   assert.equal(plain.image, "https://api.tikdum.com/uploads/ac.webp", "no photo of its own → the category's");
   const sameAsName = seo.pageFor("/service/s3", { ...data, services: data.services.map((x) => (x.id === "s3" ? { ...x, tagline: "AC Service" } : x)) });
-  assert.equal(sameAsName.description, "AC Service from ₹499 with Ravi Cooling in Jammu & Kashmir. Verified local professionals — book instantly on Tikdum over WhatsApp.");
+  assert.equal(sameAsName.description, "AC Service from ₹499 with Ravi Cooling in Jammu & Kashmir. Verified local professionals — book on tikdum.com or the Tikdum app.");
   const service = ld(s, "Service");
   assert.equal(service.offers.price, 1499);
   assert.equal(service.provider.name, "Ravi Cooling");

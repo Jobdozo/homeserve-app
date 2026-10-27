@@ -1,5 +1,6 @@
-// City pages for search: tikdum.com/jammu (every service in the city) and
-// tikdum.com/jammu/ac-repair (one service category in the city). Built only from real data:
+// City pages for search: tikdum.com/jammu (every service in the city),
+// tikdum.com/jammu/ac-repair (one service category in the city) and
+// tikdum.com/jammu/home-cleaning/sofa-cleaning (one kind of service in the city). Built only from real data:
 // the cities, areas and PIN codes switched on in Super Admin → Locations, the providers whose
 // service area (PIN codes, or "all areas") reaches the city, and their live services, prices
 // and reviews. A page exists only when at least one approved provider serves it, so there are
@@ -82,12 +83,27 @@ function ratingOf(list) {
   return { rating: Math.round((rated.reduce((n, s) => n + Number(s.rating) * Number(s.reviewCount), 0) / count) * 10) / 10, reviews: count };
 }
 const prices = (list) => list.map((s) => Number(s.price)).filter((p) => Number.isFinite(p) && p > 0);
+// The "from" price people see: a job's price, not a per-unit rate. Services priced under ₹50 are
+// per square foot or per litre (floor scrubbing ₹4, carpet ₹15, tank ₹1), and "from ₹4" for a
+// whole category reads as a mistake. Falls back to every price when there's nothing else.
+const MIN_JOB_PRICE = 50;
+function jobPrices(list) {
+  const all = prices(list);
+  const jobs = all.filter((p) => p >= MIN_JOB_PRICE);
+  return jobs.length ? jobs : all;
+}
+const fromPrice = (list) => (jobPrices(list).length ? Math.min(...jobPrices(list)) : null);
+
+// One kind of service, whatever the provider added in brackets: "Sofa Cleaning (1 Seat)" and
+// "Sofa Cleaning" are both tikdum.com/<city>/home-cleaning/sofa-cleaning.
+const serviceKey = (name) => slugify(String(name || "").replace(/\([^)]*\)/g, " "));
+const serviceTitle = (name) => String(name || "").replace(/\s*\([^)]*\)/g, "").replace(/\s+/g, " ").trim();
 
 // One card per kind of service (same name), cheapest first in each, most offered first overall.
 function serviceGroups(list) {
   const groups = new Map();
   for (const s of list) {
-    const key = String(s.name).trim().toLowerCase();
+    const key = serviceKey(s.name);
     const g = groups.get(key) || { items: [] };
     g.items.push(s);
     groups.set(key, g);
@@ -97,7 +113,7 @@ function serviceGroups(list) {
       const cheapest = [...items].sort((a, b) => Number(a.price) - Number(b.price))[0];
       const r = ratingOf(items);
       return {
-        id: cheapest.id, name: cheapest.name, categoryId: cheapest.categoryId, price: Number(cheapest.price), originalPrice: cheapest.originalPrice || null,
+        id: cheapest.id, slug: serviceKey(cheapest.name), name: cheapest.name, categoryId: cheapest.categoryId, price: Number(cheapest.price), originalPrice: cheapest.originalPrice || null,
         imageUrl: items.find((x) => x.imageUrl)?.imageUrl || null, include: cheapest.includes?.[0] || null,
         providers: new Set(items.map((x) => x.providerId)).size, rating: r?.rating || null, reviews: r?.reviews || 0,
       };
@@ -114,13 +130,13 @@ const providerCard = (p, list) => {
   const theirs = list.filter((s) => s.providerId === p.id);
   return {
     id: p.id, name: p.businessName || p.name, photoUrl: p.photoUrl || null, rating: Number(p.reviews) > 0 ? Number(p.rating) : null, reviews: Number(p.reviews) || 0,
-    services: theirs.length, from: prices(theirs).length ? Math.min(...prices(theirs)) : null,
+    services: theirs.length, from: fromPrice(theirs),
   };
 };
 
 // Questions people ask before booking, answered with this page's own numbers.
 function faqsFor({ city, category, providers, services, areas, rating }) {
-  const p = prices(services);
+  const p = jobPrices(services);
   const what = category ? category.name : "home services";
   const out = [];
   // Prices only for one kind of service; across all of them the range says nothing.
@@ -158,12 +174,12 @@ function cityPage(slug, data) {
     city: { name: city.name, slug: city.slug },
     providers: providerList.length,
     services: services.length,
-    from: prices(services).length ? Math.min(...prices(services)) : null,
+    from: fromPrice(services),
     rating,
     reviews: reviewsFor(data, (r) => entry.providerIds.includes(r.providerId), providerList),
     categories: byCategory.map(({ category, services: list, providerIds }) => ({
       id: category.id, name: category.name, slug: category.id, imageUrl: category.imageUrl || null, providers: providerIds.length,
-      services: list.length, from: prices(list).length ? Math.min(...prices(list)) : null, rating: ratingOf(list),
+      services: list.length, from: fromPrice(list), rating: ratingOf(list),
     })),
     areas,
     faqs: faqsFor({ city, providers: providerList, services, areas, rating }),
@@ -188,12 +204,78 @@ function cityCategoryPage(slug, categoryId, data) {
     reviews: reviewsFor(data, (r) => r.categoryId === categoryId && hit.providerIds.includes(r.providerId), providerList),
     services: serviceGroups(hit.services),
     serviceCount: hit.services.length,
-    from: p.length ? Math.min(...p) : null,
+    from: fromPrice(hit.services),
     to: p.length ? Math.max(...p) : null,
     rating,
     areas,
     others: entry.byCategory.filter((x) => x.category.id !== categoryId).map((x) => ({ id: x.category.id, name: x.category.name, providers: x.providerIds.length })),
     faqs: faqsFor({ city, category: hit.category, providers: providerList, services: hit.services, areas, rating }),
+  };
+}
+
+// Questions for one kind of service, answered with its own live numbers.
+function serviceFaqsFor({ city, name, items, providers, areas, rating, includes }) {
+  const p = jobPrices(items);
+  const out = [];
+  if (p.length) {
+    out.push({
+      q: `How much does ${name.toLowerCase()} cost in ${city.name}?`,
+      a: `On Tikdum, ${name.toLowerCase()} in ${city.name} starts at ${inr(Math.min(...p))}${Math.max(...p) > Math.min(...p) ? ` and goes up to ${inr(Math.max(...p))}, depending on the provider and the job` : ""}. You see the price before you book.`,
+    });
+  }
+  if (includes.length) out.push({ q: `What's included in ${name.toLowerCase()}?`, a: `${listText(includes, 6)}. Each provider lists exactly what their service includes before you book.` });
+  out.push({
+    q: `Who does ${name.toLowerCase()} in ${city.name}?`,
+    a: `${listText(providers.map((x) => x.businessName || x.name), 5)} — ${providers.length === 1 ? "a provider" : "providers"} approved by the Tikdum team${rating ? `, rated ${rating.rating}★ from ${plural(rating.reviews, "review")}` : ""}.`,
+  });
+  out.push({
+    q: `Which areas of ${city.name} do you cover?`,
+    a: `${listText(areas.map((a) => `${a.name} (${a.pincodes.join(", ")})`), 6)}. Enter your PIN code in the app to see who serves your address.`,
+  });
+  out.push({
+    q: `How do I book ${name.toLowerCase()}?`,
+    a: `Pick a provider below, choose a date and time, and confirm on tikdum.com or the Tikdum app. The work starts only with your one-time code, and every booking has Tikdum Booking Protection.`,
+  });
+  return out;
+}
+
+// tikdum.com/<city>/<category>/<service>: one kind of service in the city, every provider who offers it.
+function cityServicePage(slug, categoryId, service, data) {
+  const entry = cityIndex(data).find((x) => x.city.slug === slug);
+  const hit = entry?.byCategory.find((x) => x.category.id === categoryId);
+  if (!hit) return null;
+  const items = hit.services.filter((s) => serviceKey(s.name) === service);
+  if (!items.length) return null;
+  const { city } = entry;
+  const byId = new Map((data.providers || []).map((p) => [p.id, p]));
+  const providerList = [...new Set(items.map((s) => s.providerId))].map((id) => byId.get(id)).filter(Boolean);
+  const areas = areaList(city, providerList);
+  const rating = ratingOf(items);
+  const name = serviceTitle(items[0].name) || items[0].name;
+  const includes = [...new Set(items.flatMap((s) => s.includes || []).map((x) => String(x).trim()).filter(Boolean))].slice(0, 8);
+  return {
+    kind: "city-service",
+    city: { name: city.name, slug: city.slug },
+    category: { id: hit.category.id, name: hit.category.name, imageUrl: hit.category.imageUrl || null },
+    service: { slug: service, name },
+    offers: [...items]
+      .sort((a, b) => Number(a.price) - Number(b.price))
+      .map((s) => {
+        const p = byId.get(s.providerId);
+        return {
+          id: s.id, name: s.name, price: Number(s.price), originalPrice: s.originalPrice || null, imageUrl: s.imageUrl || null, categoryId: s.categoryId,
+          include: s.includes?.[0] || null, rating: Number(s.reviewCount) > 0 ? Number(s.rating) : null, reviews: Number(s.reviewCount) || 0,
+          provider: p ? { id: p.id, name: p.businessName || p.name, photoUrl: p.photoUrl || null } : null,
+        };
+      }),
+    from: fromPrice(items),
+    to: prices(items).length ? Math.max(...prices(items)) : null,
+    rating,
+    includes,
+    areas,
+    reviews: reviewsFor(data, (r) => items.some((s) => s.providerId === r.providerId) && r.categoryId === categoryId, providerList),
+    others: serviceGroups(hit.services).filter((g) => g.slug !== service).slice(0, 12).map((g) => ({ slug: g.slug, name: serviceTitle(g.name) || g.name })),
+    faqs: serviceFaqsFor({ city, name, items, providers: providerList, areas, rating, includes }),
   };
 }
 
@@ -208,7 +290,10 @@ function reviewsFor(data, keep, providerList) {
 
 // Every city page that exists, for the sitemap.
 function allPaths(data) {
-  return cityIndex(data).flatMap(({ city, byCategory }) => [`/${city.slug}`, ...byCategory.map((x) => `/${city.slug}/${x.category.id}`)]);
+  return cityIndex(data).flatMap(({ city, byCategory }) => [
+    `/${city.slug}`,
+    ...byCategory.flatMap((x) => [`/${city.slug}/${x.category.id}`, ...serviceGroups(x.services).map((g) => `/${city.slug}/${x.category.id}/${g.slug}`)]),
+  ]);
 }
 
-module.exports = { slugify, citiesFrom, servesPin, cityIndex, cityPage, cityCategoryPage, allPaths, faqsFor, RESERVED };
+module.exports = { slugify, citiesFrom, servesPin, cityIndex, cityPage, cityCategoryPage, cityServicePage, allPaths, faqsFor, serviceKey, fromPrice, RESERVED };

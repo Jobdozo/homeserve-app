@@ -139,6 +139,7 @@ function AppRoutes() {
           <Route path="/blog/:slug" element={<BlogArticleScreen />} />
           <Route path="/:city" element={<CityPageScreen />} />
           <Route path="/:city/:categoryId" element={<CityPageScreen />} />
+          <Route path="/:city/:categoryId/:service" element={<CityPageScreen />} />
           <Route
             path="/cart"
             element={

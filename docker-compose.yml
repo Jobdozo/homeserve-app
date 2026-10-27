@@ -48,6 +48,8 @@ services:
       YOUTUBE_REFRESH_TOKEN: ${YOUTUBE_REFRESH_TOKEN:-}
       YOUTUBE_PRIVACY: ${YOUTUBE_PRIVACY:-public}
       SOCIAL_IMAGE_BASE: ${SOCIAL_IMAGE_BASE:-https://api.tikdum.com}
+      # Tell Bing and the other IndexNow engines about tikdum.com pages (server/src/indexNow.js). "off" stops it.
+      INDEXNOW: ${INDEXNOW:-on}
       # Meta Pixel + Conversions API: bookings for Meta ads (server/src/metaEvents.js; set with deploy/set-meta-pixel.sh).
       META_PIXEL_ID: ${META_PIXEL_ID:-}
       META_CAPI_TOKEN: ${META_CAPI_TOKEN:-}

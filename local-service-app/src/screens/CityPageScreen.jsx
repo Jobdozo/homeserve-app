@@ -8,12 +8,12 @@ import CategoryPhoto from "../components/CategoryPhoto";
 import AboutSection from "../components/AboutSection";
 import Seo from "../components/Seo";
 
-// tikdum.com/jammu (every service in the city) and tikdum.com/jammu/ac-repair (one category in
-// the city): who really serves the city, what they offer and for how much, the areas covered,
+// tikdum.com/jammu (every service in the city), tikdum.com/jammu/ac-repair (one category in the
+// city) and tikdum.com/jammu/home-cleaning/sofa-cleaning (one kind of service): who really serves the city, what they offer and for how much, the areas covered,
 // and the common questions — all from live data (server/src/cityPages.js). An address that
 // isn't a city page goes home, as any unknown address does.
 export default function CityPageScreen() {
-  const { city, categoryId } = useParams();
+  const { city, categoryId, service } = useParams();
   const [page, setPage] = useState(null);
   const [missing, setMissing] = useState(false);
 
@@ -22,18 +22,18 @@ export default function CityPageScreen() {
     setPage(null);
     setMissing(false);
     api
-      .cityPage(city, categoryId)
+      .cityPage(city, categoryId, service)
       .then((p) => alive && setPage(p))
       .catch(() => alive && setMissing(true));
     return () => {
       alive = false;
     };
-  }, [city, categoryId]);
+  }, [city, categoryId, service]);
 
   if (missing) return <Navigate to="/home" replace />;
   return (
     <div className="flex min-h-full flex-shrink-0 flex-col bg-mist lg:mx-auto lg:w-full lg:max-w-6xl lg:px-4 lg:pb-10">
-      {!page ? <Loading /> : page.kind === "city" ? <CityHub page={page} /> : <CityCategory page={page} />}
+      {!page ? <Loading /> : page.kind === "city" ? <CityHub page={page} /> : page.kind === "city-service" ? <CityService page={page} /> : <CityCategory page={page} />}
     </div>
   );
 }
@@ -87,7 +87,7 @@ function CityCategory({ page }) {
           {page.services.slice(0, SHOWN).map((s) => {
             const pct = discountPct(s.price, s.originalPrice);
             return (
-              <button key={s.id} onClick={() => navigate(`/find-service/${s.id}`)} className="flex gap-3 rounded-[22px] bg-white p-3 text-left shadow-card active:scale-[0.99]">
+              <button key={s.id} onClick={() => navigate(s.slug ? `/${city.slug}/${category.id}/${s.slug}` : `/find-service/${s.id}`)} className="flex gap-3 rounded-[22px] bg-white p-3 text-left shadow-card active:scale-[0.99]">
                 <span className="relative h-[96px] w-[88px] flex-shrink-0 overflow-hidden rounded-2xl">
                   <CategoryPhoto categoryId={s.categoryId} imageUrl={s.imageUrl} size={100} />
                   {pct > 0 && <OfferTag className="absolute left-1.5 top-1.5 !px-1.5 !text-[10.5px]">{pct}% OFF</OfferTag>}
@@ -154,6 +154,91 @@ function CityCategory({ page }) {
           ))}
           <Link to={`/category/${category.id}`} className="rounded-xl bg-ink px-3 py-2 text-[13px] font-semibold text-white active:scale-[0.98]">
             All {category.name} →
+          </Link>
+        </div>
+      </section>
+    </>
+  );
+}
+
+// One kind of service in the city ("Sofa Cleaning in Jammu"): every provider who offers it, cheapest first.
+function CityService({ page }) {
+  const navigate = useNavigate();
+  const { city, category, service } = page;
+  const n = new Set(page.offers.map((o) => o.provider?.id).filter(Boolean)).size;
+  return (
+    <>
+      <Seo
+        title={`${service.name} in ${city.name}${page.from ? ` — from ${inr(page.from)}` : ""}`}
+        description={`${service.name} in ${city.name} on Tikdum: ${n} verified local provider${n === 1 ? "" : "s"}${page.from ? `, from ${inr(page.from)}` : ""}${page.rating ? `, rated ${page.rating.rating}★` : ""}. See the price before you book and choose a time that suits you.`}
+        path={`/${city.slug}/${category.id}/${service.slug}`}
+      />
+      <Header
+        title={`${service.name} in ${city.name}`}
+        searchLabel={`Search in ${category.name}`}
+        subtitle={`${n} verified provider${n === 1 ? "" : "s"}${page.from != null ? ` · from ${inr(page.from)}` : ""}${ratingText(page.rating)}`}
+      />
+
+      <section className="px-4 pt-5">
+        <SectionTitle>Choose a provider</SectionTitle>
+        <div className="mt-3 flex flex-col gap-3 lg:grid lg:grid-cols-2">
+          {page.offers.map((o) => {
+            const pct = discountPct(o.price, o.originalPrice);
+            return (
+              <button key={o.id} onClick={() => navigate(`/service/${o.id}`)} className="flex gap-3 rounded-[22px] bg-white p-3 text-left shadow-card active:scale-[0.99]">
+                <span className="relative h-[96px] w-[88px] flex-shrink-0 overflow-hidden rounded-2xl">
+                  <CategoryPhoto categoryId={o.categoryId} imageUrl={o.imageUrl} size={100} />
+                  {pct > 0 && <OfferTag className="absolute left-1.5 top-1.5 !px-1.5 !text-[10.5px]">{pct}% OFF</OfferTag>}
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="flex items-start justify-between gap-2">
+                    <span className="line-clamp-2 text-[15px] font-bold leading-snug text-ink">{o.provider?.name || o.name}</span>
+                    <RatingPill rating={o.rating} count={o.reviews} size="sm" />
+                  </span>
+                  <span className="flex items-center gap-1 text-[12.5px] text-ink-muted">
+                    <ShieldCheckIcon width={13} height={13} className="text-trust" />
+                    Verified · {o.name}
+                  </span>
+                  {o.include && <span className="line-clamp-1 text-[12.5px] text-ink-muted">{o.include}</span>}
+                  <span className="mt-auto flex items-baseline gap-1.5">
+                    <span className="font-display text-[18px] font-extrabold text-ink">{inr(o.price)}</span>
+                    {pct > 0 && <s className="text-[12px] text-ink-muted">{inr(o.originalPrice)}</s>}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {page.includes?.length > 0 && (
+        <section className="px-4 pt-7">
+          <SectionTitle>What's included</SectionTitle>
+          <ul className="mt-3 grid gap-2 rounded-[20px] bg-white p-4 shadow-card sm:grid-cols-2">
+            {page.includes.map((x) => (
+              <li key={x} className="flex items-start gap-2 text-[13.5px] text-ink">
+                <ShieldCheckIcon width={15} height={15} className="mt-0.5 flex-shrink-0 text-trust" />
+                {x}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <Reviews reviews={page.reviews} title={`What customers say about ${service.name}`} />
+      <Areas page={page} />
+      <Faqs faqs={page.faqs} />
+
+      <section className="px-4 pb-8 pt-7">
+        <SectionTitle>More {category.name} in {city.name}</SectionTitle>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {page.others.map((o) => (
+            <Link key={o.slug} to={`/${city.slug}/${category.id}/${o.slug}`} className="rounded-xl border border-line bg-white px-3 py-2 text-[13px] font-semibold text-ink active:scale-[0.98]">
+              {o.name} in {city.name}
+            </Link>
+          ))}
+          <Link to={`/${city.slug}/${category.id}`} className="rounded-xl bg-ink px-3 py-2 text-[13px] font-semibold text-white active:scale-[0.98]">
+            All {category.name} in {city.name} →
           </Link>
         </div>
       </section>

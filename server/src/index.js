@@ -1116,13 +1116,12 @@ app.post("/api/provider/complaints/:id/reply", auth.requireAuth("provider"), ah(
 // proxies /sitemap.xml here (see local-service-app/nginx.conf). Lists only
 // what an anonymous visitor can actually browse to, matching the public
 // /api/categories and /api/services({activeOnly:true}) filtering exactly.
-app.get("/sitemap.xml", ah(async (req, res) => {
+// Every page of tikdum.com that exists for search engines (seoPages.searchCatalog): lasting
+// rules, not "bookable this minute", so the list doesn't change with working hours. The sitemap
+// and IndexNow (indexNow.js) both use it.
+function sitemapUrls(data) {
   const SITE_URL = "https://tikdum.com";
-  // The pages that exist for search engines (seoPages.searchCatalog): lasting rules, not
-  // "bookable this minute", so the list doesn't change with working hours.
-  const data = await seoPages.loadSearchData(store);
   const { categories, services, providers } = data;
-  const escapeXml = (s) => String(s).replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]));
   const absolute = seoPages.absUrl; // uploaded photos live on the API host
   // Same rules as the pages themselves (seoPages.js): a category with nothing bookable and a
   // provider without an approved, bookable service aren't listed (those pages are noindex / 404).
@@ -1147,6 +1146,12 @@ app.get("/sitemap.xml", ah(async (req, res) => {
       .filter((p) => (p.verificationStatus || "pending") === "approved" && bookableProviders.has(p.id))
       .map((p) => ({ loc: `${SITE_URL}/provider/${encodeURIComponent(p.id)}`, priority: "0.5", image: p.photoUrl ? { loc: absolute(p.photoUrl), title: p.businessName || p.name } : null })),
   ];
+  return urls;
+}
+
+app.get("/sitemap.xml", ah(async (req, res) => {
+  const urls = sitemapUrls(await seoPages.loadSearchData(store));
+  const escapeXml = (s) => String(s).replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]));
   const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${urls
     .map(
       (u) =>
@@ -1157,6 +1162,21 @@ app.get("/sitemap.xml", ah(async (req, res) => {
     .join("\n")}\n</urlset>\n`;
   res.set({ "Content-Type": "application/xml", "Cache-Control": "public, max-age=3600" }).send(body);
 }));
+
+// IndexNow: new pages to Bing and the others the same day, every page again weekly (indexNow.js).
+// Every 6 hours, first 3 minutes after start; on only where INDEXNOW=on.
+const indexNow = require("./indexNow");
+const sendIndexNow = async () => {
+  if (!indexNow.enabled()) return;
+  try {
+    const out = await indexNow.submit(sitemapUrls(await seoPages.loadSearchData(store)).map((u) => u.loc));
+    if (out.sent) console.log(`IndexNow: ${out.sent} page(s) sent`);
+  } catch (e) {
+    console.error("IndexNow failed:", e.message);
+  }
+};
+setTimeout(sendIndexNow, 3 * 60 * 1000).unref();
+setInterval(sendIndexNow, 6 * 3600 * 1000).unref();
 
 // Every page of the website with its own title, description, preview tags, structured data
 // and status (see seoPages.js). Only the website's nginx calls this, for addresses that
@@ -1171,6 +1191,11 @@ app.get("/api/city-pages/:city", ah(async (req, res) => {
 }));
 app.get("/api/city-pages/:city/:category", ah(async (req, res) => {
   const page = cityPages.cityCategoryPage(req.params.city, req.params.category, await seoPages.loadSearchData(store));
+  if (!page) return res.status(404).json({ error: "Not found" });
+  res.set("Cache-Control", "public, max-age=300").json(page);
+}));
+app.get("/api/city-pages/:city/:category/:service", ah(async (req, res) => {
+  const page = cityPages.cityServicePage(req.params.city, req.params.category, req.params.service, await seoPages.loadSearchData(store));
   if (!page) return res.status(404).json({ error: "Not found" });
   res.set("Cache-Control", "public, max-age=300").json(page);
 }));
