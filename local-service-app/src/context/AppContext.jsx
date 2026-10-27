@@ -6,6 +6,7 @@ import { detectCurrentLocation, APPROXIMATE_OVER_METERS } from "../utils/geoloca
 import { ensurePushSubscribed, onNativeNotificationTap } from "../utils/pushNotifications";
 import { readSnap, writeSnap, clearSnaps, newest } from "../utils/snapshot";
 import { trackMeta } from "../utils/metaPixel";
+import { trackGoogleBooking } from "../utils/googleAds";
 
 const AppContext = createContext(null);
 const CART_KEY = "homeserve-cart-v1";
@@ -682,6 +683,7 @@ export function AppProvider({ children }) {
     const booking = await api.createBooking({ serviceId, date, time, address, issue });
     setBookings((prev) => upsertById(prev, booking));
     trackMeta("Schedule", { value: Number(booking.amount) || 0, currency: "INR", content_name: booking.service?.name }, `order:${booking.orderId || booking.id}:schedule`);
+    trackGoogleBooking({ value: booking.amount, orderId: booking.orderId || booking.id, phone: booking.customer?.phone });
     return booking;
   }, []);
 
@@ -822,6 +824,7 @@ export function AppProvider({ children }) {
           { value: created.reduce((s, b) => s + (Number(b.amount) || 0), 0), currency: "INR", content_name: created.map((b) => b.service?.name).filter(Boolean).join(", "), num_items: created.length },
           `order:${created[0].orderId || created[0].id}:schedule`
         );
+        trackGoogleBooking({ value: created.reduce((s, b) => s + (Number(b.amount) || 0), 0), orderId: created[0].orderId || created[0].id, phone: created[0].customer?.phone });
       }
       setCart((prev) => prev.filter((c) => !ordered.some((o) => o.serviceId === c.serviceId)));
       setAppliedOffer(null);

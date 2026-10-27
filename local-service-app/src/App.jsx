@@ -9,6 +9,7 @@ import LogoMark from "./components/LogoMark";
 import { useAndroidBackButton } from "./utils/useAndroidBackButton";
 import { trackMeta } from "./utils/metaPixel";
 import { blogAdsFor } from "./utils/blogAds";
+import { initGoogleAds } from "./utils/googleAds";
 
 // Route-level code splitting: only Login (needed before anything else can
 // render) ships in the initial bundle. Every other screen loads on demand
@@ -68,6 +69,10 @@ function AppRoutes() {
   useEffect(() => trackMeta("PageView"), [pathname]);
   // Google AdSense on the blog only (website only; does nothing in the Android app).
   useEffect(() => blogAdsFor(pathname), [pathname]);
+  // Google Ads booking tracking (website only; nothing loads until it's set up in Admin).
+  useEffect(() => {
+    initGoogleAds();
+  }, []);
 
   useEffect(() => {
     if (!pendingNotificationBookingId) return;

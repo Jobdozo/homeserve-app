@@ -336,6 +336,8 @@ const RULES = [
   [/^\/admin\/watch\/renewals$/, () => "reports.view"],
   [/^\/admin\/meta\/(status|exclusion-check)$/, () => "reports.view"],
   [/^\/admin\/meta\/self-test$/, () => "settings.edit"],
+  // Google Ads booking tracking (googleAds.js): seen with social media, changed by whoever edits settings.
+  [/^\/admin\/google-ads$/, (m) => (m === "GET" ? "social.view" : "settings.edit")],
   [/^\/admin\/social\/posts$/, (m) => (m === "GET" ? "social.view" : "social.add")],
   // Video Studio: making videos is "social.add" (publishing one is the person's: agents.policy).
   [/^\/admin\/video-studio(\/|$)/, (m) => (m === "GET" ? "social.view" : "social.add")],

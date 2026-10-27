@@ -241,6 +241,8 @@ export const api = {
   listSocialPosts: (limit = 60) => request(`/admin/social/posts?limit=${limit}`),
   refreshSocialResults: () => request("/admin/social/metrics/refresh", { method: "POST" }),
   listSocialCalendar: () => request("/admin/social/calendar"),
+  getGoogleAds: () => request("/admin/google-ads"),
+  setGoogleAds: (patch) => request("/admin/google-ads", { method: "PUT", body: JSON.stringify(patch) }),
   addSocialCalendar: (data) => request("/admin/social/calendar", { method: "POST", body: JSON.stringify(data) }),
   updateSocialCalendar: (id, patch) => request(`/admin/social/calendar/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteSocialCalendar: (id) => request(`/admin/social/calendar/${id}`, { method: "DELETE" }),

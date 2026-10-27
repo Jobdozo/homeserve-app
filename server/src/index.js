@@ -2208,6 +2208,9 @@ app.get("/api/maps/config", (req, res) => {
 
 // The website's Meta Pixel id (public anyway: it's in every page's source once loaded). null = off.
 app.get("/api/meta/pixel", (req, res) => res.json({ pixelId: metaEvents.pixelId() }));
+// Google Ads booking tracking (googleAds.js): the tag and conversion label for the website.
+const googleAds = require("./googleAds");
+app.get("/api/google-ads", (req, res) => res.set("Cache-Control", "public, max-age=300").json(googleAds.forWebsite()));
 app.get("/api/admin/meta/status", auth.requireAuth("admin"), (req, res) =>
   res.json({ ...metaEvents.status(), testProviders: testProviderIds().size }));
 // Would a booking with this provider be sent to Meta? The same filter real bookings go through.
@@ -3939,6 +3942,15 @@ app.get("/api/blog/:slug", (req, res) => {
   res.set("Cache-Control", "public, max-age=300").json(pub);
 });
 // Staff (Admin → Blog), and the SEO Agent's drafts.
+// Google Ads booking tracking (googleAds.js): set in Admin → Social media → Google Ads.
+app.get("/api/admin/google-ads", adminOnly, crm(async (req, res) => res.json(googleAds.get())));
+app.put("/api/admin/google-ads", adminOnly, crm(async (req, res) => {
+  const before = googleAds.get();
+  const after = googleAds.set({ tagId: req.body?.tagId, label: req.body?.label, snippet: req.body?.snippet, on: req.body?.on }, actorOf(req));
+  audit(req, "marketing.google-ads", "marketing", "google-ads", "Google Ads tracking", [{ field: "tracking", from: before.on ? `${before.tagId}/${before.label}` : "off", to: after.on ? `${after.tagId}/${after.label}` : "off" }]);
+  res.json(after);
+}));
+
 // Google AdSense on the blog only (blogAds.js): the publisher ID, for the website and the admin.
 const blogAds = require("./blogAds");
 app.get("/api/blog-ads", (req, res) => res.set("Cache-Control", "public, max-age=300").json({ client: blogAds.active() }));

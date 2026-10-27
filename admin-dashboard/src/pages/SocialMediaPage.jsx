@@ -306,6 +306,73 @@ function CalendarTab({ entries, canEdit, run }) {
   );
 }
 
+// Google Ads booking tracking on tikdum.com (server/src/googleAds.js): paste the tag ID and the
+// "Booking" conversion's label, or Google's whole event snippet.
+function GoogleAdsTab() {
+  const { showToast, can } = useApp();
+  const canEdit = can("settings.edit");
+  const [g, setG] = useState(null);
+  const [snippet, setSnippet] = useState("");
+  const [tagId, setTagId] = useState("");
+  const [label, setLabel] = useState("");
+  useEffect(() => {
+    api.getGoogleAds().then((x) => (setG(x), setTagId(x.tagId || ""), setLabel(x.label || ""))).catch((e) => showToast(e.message || "Couldn't load"));
+  }, [showToast]);
+  if (!g) return <p className="py-10 text-center text-[13px] text-gray-400">Loading…</p>;
+  const save = async (patch, msg) => {
+    try {
+      const x = await api.setGoogleAds(patch);
+      setG(x);
+      setTagId(x.tagId || "");
+      setLabel(x.label || "");
+      setSnippet("");
+      showToast(msg);
+    } catch (e) {
+      showToast(e.message || "Couldn't save");
+    }
+  };
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl bg-white p-4 shadow-card">
+        <h2 className="text-[14px] font-bold text-gray-900">Google Ads booking tracking</h2>
+        <p className="mt-0.5 max-w-[640px] text-[12px] leading-snug text-gray-500">
+          {g.on ? (
+            <>
+              On: tikdum.com reports every order to Google Ads as a <b>Booking</b> conversion with its value, so Google learns which clicks bring bookings. Tag <span className="font-mono">{g.tagId}</span>, label <span className="font-mono">{g.label}</span>. Website only — never in the app.
+            </>
+          ) : g.tagId || g.label ? (
+            "Paused, or one of the two IDs is missing — nothing loads on the website."
+          ) : (
+            <>In Google Ads: Goals → Conversions → New conversion action → Website → <b>Purchase</b> named "Booking", value from the website, count "One". Then in Tag setup → "Install the tag yourself", copy the event snippet and paste it below — the IDs are taken from it.</>
+          )}
+        </p>
+        {canEdit && (
+          <div className="mt-3 space-y-2">
+            <textarea value={snippet} onChange={(e) => setSnippet(e.target.value)} rows={3} placeholder="Paste Google's event snippet here (or fill in the two IDs below)" className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 font-mono text-[11.5px]" />
+            <div className="flex flex-wrap items-center gap-2">
+              <input value={tagId} onChange={(e) => setTagId(e.target.value)} placeholder="AW-123456789" className="w-[160px] rounded-lg border border-gray-200 px-2.5 py-1.5 font-mono text-[12px]" />
+              <span className="text-gray-400">/</span>
+              <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Conversion label" className="w-[200px] rounded-lg border border-gray-200 px-2.5 py-1.5 font-mono text-[12px]" />
+              <button
+                onClick={() => save(snippet.trim() ? { snippet, on: true } : { tagId, label, on: true }, "Google Ads tracking saved")}
+                disabled={!snippet.trim() && (!tagId.trim() || !label.trim())}
+                className="rounded-lg bg-brand px-3 py-1.5 text-[12.5px] font-semibold text-white disabled:opacity-50"
+              >
+                Save
+              </button>
+              {g.tagId && (
+                <button onClick={() => save({ on: !g.on }, g.on ? "Tracking paused" : "Tracking on")} className="rounded-lg bg-gray-100 px-3 py-1.5 text-[12.5px] font-semibold text-gray-700">
+                  {g.on ? "Pause" : "Turn on"}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function SocialMediaPage() {
   const { showToast, can } = useApp();
   const canEdit = can("social.add");
@@ -343,13 +410,16 @@ export default function SocialMediaPage() {
         {[
           ["posts", "Posts & results"],
           ["calendar", "Festival calendar"],
+          ["google", "Google Ads"],
         ].map(([k, v]) => (
           <button key={k} onClick={() => setTab(k)} className={`flex-shrink-0 rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold ${tab === k ? "bg-brand text-white" : "bg-white text-gray-600 shadow-card"}`}>
             {v}
           </button>
         ))}
       </div>
-      {!posts || !calendar ? (
+      {tab === "google" ? (
+        <GoogleAdsTab />
+      ) : !posts || !calendar ? (
         <p className="py-10 text-center text-[13px] text-gray-400">Loading…</p>
       ) : tab === "posts" ? (
         <PostsTab posts={posts} busy={busy} canEdit={canEdit} onRefresh={() => run(() => api.refreshSocialResults(), "Results updated")} />
