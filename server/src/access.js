@@ -36,6 +36,7 @@ const MODULES = [
   { key: "users", label: "User management", actions: ["view", "add", "edit", "delete", "manage"] },
   { key: "ai", label: "AI agents (approvals, alerts, agent accounts)", actions: ["view", "approve", "manage"] },
   { key: "inbox", label: "WhatsApp inbox (customer chats)", actions: ["view", "add", "manage"] },
+  { key: "email", label: "Email inbox (support@tikdum.com)", actions: ["view", "add", "manage"] },
   { key: "accounting", label: "Accounting & GST (invoices, credit notes, returns)", actions: ["view", "export", "manage"] },
   { key: "social", label: "Social media posts (Facebook, Instagram)", actions: ["view", "add", "manage"] },
   { key: "blog", label: "Blog articles (tikdum.com/blog)", actions: ["view", "add", "edit", "delete", "approve", "manage"] },
@@ -65,6 +66,8 @@ const ROLE_MIGRATIONS = [
     id: "2026-10-blog",
     grant: { admin: ["blog.view", "blog.add", "blog.edit", "blog.delete", "blog.approve"], management: ["blog.view", "blog.add", "blog.approve"], marketing: ["blog.view"] },
   },
+  // The email inbox (mailbox.js): read and answered by people; agents may not send (agents.policy).
+  { id: "2026-10-email", grant: { support: ["email.view", "email.add"], admin: ["email.view", "email.add"] } },
 ];
 function runRoleMigrations(roles) {
   const done = new Set(jsonStore.readAll("accessMigrations").map((m) => m.id));
@@ -322,6 +325,7 @@ const RULES = [
   [/^\/admin\/ai\/(actions|feed)(\/|$)/, () => "ai.view"],
   [/^\/admin\/ai\//, (m) => (m === "GET" ? "ai.view" : "ai.manage")],
   [/^\/admin\/inbox(\/|$)/, (m) => (m === "GET" ? "inbox.view" : "inbox.add")],
+  [/^\/admin\/email(\/|$)/, (m) => (m === "GET" ? "email.view" : "email.add")],
   [/^\/admin\/verification\/precheck$/, () => "providers.view"],
   [/^\/admin\/watch\/provider-quality$/, () => "providers.view"],
   [/^\/admin\/watch\/(retention|fraud|reviews)$/, () => "customers.view"],

@@ -341,6 +341,8 @@ function policy(req, admin, path) {
     recent.push(now);
     notifyLog.set(admin.agentId, recent);
   }
+  // Email goes out only from a person (Admin -> Email Inbox); agents can read it.
+  if (req.method !== "GET" && /^\/admin\/email(\/|$)/.test(path)) return { status: 403, error: "AI agents can't send email — a person replies from the Email Inbox" };
   if (req.method === "POST" && path === "/admin/inbox/send") {
     const now = Date.now();
     const recent = (waLog.get(admin.agentId) || []).filter((t) => now - t < 3600 * 1000);

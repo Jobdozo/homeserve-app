@@ -23,6 +23,7 @@ const csvImport = require("./csvImport");
 const auth = require("./auth");
 const agents = require("./agents");
 const inbox = require("./inbox");
+const mailbox = require("./mailbox");
 const backoffice = require("./backoffice");
 const gstPortal = require("./gstPortal");
 const callDesk = require("./callDesk");
@@ -79,6 +80,9 @@ if (!process.env.ALLOWED_ORIGINS) {
 const app = express();
 app.use(compression());
 app.use(cors({ origin: ALLOWED_ORIGINS }));
+// Emails carry attachments: incoming ones from Postmark, outgoing ones from the admin composer (mailbox.js).
+app.use("/api/webhooks/email", express.json({ limit: "30mb" }));
+app.use("/api/admin/email", express.json({ limit: "15mb" }));
 app.use(express.json());
 // Photos copied to cloud storage go to its CDN; everything else is served from here (see uploads.js).
 app.use("/uploads", uploads.serveUpload);
@@ -3701,6 +3705,71 @@ app.post("/api/admin/inbox/:id/mode", adminOnly, crm(async (req, res) => {
     await store.logActivity("ai", `${req.admin.name} handed a WhatsApp chat (${conv.name || conv.phone}) to the team: ${conv.handoffReason || "needs a person"}`).catch(() => {});
   }
   res.json(conv);
+}));
+
+// ---- Email inbox: support@tikdum.com through Postmark (see mailbox.js) ----
+// In Postmark: Inbound stream -> Webhook URL
+// https://postmark:<EMAIL_WEBHOOK_SECRET>@<api host>/api/webhooks/email/postmark
+app.post("/api/webhooks/email/postmark", ah(async (req, res) => {
+  if (!mailbox.status().receiving) {
+    console.warn("[email-webhook] rejected: EMAIL_WEBHOOK_SECRET is not set on the server");
+    return res.status(503).json({ error: "Inbound email isn't configured" });
+  }
+  if (!mailbox.webhookAuthorized(req.headers.authorization)) {
+    console.warn("[email-webhook] rejected: wrong or missing credentials");
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  try {
+    const out = await mailbox.ingest(req.body, { lookup: emailLookup });
+    console.log(`[email-webhook] ok: ${out.duplicate ? "duplicate" : `new email in ${out.threadId}`}`);
+    res.json({ ok: true });
+  } catch (e) {
+    // A malformed email is answered 200 so Postmark doesn't keep retrying it.
+    if (e.status === 400) return res.json({ ok: false, error: e.message });
+    throw e;
+  }
+}));
+// The Tikdum customer or provider behind an email address, if any.
+async function emailLookup(email) {
+  const page = await store.listCustomersPage({ q: email, limit: 5 });
+  const c = page.items.find((x) => String(x.email || "").toLowerCase() === email);
+  if (c) return { customerId: c.id, name: c.name };
+  const p = (await store.listProviders()).find((x) => String(x.email || "").toLowerCase() === email);
+  return p ? { providerId: p.id, name: p.businessName || p.name } : {};
+}
+app.get("/api/admin/email/status", adminOnly, crm(async (req, res) => res.json(mailbox.status())));
+app.get("/api/admin/email", adminOnly, crm(async (req, res) => {
+  res.json(mailbox.listThreads({ queue: req.query.queue, q: req.query.q, limit: req.query.limit }));
+}));
+app.post("/api/admin/email/compose", adminOnly, crm(async (req, res) => {
+  const out = await mailbox.compose(req.body || {}, actorOf(req), { lookup: emailLookup });
+  await store.logActivity("email", `${actorOf(req)} emailed ${out.message.to}: ${out.message.subject}`).catch(() => {});
+  res.status(201).json(out);
+}));
+app.get("/api/admin/email/threads/:id", adminOnly, crm(async (req, res) => {
+  const found = mailbox.getThread(req.params.id, { markRead: !req.admin.agent });
+  if (!found) return res.status(404).json({ error: "Email not found" });
+  res.json(found);
+}));
+app.post("/api/admin/email/threads/:id/reply", adminOnly, crm(async (req, res) => {
+  const msg = await mailbox.reply(req.params.id, req.body || {}, actorOf(req));
+  if (!msg) return res.status(404).json({ error: "Email not found" });
+  await store.logActivity("email", `${actorOf(req)} replied by email to ${msg.to}: ${msg.subject}`).catch(() => {});
+  res.status(201).json(msg);
+}));
+app.post("/api/admin/email/threads/:id/folder", adminOnly, crm(async (req, res) => {
+  const t = mailbox.setFolder(req.params.id, req.body?.folder);
+  if (!t) return res.status(404).json({ error: "Email not found" });
+  res.json(t);
+}));
+app.get("/api/admin/email/messages/:mid/attachments/:n", adminOnly, crm(async (req, res) => {
+  const f = mailbox.attachmentFile(req.params.mid, req.params.n);
+  if (!f) return res.status(404).json({ error: "Attachment not found" });
+  // Always a download, never shown inline in the admin.
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.attachment(f.name);
+  res.type("application/octet-stream");
+  res.sendFile(f.path);
 }));
 
 // ---- Agent Office: task board, CEO thread, weekly goals (see office.js) ----

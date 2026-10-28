@@ -52,6 +52,20 @@ async function uploadComplaintEvidence(id, file, note) {
   return data;
 }
 
+// An email attachment: fetched with the sign-in token, then saved by the browser (never opened inline).
+async function downloadEmailAttachment(messageId, index, name) {
+  const res = await fetch(`${API_BASE}/admin/email/messages/${encodeURIComponent(messageId)}/attachments/${index}`, {
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Download failed: ${res.status}`);
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name || "attachment";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
 // A push notification picture: the server re-saves it as a 1024×512 banner -> { image, url }.
 async function uploadPushPicture(file) {
   const body = new FormData();
@@ -478,6 +492,15 @@ export const api = {
   getWhatsAppStatus: (target) => request(`/admin/inbox/phone-status?${new URLSearchParams(Object.fromEntries(Object.entries(target).filter(([, v]) => v)))}`),
   sendWhatsApp: (target, message) => request("/admin/inbox/send", { method: "POST", body: JSON.stringify({ ...target, message }) }),
   setInboxMode: (id, mode, reason) => request(`/admin/inbox/${encodeURIComponent(id)}/mode`, { method: "POST", body: JSON.stringify({ mode, reason }) }),
+
+  // Email inbox (support@tikdum.com via Postmark). files: [{ name, type, base64 }]
+  emailStatus: () => request("/admin/email/status"),
+  listEmail: (params = {}) => request(`/admin/email?${new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v)))}`),
+  getEmailThread: (id) => request(`/admin/email/threads/${encodeURIComponent(id)}`),
+  replyEmail: (id, text, files) => request(`/admin/email/threads/${encodeURIComponent(id)}/reply`, { method: "POST", body: JSON.stringify({ text, files }) }),
+  composeEmail: (email) => request("/admin/email/compose", { method: "POST", body: JSON.stringify(email) }),
+  setEmailFolder: (id, folder) => request(`/admin/email/threads/${encodeURIComponent(id)}/folder`, { method: "POST", body: JSON.stringify({ folder }) }),
+  downloadEmailAttachment,
 
   getVerificationPrecheck: () => request("/admin/verification/precheck"),
   getGstPortal: (providerId, refresh = false) => request(`/admin/providers/${encodeURIComponent(providerId)}/gst-portal${refresh ? "?refresh=1" : ""}`),

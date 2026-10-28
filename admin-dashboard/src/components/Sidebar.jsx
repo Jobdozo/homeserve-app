@@ -23,6 +23,7 @@ import {
   RequestIcon,
   BotIcon,
   ChatIcon,
+  MailIcon,
   PipelineIcon,
   CameraIcon,
 } from "./icons";
@@ -49,6 +50,7 @@ const sections = [
       { label: "Complaints & Disputes", icon: AlertIcon, to: "/complaints", perm: "complaints.view" },
       { label: "Notifications", icon: BellIcon, to: "/notifications", perm: "notifications.view" },
       { label: "WhatsApp Inbox", icon: ChatIcon, to: "/inbox", perm: "inbox.view" },
+      { label: "Email Inbox", icon: MailIcon, to: "/email", perm: "email.view" },
       { label: "Social Media", icon: ChartIcon, to: "/social", perm: "social.view" },
       { label: "Blog", icon: FileIcon, to: "/blog", perm: "blog.view" },
       { label: "Video Studio", icon: CameraIcon, to: "/video-studio", perm: "social.view" },

@@ -33,6 +33,7 @@ const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
 const UserManagementPage = lazy(() => import("./pages/UserManagementPage"));
 const AiAgentsPage = lazy(() => import("./pages/AiAgentsPage"));
 const InboxPage = lazy(() => import("./pages/InboxPage"));
+const EmailPage = lazy(() => import("./pages/EmailPage"));
 const AccountingPage = lazy(() => import("./pages/AccountingPage"));
 
 function NoAccess() {
@@ -89,6 +90,7 @@ function AppRoutes() {
     ["/users", <UserManagementPage />, "users.view"],
     ["/ai-agents", <AiAgentsPage />, "ai.view"],
     ["/inbox", <InboxPage />, "inbox.view"],
+    ["/email", <EmailPage />, "email.view"],
     ["/social", <SocialMediaPage />, "social.view"],
     ["/blog", <BlogPage />, "blog.view"],
     ["/video-studio", <VideoStudioPage />, "social.view"],

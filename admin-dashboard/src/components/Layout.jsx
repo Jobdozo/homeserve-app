@@ -15,6 +15,7 @@ const TITLES = {
   "/users": { title: "User Management", subtitle: "Staff accounts, roles and permissions" },
   "/ai-agents": { title: "AI Agents", subtitle: "Approvals, alerts and agent accounts" },
   "/inbox": { title: "WhatsApp Inbox", subtitle: "Customer chats — answered by the AI or your team" },
+  "/email": { title: "Email Inbox", subtitle: "support@tikdum.com — read and answer emails" },
   "/complaints": { title: "Complaints & Disputes", subtitle: "Track, assign and resolve every complaint" },
   "/monitoring": { title: "Live Service Provider Monitoring", subtitle: "Real-time provider status, orders and reports" },
   "/bookings": { title: "Bookings", subtitle: "All bookings across every provider" },
