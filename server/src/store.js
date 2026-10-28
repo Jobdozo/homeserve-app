@@ -2409,6 +2409,14 @@ async function updateBookingStatus(id, status, opts = {}) {
   }
 
   cacheClear("openBookings");
+  if (status === "Cancelled") {
+    // A wallet-side failure must not undo the cancellation.
+    try {
+      await refundQuickCancelFee(existing, id, now);
+    } catch (e) {
+      console.error(`Fee refund for cancelled booking ${id} failed:`, e);
+    }
+  }
   const provider = await getProvider(existing.providerId);
   const serviceName = existing.service?.name || "Service";
   await logActivity("booking", `Booking #${bookingRef(refBookingId(existing))} (${serviceName}) marked ${status}`);
@@ -4333,7 +4341,8 @@ function resolveFeeConfig(booking, cfg = getSettings(), overrides = listFeeOverr
 // Fees actually charged at completion, so later rule changes never rewrite
 // what a finished job paid. Build once per report and pass it in.
 function feeLedger() {
-  return new Map(jsonStore.readAll("bookingFees").map((r) => [r.id, r]));
+  // A refunded fee (refundQuickCancelFee) counts as ₹0.
+  return new Map(jsonStore.readAll("bookingFees").map((r) => [r.id, r.refundedAt ? { ...r, fee: 0 } : r]));
 }
 
 // A completed booking's recorded fee if there is one, otherwise what the
@@ -4786,6 +4795,40 @@ async function settlePriceCover(booking) {
   return rec;
 }
 
+// A booking cancelled within 90 seconds of the provider taking it gets the fee back
+// (the customer changed their mind at once — nothing was delivered); after that the
+// fee stands. Credited to the wallet that paid it, with a GST credit note for its
+// invoice. The fee record is kept (marked refunded), so the booking is never charged
+// or refunded twice.
+const FEE_REFUND_WINDOW_MS = 90 * 1000;
+async function refundQuickCancelFee(booking, bookingId, cancelledAt) {
+  const rec = jsonStore.readAll("bookingFees").find((r) => r.id === bookingId);
+  if (!rec || rec.refundedAt || !(rec.fee > 0)) return null;
+  const elapsed = Date.parse(cancelledAt) - Date.parse(rec.at);
+  if (!(elapsed >= 0 && elapsed <= FEE_REFUND_WINDOW_MS)) return null;
+  const providerId = rec.providerId || booking.providerId;
+  if (!providerId) return null;
+  jsonStore.update("bookingFees", bookingId, { refundedAt: cancelledAt, refundReason: "cancelled within 90 seconds" }); // claim first
+  const ref = bookingRef(refBookingId(booking));
+  creditProviderWallet(providerId, rec.fee, `Fee refunded: booking #${ref} was cancelled within 90 seconds`);
+  try {
+    const invoice = accounting.listInvoices({ type: "invoice" }).find((i) => i.sourceId === bookingId && !i.creditNoteId);
+    if (invoice) accounting.issueCreditNote(invoice.id, "Booking cancelled within 90 seconds of acceptance — fee refunded", "Tikdum (automatic)");
+  } catch (e) {
+    console.error(`Credit note for the refunded fee of booking ${bookingId} failed:`, e);
+  }
+  await addNotification({
+    recipientType: "provider",
+    recipientId: providerId,
+    type: "wallet",
+    title: `₹${rec.fee} fee refunded`,
+    message: `Booking #${ref} was cancelled within 90 seconds of you accepting it, so its ₹${rec.fee} fee is back in your wallet.`,
+    bookingId,
+  }).catch(() => {});
+  await logActivity("provider", `Fee ₹${rec.fee} refunded for booking #${ref}: cancelled within 90 seconds of acceptance`).catch(() => {});
+  return { fee: rec.fee, providerId };
+}
+
 async function deductWalletCommission(providerId, booking, bookingId) {
   if (jsonStore.readAll("bookingFees").some((r) => r.id === bookingId)) return null; // already charged
   const { cfg, source } = resolveFeeConfig(booking);
@@ -4796,6 +4839,7 @@ async function deductWalletCommission(providerId, booking, bookingId) {
   // booking sees the claim and stops instead of charging twice.
   jsonStore.insert("bookingFees", {
     id: bookingId,
+    providerId,
     fee,
     source,
     pct: cfg.communicationFeePct,
@@ -5524,6 +5568,7 @@ module.exports = {
   changeBookingService,
   _sameServiceKind: sameServiceKind,
   _otherServiceCheck: otherServiceCheck,
+  _refundQuickCancelFee: refundQuickCancelFee,
   rescheduleBooking,
   changeBookingProvider,
   markProviderLive,

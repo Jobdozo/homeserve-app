@@ -990,7 +990,7 @@ app.get("/api/provider/money", auth.requireAuth("provider"), ah(async (req, res)
   if (staffLacks(req, "earnings.view")) return res.status(403).json({ error: "Ask the owner for access to money" });
   const id = req.user.id;
   const bookings = await store.listBookings({ providerId: id });
-  const fees = new Map(jsonStore.readAll("bookingFees").map((r) => [r.id, r.fee]));
+  const fees = new Map(jsonStore.readAll("bookingFees").map((r) => [r.id, r.refundedAt ? 0 : r.fee]));
   const wallet = store.getWallet(id);
   const recent = bookings.map((b) => fees.get(b.id)).filter((f) => f > 0).slice(0, 20);
   const avgFee = recent.length ? Math.round(recent.reduce((a, b) => a + b, 0) / recent.length) : null;
