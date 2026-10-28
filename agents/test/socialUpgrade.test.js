@@ -210,3 +210,17 @@ test("Reels a day: one from 6 PM, or spread from 9 AM to 7 PM", () => {
   assert.deepEqual(reelSlots(6), [9, 11, 13, 15, 17, 19]);
   assert.deepEqual(reelSlots(10), [9, 11, 13, 15, 17, 19], "at most 6");
 });
+
+test("Reels a day: a missed slot is skipped, never made late in a row", () => {
+  const { reelSlots, dueReel } = require("../src/socialPosts");
+  const six = reelSlots(6);
+  assert.equal(dueReel(six, 0, 8), -1, "before 9 AM");
+  assert.equal(dueReel(six, 0, 9), 0);
+  assert.equal(dueReel(six, 1, 10), -1, "the 9 AM one is done; the next is at 11");
+  assert.equal(dueReel(six, 1, 14), 2, "the 11 AM slot was missed: the 1 PM one is made, not both");
+  assert.equal(dueReel(six, 1, 23), -1, "switched to 6 at 11 PM: nothing tonight");
+  assert.equal(dueReel(six, 5, 20), 5, "the 7 PM one until 9 PM");
+  assert.equal(dueReel(six, 6, 20), -1, "all done");
+  assert.equal(dueReel(reelSlots(1), 0, 18), 0);
+  assert.equal(dueReel(reelSlots(1), 0, 21), -1, "the single 6 PM Reel isn't started after 9 PM");
+});

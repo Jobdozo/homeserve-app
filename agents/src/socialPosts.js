@@ -30,12 +30,22 @@ const STORY_FROM_HOUR = 16; // Stories are watched most in the evening
 const REEL_FROM_HOUR = 18;
 const REEL_FIRST_HOUR = 9;
 const REEL_LAST_HOUR = 19;
+const REEL_LATEST_HOUR = 21; // the day's last Reel isn't started after this
 
 // Pure: the IST hours from which each of the day's Reels is made. Exported for tests.
 function reelSlots(n) {
   const count = Math.max(1, Math.min(6, Math.round(Number(n) || 1)));
   if (count === 1) return [REEL_FROM_HOUR];
   return Array.from({ length: count }, (_, i) => Math.round(REEL_FIRST_HOUR + (i * (REEL_LAST_HOUR - REEL_FIRST_HOUR)) / (count - 1)));
+}
+
+// Pure: which slot's Reel to make now (or -1), given how many of today's are done. A slot is only
+// made before the next slot's hour (the last one before 9 PM); missed ones are skipped, so Reels
+// switched on late in the day, or agents that were down, don't post several Reels in a row.
+function dueReel(slots, done, hour) {
+  let i = done;
+  while (i < slots.length && hour >= (i + 1 < slots.length ? slots[i + 1] : REEL_LATEST_HOUR)) i++;
+  return i < slots.length && hour >= slots[i] ? i : -1;
 }
 const REPORT_WEEKDAY = 1; // Monday
 const REPORT_HOUR = 11;
@@ -370,8 +380,8 @@ async function run(client, log, { st, office, now = Date.now() }) {
   // The day's Reels, each from its hour — a run that makes one doesn't also make a post (the next run does).
   if (!st.socialReels || st.socialReels.day !== today) st.socialReels = { day: today, done: st.socialReelDay === today ? 1 : 0 };
   const slots = reelSlots(self?.socialReelsPerDay);
-  const reelNo = st.socialReels.done;
-  if (postingDay && reelsOn(self) && reelNo < slots.length && istHour(now) >= slots[reelNo]) {
+  const reelNo = dueReel(slots, st.socialReels.done, istHour(now));
+  if (postingDay && reelsOn(self) && reelNo >= 0) {
     st.socialReels.done = reelNo + 1; // one try per slot
     st.socialReelDay = today;
     try {
@@ -473,4 +483,4 @@ async function run(client, log, { st, office, now = Date.now() }) {
   return proposed;
 }
 
-module.exports = { run, isPostTask, cleanAnswer, proposalFor, promptFor, bodyFor, dueSlots, chooseSlots, hourStats, resultsFor, weeklyNumbers, reelSlots, AUTO_SLOTS };
+module.exports = { run, isPostTask, cleanAnswer, proposalFor, promptFor, bodyFor, dueSlots, chooseSlots, hourStats, resultsFor, weeklyNumbers, reelSlots, dueReel, AUTO_SLOTS };
