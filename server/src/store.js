@@ -559,7 +559,7 @@ function bookingRef(bookingId) {
   return ref;
 }
 
-const { normalizeQuantity } = require("./quantity");
+const { normalizeQuantity, quantityText } = require("./quantity");
 const dup = require("./duplicates");
 const { describeGroup, sameServiceName, pincodeFromLine } = require("./orderGroups");
 const assignments = require("./assignments");
@@ -577,7 +577,7 @@ function mapBooking(b, customer, service) {
   const quantity = bookingQuantity(b.id);
   // The booking carries its own copy of the service, named with the count ("Sofa Cleaning (1 Seat) × 10") so every
   // screen, notification and report shows it without each one needing to know about quantities.
-  if (quantity > 1 && service) service = { ...service, name: `${service.name} × ${quantity}` };
+  if (quantity > 1 && service) service = { ...service, name: `${service.name} ${quantityText(quantity, service)}` };
   const statusHistory = {};
   for (const e of b.bookingStatusEvents_on_booking || []) statusHistory[e.status] = e.at;
   return {
@@ -2130,9 +2130,9 @@ function assertServedAtPincode(service, address) {
 // `offerCode` (never a raw discount percentage) is re-validated here server-side
 // on every call — a client can never supply its own discount amount directly.
 async function createBooking({ serviceId, date, time, address, issue, customerId, orderId, offerCode, flatDiscount = 0, quantity, options }) {
-  const qty = normalizeQuantity(quantity);
   const service = await getService(serviceId);
   if (!service) throw new Error("Unknown service");
+  const qty = normalizeQuantity(quantity, service);
   assertServedAtPincode(service, address);
   address = withPincodeInLine(address);
   if (service.status === "pending_approval" || service.status === "rejected") {
@@ -2202,7 +2202,7 @@ async function createBooking({ serviceId, date, time, address, issue, customerId
   if (!orderId) await logActivity("booking", `New booking received: #${bookingRef(bookingId)} — ${service.name}`);
   // An order (a cart) alerts the provider once for all of its services — see createOrder.
   if (!orderId) {
-    const bookingMessage = `${customer.name} requested ${service.name}${qty > 1 ? ` × ${qty}` : ""} for ${date}`;
+    const bookingMessage = `${customer.name} requested ${service.name}${qty > 1 ? ` ${quantityText(qty, service)}` : ""} for ${date}`;
     await addNotification({
       recipientType: "provider",
       recipientId: service.providerId,
@@ -2281,7 +2281,7 @@ async function createOrder({ items, address, customerId, offerCode, referralCode
       continue;
     }
     assertServedAtPincode(svc, address);
-    const total = (svc.price + serviceOptions.priceSelection(svc, item.options).extra) * normalizeQuantity(item.quantity);
+    const total = (svc.price + serviceOptions.priceSelection(svc, item.options).extra) * normalizeQuantity(item.quantity, svc);
     lineTotals.push({ providerId: svc.providerId, total });
     subtotal += total;
   }
@@ -2826,7 +2826,7 @@ async function assignmentOptions(booking) {
   // The booked service's own name: the booking's copy carries the count ("Sofa Cleaning (1 Seat) × 5",
   // mapBooking), which no provider's service is called — so every provider used to look like
   // "another service".
-  const wanted = (booking.serviceId ? (await getService(booking.serviceId))?.name : null) || String(booking.service?.name || "").replace(/ × \d+$/, "");
+  const wanted = (booking.serviceId ? (await getService(booking.serviceId))?.name : null) || String(booking.service?.name || "").replace(/ × \d+( sq ft| litres)?$/, "");
   const tried = new Set(assignments.queued(booking.id)?.tried || []);
   const quoted = assignments.coverFor(booking.id)?.quoted ?? booking.amount;
   const charged = assignments.coverFor(booking.id)?.chargedProviderId || booking.providerId;
@@ -4156,7 +4156,7 @@ async function checkOffer(code, { lines, items, subtotal, customerId } = {}) {
     lines = [];
     for (const it of items) {
       const svc = await getService(it.serviceId);
-      if (svc) lines.push({ providerId: svc.providerId, total: (svc.price + serviceOptions.priceSelection(svc, it.options).extra) * normalizeQuantity(it.quantity) });
+      if (svc) lines.push({ providerId: svc.providerId, total: (svc.price + serviceOptions.priceSelection(svc, it.options).extra) * normalizeQuantity(it.quantity, svc) });
     }
   }
   const sub = lines ? lines.reduce((n, l) => n + l.total, 0) : Number(subtotal);

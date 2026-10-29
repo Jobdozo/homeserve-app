@@ -119,11 +119,15 @@ function getJob(id) {
   return j;
 }
 
+// Newest first. Two jobs added in the same millisecond keep the order they were added in
+// (the later one first), so "oldest queued" is never the newer of a tie.
 function list({ status } = {}) {
   return jsonStore
     .readAll(JOBS)
-    .filter((j) => !status || j.status === status)
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    .map((j, i) => [j, i])
+    .filter(([j]) => !status || j.status === status)
+    .sort(([a, ai], [b, bi]) => String(b.createdAt).localeCompare(String(a.createdAt)) || bi - ai)
+    .map(([j]) => j);
 }
 
 // Started today, by way of making (AI videos have the strict, user-set limit).

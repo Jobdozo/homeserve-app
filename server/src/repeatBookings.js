@@ -11,8 +11,9 @@ const DOUBLE_TAP_MS = 2 * 60 * 1000;
 const WINDOW_MS = 60 * 60 * 1000;
 const CLOSED = new Set(["Cancelled", "Rejected"]);
 
-// "Sofa Cleaning (1 Seat) × 2" -> "sofa cleaning (1 seat)"
-const baseName = (name) => String(name || "").replace(/\s*×\s*\d+\s*$/, "").trim().toLowerCase();
+// "Sofa Cleaning (1 Seat) × 2" -> "sofa cleaning (1 seat)"; "Carpet Cleaning × 300 sq ft" -> "carpet cleaning"
+const COUNT = /\s*×\s*\d+(\s*(sq ft|litres))?\s*$/;
+const baseName = (name) => String(name || "").replace(COUNT, "").trim().toLowerCase();
 
 // The same service, or the same-named service in the same category from another provider
 // (a booking handed to another provider keeps the customer's service but not its id).
@@ -44,7 +45,7 @@ function describe(matches) {
     if (!m) continue;
     const key = m.ref || m.id;
     if (!groups.has(key)) groups.set(key, { ref: m.ref, at: Date.parse(m.createdAt), names: [] });
-    const name = String(m.service?.name || "this service").replace(/\s*×\s*\d+\s*$/, "");
+    const name = String(m.service?.name || "this service").replace(COUNT, "");
     if (!groups.get(key).names.includes(name)) groups.get(key).names.push(name);
   }
   const parts = [...groups.values()].map((g) => `${listOf(g.names)} at ${clock(g.at)}${g.ref ? ` (#${g.ref})` : ""}`);

@@ -27,6 +27,10 @@ function linePrice(service, picked, qty) {
   }
   return (service.price + extra) * qty;
 }
+// Services priced under ₹50 are a rate per sq ft (litre for water tanks): their quantity is the
+// area, up to 20,000 — the same rule as the server (server/src/quantity.js).
+const unitOf = (service) => (service.price > 0 && service.price < 50 ? (/tank/i.test(service.name) ? "litres" : "sq ft") : null);
+const maxQty = (service) => (unitOf(service) ? 20000 : 50);
 const startPicks = (service) =>
   Object.fromEntries((service.options || []).filter((g) => g.required && g.max === 1 && g.choices[0]).map((g) => [g.id, [g.choices[0].id]]));
 
@@ -178,7 +182,16 @@ function NewCallBooking({ onBooked }) {
 
           <div className="relative">
             <label className={labelCls} htmlFor="cd-search">Services</label>
-            <input id="cd-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search a service, category or provider" className={inputCls} />
+            <input
+              id="cd-search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={items.length ? "Add another service…" : "Search a service, category or provider"}
+              className={inputCls}
+            />
+            <p className="mt-1 text-[11px] text-gray-400">
+              {items.length ? `${items.length} added · ` : ""}Up to 10 services in one booking — search again to add the next one.
+            </p>
             {matches.length > 0 && (
               <ul className="absolute z-10 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-gray-100 bg-white py-1 shadow-lg">
                 {matches.map((s) => (
@@ -201,7 +214,10 @@ function NewCallBooking({ onBooked }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[13px] font-semibold text-gray-900">{it.service.name}</p>
-                  <p className="text-[11px] text-gray-400">{providerName(it.service.providerId)}</p>
+                  <p className="text-[11px] text-gray-400">
+                    {providerName(it.service.providerId)}
+                    {unitOf(it.service) ? ` · ${inr(it.service.price)} per ${unitOf(it.service) === "sq ft" ? "sq ft" : "litre"}` : ""}
+                  </p>
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-2">
                   <span className="text-[13px] font-bold tabular-nums text-gray-900">{inr(linePrice(it.service, it.picked, it.qty))}</span>
@@ -231,10 +247,25 @@ function NewCallBooking({ onBooked }) {
                 </fieldset>
               ))}
               <div className="flex flex-wrap items-center gap-2">
-                <label className="flex items-center gap-1.5 text-[11.5px] text-gray-500">
-                  Qty
-                  <input type="number" min="1" max="20" value={it.qty} onChange={(e) => updateItem(idx, { qty: Math.max(1, Math.min(20, Number(e.target.value) || 1)) })} className="w-14 rounded-lg border border-gray-200 px-2 py-1 text-center text-[12px]" />
-                </label>
+                {unitOf(it.service) ? (
+                  <label className="flex items-center gap-1.5 text-[11.5px] font-semibold text-gray-700">
+                    {unitOf(it.service) === "sq ft" ? "Area" : "Tank size"}
+                    <input
+                      type="number"
+                      min="1"
+                      max={maxQty(it.service)}
+                      value={it.qty}
+                      onChange={(e) => updateItem(idx, { qty: Math.max(1, Math.min(maxQty(it.service), Math.round(Number(e.target.value)) || 1)) })}
+                      className="w-24 rounded-lg border border-brand/40 px-2 py-1 text-center text-[12px]"
+                    />
+                    <span className="font-normal text-gray-500">{unitOf(it.service)}</span>
+                  </label>
+                ) : (
+                  <label className="flex items-center gap-1.5 text-[11.5px] text-gray-500">
+                    Qty
+                    <input type="number" min="1" max={maxQty(it.service)} value={it.qty} onChange={(e) => updateItem(idx, { qty: Math.max(1, Math.min(maxQty(it.service), Number(e.target.value) || 1)) })} className="w-14 rounded-lg border border-gray-200 px-2 py-1 text-center text-[12px]" />
+                  </label>
+                )}
                 <input value={it.issue} onChange={(e) => updateItem(idx, { issue: e.target.value })} placeholder="What the customer said (optional)" className={`${inputCls} flex-1 py-1.5`} />
               </div>
             </div>
