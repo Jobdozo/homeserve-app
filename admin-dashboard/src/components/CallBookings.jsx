@@ -122,7 +122,12 @@ function NewCallBooking({ onBooked }) {
         items: items.map((it) => ({ serviceId: it.service.id, options: it.picked, quantity: it.qty, issue: it.issue })),
         date,
         time,
-        address,
+        // The map pin only goes with one of the customer's own places, unchanged — so the
+        // provider's directions button works, and a typed-in address never gets an old pin.
+        address: (() => {
+          const known = caller?.addresses?.find((a) => a.line === address.line.trim() && a.pincode === address.pincode.trim());
+          return { ...address, lat: known?.lat ?? null, lng: known?.lng ?? null };
+        })(),
         note,
       });
       showToast(`Booked for ${r.customer.name}: ${r.bookings.map((b) => `#${b.ref}`).join(", ")}${r.newCustomer ? " (new customer)" : ""}`);

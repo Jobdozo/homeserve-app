@@ -33,35 +33,48 @@ function cleanSchedule({ date, time } = {}, now = Date.now()) {
   return { date: d, time: t };
 }
 
+// A map pin inside India, or null (the provider's directions button needs one).
+function cleanPin(lat, lng) {
+  const la = Number(lat);
+  const ln = Number(lng);
+  return lat != null && lng != null && la >= 6 && la <= 38 && ln >= 68 && ln <= 98 ? { lat: la, lng: ln } : null;
+}
+
 function cleanAddress(a = {}) {
   const line = text(a.line, 300);
   if (line.length < 5) throw fail("Enter the customer's full address");
   const pincode = String(a.pincode || "").replace(/\D/g, "");
   if (!/^\d{6}$/.test(pincode)) throw fail("Enter the 6-digit PIN code");
-  return { label: text(a.label, 30) || "Home", line, pincode };
+  // The pin comes with an address picked from the customer's own (knownAddresses).
+  return { label: text(a.label, 30) || "Home", line, pincode, ...(cleanPin(a.lat, a.lng) || {}) };
 }
 
 const isCallBooking = (bookingId) => jsonStore.readAll("callBookings").some((r) => r.id === bookingId);
 
 // Pure: the places a customer has used, newest first — the address of their last booking, then
-// their saved Home and Office — each { source, label, line, pincode }, without repeats. A
-// booking keeps its PIN inside the address line (store.withPincodeInLine), so it's taken out
-// again here. Exported for tests.
+// their saved Home and Office — each { source, label, line, pincode, lat, lng }, without
+// repeats; lat/lng (the map pin) when the place has one. A booking keeps its PIN inside the
+// address line (store.withPincodeInLine), so it's taken out again here. Exported for tests.
 function knownAddresses(bookings = [], saved = null) {
   const out = [];
-  const add = (source, label, line, pincode) => {
+  const add = (source, label, line, pincode, lat, lng) => {
     let l = String(line || "").trim();
     let pin = String(pincode || "").replace(/\D/g, "");
     if (!pin) pin = (l.match(/\b\d{6}\b(?!.*\b\d{6}\b)/) || [""])[0];
     if (pin) l = l.replace(new RegExp(`[,\\s]*${pin}\\s*$`), "").trim();
     if (l.length < 5 || !/^\d{6}$/.test(pin)) return;
-    if (out.some((a) => a.line.toLowerCase() === l.toLowerCase() && a.pincode === pin)) return;
-    out.push({ source, label: text(label, 30) || "Home", line: l, pincode: pin });
+    const same = out.find((a) => a.line.toLowerCase() === l.toLowerCase() && a.pincode === pin);
+    const mapPin = cleanPin(lat, lng);
+    if (same) {
+      if (!same.lat && mapPin) Object.assign(same, mapPin); // the same place, with a pin from the other record
+      return;
+    }
+    out.push({ source, label: text(label, 30) || "Home", line: l, pincode: pin, ...(mapPin || { lat: null, lng: null }) });
   };
   const last = [...bookings].filter((b) => b.address?.line).sort((a, b) => String(b.createdAt || b.date || "").localeCompare(String(a.createdAt || a.date || "")))[0];
-  if (last) add("last", last.address.label, last.address.line);
-  if (saved?.line) add("home", saved.label || "Home", saved.line, saved.pincode);
-  if (saved?.office?.line) add("office", "Office", saved.office.line, saved.office.pincode);
+  if (last) add("last", last.address.label, last.address.line, null, last.address.lat, last.address.lng);
+  if (saved?.line) add("home", saved.label || "Home", saved.line, saved.pincode, saved.lat, saved.lng);
+  if (saved?.office?.line) add("office", "Office", saved.office.line, saved.office.pincode, saved.office.lat, saved.office.lng);
   return out;
 }
 

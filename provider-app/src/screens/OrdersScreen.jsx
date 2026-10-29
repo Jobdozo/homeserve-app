@@ -302,6 +302,12 @@ function JobCard({ group }) {
   const live = ["Accepted", "In Progress"].includes(r.status);
   const lat = r.address?.lat;
   const lng = r.address?.lng;
+  // A booking without a map pin (typed in on a call) still gets directions, by its address text.
+  const directions = lat && lng
+    ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+    : r.address?.line
+      ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(r.address.line)}`
+      : null;
   return (
     <Card className="flex flex-col gap-3 p-4">
       <button onClick={() => navigate(`/requests/${r.id}`)} className="flex justify-between gap-2.5 text-left">
@@ -329,8 +335,8 @@ function JobCard({ group }) {
           <button onClick={() => navigate(`/chat/${r.id}`)} aria-label="Chat with customer" className="flex h-11 items-center justify-center rounded-[14px] bg-raised text-ink">
             <ChatIcon width={18} height={18} />
           </button>
-          {lat && lng ? (
-            <a href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`} target="_blank" rel="noreferrer" aria-label="Directions" className="flex h-11 items-center justify-center rounded-[14px] bg-raised text-ink">
+          {directions ? (
+            <a href={directions} target="_blank" rel="noreferrer" aria-label="Directions" className="flex h-11 items-center justify-center rounded-[14px] bg-raised text-ink">
               <NavigateIcon width={18} height={18} />
             </a>
           ) : (

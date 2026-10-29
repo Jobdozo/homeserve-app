@@ -93,7 +93,12 @@ export default function RequestDetailsScreen() {
             : { eyebrow: JOB_STATUS[request.status]?.label || request.status, title: request.service?.name || "Request", tone: "text-red-400" };
   const lat = liveLocation?.lat ?? request.address?.lat;
   const lng = liveLocation?.lng ?? request.address?.lng;
-  const mapsUrl = lat && lng ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}` : null;
+  // Without a map pin (a booking typed in on a call), directions go by the address text.
+  const mapsUrl = lat && lng
+    ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+    : request.address?.line
+      ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(request.address.line)}`
+      : null;
   const live = ["Accepted", "In Progress"].includes(request.status);
   const lines = [request, ...siblings];
 

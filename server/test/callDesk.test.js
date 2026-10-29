@@ -46,12 +46,24 @@ test("call desk: a regular customer's addresses — last booking first, then sav
   ];
   const saved = { label: "Home", line: "12 Gandhi Nagar, near park", pincode: "180004", office: { line: "Office 2, Bahu Plaza", pincode: "180012" } };
   assert.deepEqual(callDesk.knownAddresses(bookings, saved), [
-    { source: "last", label: "Home", line: "45 Trikuta Nagar, lane 3", pincode: "180012" },
-    { source: "home", label: "Home", line: "12 Gandhi Nagar, near park", pincode: "180004" },
-    { source: "office", label: "Office", line: "Office 2, Bahu Plaza", pincode: "180012" },
+    { source: "last", label: "Home", line: "45 Trikuta Nagar, lane 3", pincode: "180012", lat: null, lng: null },
+    { source: "home", label: "Home", line: "12 Gandhi Nagar, near park", pincode: "180004", lat: null, lng: null },
+    { source: "office", label: "Office", line: "Office 2, Bahu Plaza", pincode: "180012", lat: null, lng: null },
   ]);
   // The saved Home is the same place as the last booking: listed once.
   assert.equal(callDesk.knownAddresses([bookings[0]], saved).filter((a) => a.line.startsWith("12 Gandhi")).length, 1);
   assert.deepEqual(callDesk.knownAddresses([], null), [], "a new caller has none");
   assert.deepEqual(callDesk.knownAddresses([{ createdAt: "x", address: { line: "no pin here" } }], null), [], "an address without a PIN isn't offered");
+});
+
+test("call desk: a known place keeps its map pin, so the provider gets directions; a bad pin is dropped", () => {
+  const withPin = [{ createdAt: "2026-10-28T10:00:00Z", address: { label: "Home", line: "Preet Nagar, Jammu, 180020", lat: 32.71, lng: 74.86 } }];
+  const [last] = callDesk.knownAddresses(withPin, { line: "Preet Nagar, Jammu", pincode: "180020" });
+  assert.deepEqual([last.lat, last.lng], [32.71, 74.86]);
+  // The saved Home has the pin and the last booking doesn't: the one entry gets it.
+  const [merged] = callDesk.knownAddresses([{ createdAt: "x", address: { line: "Preet Nagar, Jammu, 180020" } }], { line: "Preet Nagar, Jammu", pincode: "180020", lat: 32.7, lng: 74.8 });
+  assert.equal(merged.lat, 32.7);
+  assert.deepEqual(callDesk.cleanAddress({ line: "Preet Nagar, Jammu", pincode: "180020", lat: 32.71, lng: 74.86 }), { label: "Home", line: "Preet Nagar, Jammu", pincode: "180020", lat: 32.71, lng: 74.86 });
+  assert.equal(callDesk.cleanAddress({ line: "Preet Nagar, Jammu", pincode: "180020", lat: 0, lng: 0 }).lat, undefined, "outside India: no pin");
+  assert.equal(callDesk.cleanAddress({ line: "Preet Nagar, Jammu", pincode: "180020" }).lat, undefined);
 });
