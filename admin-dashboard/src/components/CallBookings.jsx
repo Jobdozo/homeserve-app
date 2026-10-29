@@ -78,6 +78,9 @@ function NewCallBooking({ onBooked }) {
       const r = await api.callDeskLookup(phone);
       setCaller(r);
       if (r.customer) setName(r.customer.name || "");
+      // A regular customer's address comes ready: their last booking's, else their saved one.
+      const known = r.addresses?.[0];
+      setAddress(known ? { label: known.label, line: known.line, pincode: known.pincode } : { label: "Home", line: "", pincode: "" });
     } catch (e) {
       setCaller(null);
       setError(e.message);
@@ -260,6 +263,28 @@ function NewCallBooking({ onBooked }) {
               <input id="cd-pin" value={address.pincode} onChange={(e) => setAddress({ ...address, pincode: e.target.value })} inputMode="numeric" maxLength={6} placeholder="180001" className={inputCls} />
             </div>
           </div>
+          {caller?.addresses?.length > 0 && (
+            <div className="-mt-1 flex flex-wrap items-center gap-1.5 text-[11.5px]">
+              <span className="text-gray-500">Their addresses:</span>
+              {caller.addresses.map((a) => {
+                const on = a.line === address.line && a.pincode === address.pincode;
+                return (
+                  <button
+                    key={`${a.source}-${a.line}`}
+                    type="button"
+                    title={`${a.line}, ${a.pincode}`}
+                    onClick={() => setAddress({ label: a.label, line: a.line, pincode: a.pincode })}
+                    className={`max-w-[240px] truncate rounded-full border px-2.5 py-1 font-semibold ${on ? "border-brand bg-brand-light text-brand-dark" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+                  >
+                    {{ last: "Last booking", home: a.label || "Home", office: "Office" }[a.source]} · {a.line}
+                  </button>
+                );
+              })}
+              <button type="button" onClick={() => setAddress({ label: "Home", line: "", pincode: "" })} className="rounded-full border border-dashed border-gray-300 px-2.5 py-1 font-semibold text-gray-500 hover:bg-gray-50">
+                New address
+              </button>
+            </div>
+          )}
 
           <div>
             <label className={labelCls} htmlFor="cd-note">Note for the provider (optional)</label>

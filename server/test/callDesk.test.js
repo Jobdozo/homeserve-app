@@ -37,3 +37,21 @@ test("call desk: looking up needs bookings.view, booking and closing need bookin
   assert.equal(access.requiredFor("GET", "/admin/call-desk/bookings/b1/providers"), "bookings.edit");
   assert.equal(access.requiredFor("POST", "/admin/call-desk/bookings/b1/provider", {}), "bookings.edit");
 });
+
+test("call desk: a regular customer's addresses — last booking first, then saved Home and Office, no repeats", () => {
+  const bookings = [
+    { createdAt: "2026-10-20T10:00:00Z", address: { label: "Home", line: "12 Gandhi Nagar, near park, 180004" } },
+    { createdAt: "2026-10-28T10:00:00Z", address: { label: "Home", line: "45 Trikuta Nagar, lane 3, 180012" } },
+    { createdAt: "2026-10-25T10:00:00Z", address: { label: "Home" } },
+  ];
+  const saved = { label: "Home", line: "12 Gandhi Nagar, near park", pincode: "180004", office: { line: "Office 2, Bahu Plaza", pincode: "180012" } };
+  assert.deepEqual(callDesk.knownAddresses(bookings, saved), [
+    { source: "last", label: "Home", line: "45 Trikuta Nagar, lane 3", pincode: "180012" },
+    { source: "home", label: "Home", line: "12 Gandhi Nagar, near park", pincode: "180004" },
+    { source: "office", label: "Office", line: "Office 2, Bahu Plaza", pincode: "180012" },
+  ]);
+  // The saved Home is the same place as the last booking: listed once.
+  assert.equal(callDesk.knownAddresses([bookings[0]], saved).filter((a) => a.line.startsWith("12 Gandhi")).length, 1);
+  assert.deepEqual(callDesk.knownAddresses([], null), [], "a new caller has none");
+  assert.deepEqual(callDesk.knownAddresses([{ createdAt: "x", address: { line: "no pin here" } }], null), [], "an address without a PIN isn't offered");
+});

@@ -43,12 +43,37 @@ function cleanAddress(a = {}) {
 
 const isCallBooking = (bookingId) => jsonStore.readAll("callBookings").some((r) => r.id === bookingId);
 
-// Who is calling: the customer with this number (if any) and their open bookings.
+// Pure: the places a customer has used, newest first — the address of their last booking, then
+// their saved Home and Office — each { source, label, line, pincode }, without repeats. A
+// booking keeps its PIN inside the address line (store.withPincodeInLine), so it's taken out
+// again here. Exported for tests.
+function knownAddresses(bookings = [], saved = null) {
+  const out = [];
+  const add = (source, label, line, pincode) => {
+    let l = String(line || "").trim();
+    let pin = String(pincode || "").replace(/\D/g, "");
+    if (!pin) pin = (l.match(/\b\d{6}\b(?!.*\b\d{6}\b)/) || [""])[0];
+    if (pin) l = l.replace(new RegExp(`[,\\s]*${pin}\\s*$`), "").trim();
+    if (l.length < 5 || !/^\d{6}$/.test(pin)) return;
+    if (out.some((a) => a.line.toLowerCase() === l.toLowerCase() && a.pincode === pin)) return;
+    out.push({ source, label: text(label, 30) || "Home", line: l, pincode: pin });
+  };
+  const last = [...bookings].filter((b) => b.address?.line).sort((a, b) => String(b.createdAt || b.date || "").localeCompare(String(a.createdAt || a.date || "")))[0];
+  if (last) add("last", last.address.label, last.address.line);
+  if (saved?.line) add("home", saved.label || "Home", saved.line, saved.pincode);
+  if (saved?.office?.line) add("office", "Office", saved.office.line, saved.office.pincode);
+  return out;
+}
+
+// Who is calling: the customer with this number (if any), their open bookings and the
+// addresses they've used (the call desk fills in the first one).
 async function lookup(phone) {
   const mobile = cleanMobile(phone);
   const customer = await store.getCustomerByPhone(mobile);
-  const bookings = customer ? (await store.listBookings({ customerId: customer.id })).filter((b) => ACTIVE.includes(b.status)) : [];
-  return { phone: mobile, blocked: blockedPhones.isBlocked(mobile), customer: customer || null, bookings };
+  const all = customer ? await store.listBookings({ customerId: customer.id }) : [];
+  const bookings = all.filter((b) => ACTIVE.includes(b.status));
+  const addresses = customer ? knownAddresses(all, store.getCustomerAddress(customer.id)) : [];
+  return { phone: mobile, blocked: blockedPhones.isBlocked(mobile), customer: customer || null, bookings, addresses };
 }
 
 // body: { phone, name, items: [{ serviceId, options, quantity, issue }], date, time, address: { label, line, pincode }, note }
@@ -115,4 +140,4 @@ async function close(bookingId, { action, reason } = {}) {
   return booking;
 }
 
-module.exports = { lookup, book, reschedule, close, isCallBooking, cleanMobile, cleanSchedule, cleanAddress, ACTIVE };
+module.exports = { lookup, book, reschedule, close, isCallBooking, cleanMobile, cleanSchedule, cleanAddress, knownAddresses, ACTIVE };
