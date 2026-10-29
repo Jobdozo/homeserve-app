@@ -21,6 +21,7 @@ const CHANNELS = [
   ["facebook", "Facebook"],
   ["threads", "Threads"],
   ["youtube", "YouTube"],
+  ["pinterest", "Pinterest"],
 ];
 
 function NewVideo({ estimates, categories, onMade, busy, run, paid }) {

@@ -3975,6 +3975,22 @@ app.get("/api/admin/watch/reviews", adminOnly, crm(async (req, res) => {
 // Publishing is "social.add": a person posting, or approving a Marketing Agent proposal.
 const social = require("./social");
 app.get("/api/admin/social/status", adminOnly, crm(async (req, res) => res.json(await social.status())));
+// Pinterest sign-in (socialPinterest.js): Admin gets Pinterest's sign-in address, Pinterest sends
+// the browser back to the callback, which saves the tokens and returns to Admin → Social Media.
+app.get("/api/admin/social/pinterest/connect", adminOnly, crm(async (req, res) => {
+  res.json({ url: require("./socialPinterest").connectUrl(actorOf(req)) });
+}));
+app.get("/api/social/pinterest/callback", ah(async (req, res) => {
+  const back = `${(process.env.ADMIN_URL || "https://admin.tikdum.com").replace(/\/$/, "")}/#/social`;
+  try {
+    const out = await require("./socialPinterest").finishConnect({ code: req.query.code, state: req.query.state, error: req.query.error_description || req.query.error });
+    await store.logActivity("social", `Pinterest connected${out.username ? ` (@${out.username})` : ""}`).catch(() => {});
+    res.redirect(`${back}?pinterest=connected`);
+  } catch (e) {
+    console.error("Pinterest sign-in failed:", e.message);
+    res.redirect(`${back}?pinterest=${encodeURIComponent(String(e.message).slice(0, 200))}`);
+  }
+}));
 app.get("/api/admin/social/images", adminOnly, crm(async (req, res) => {
   const [categories, services] = await Promise.all([store.listCategories(), store.listServices({ activeOnly: true })]);
   res.json(social.imageLibrary({ categories, banners: store.listActiveBanners(), services }));

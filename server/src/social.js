@@ -28,6 +28,7 @@ const crypto = require("crypto");
 const jsonStore = require("./jsonStore");
 const threads = require("./socialThreads");
 const youtube = require("./socialYoutube");
+const pinterest = require("./socialPinterest");
 const video = require("./socialVideo");
 const aiVideo = require("./socialAiVideo");
 
@@ -62,7 +63,11 @@ async function graph(method, pathname, params = {}) {
 let statusCache = { at: 0, value: null };
 async function status() {
   const { pageId, token, igUserId } = cfg();
-  const base = { facebook: Boolean(pageId && token), instagram: Boolean(igUserId && token), threads: threads.configured(), youtube: youtube.configured(), video: await video.available() };
+  const pin = pinterest.status();
+  const base = {
+    facebook: Boolean(pageId && token), instagram: Boolean(igUserId && token), threads: threads.configured(), youtube: youtube.configured(), pinterest: pin.connected,
+    pinterestUsername: pin.username, pinterestReady: pin.appReady, video: await video.available(),
+  };
   if (!base.facebook) return { ...base, page: null, instagramUsername: null, threadsUsername: base.threads ? await threads.username() : null };
   if (statusCache.value && Date.now() - statusCache.at < 10 * 60 * 1000) return statusCache.value;
   let value = { ...base, page: null, instagramUsername: null };
@@ -135,7 +140,7 @@ function serveImage(req, res) {
 }
 
 const FORMATS = ["single", "carousel", "story", "reel"];
-const CHANNELS = ["facebook", "instagram", "threads", "youtube"];
+const CHANNELS = ["facebook", "instagram", "threads", "youtube", "pinterest"];
 const line = (v, n) => String(v || "").replace(/\s+/g, " ").trim().slice(0, n);
 
 function cleanPost({ caption, imageUrl, channels, format, title, slides, storyLine, colour, threadsText, videoScene } = {}) {
@@ -146,9 +151,9 @@ function cleanPost({ caption, imageUrl, channels, format, title, slides, storyLi
   if ((text.match(/#[\p{L}\p{N}_]+/gu) || []).length > 30) throw fail(400, "Instagram allows at most 30 hashtags");
   if (!imageUrl) throw fail(400, "Pick a picture — Instagram posts need one");
   const wanted = [...new Set((Array.isArray(channels) && channels.length ? channels : ["facebook", "instagram"]).map(String))];
-  if (wanted.some((c) => !CHANNELS.includes(c))) throw fail(400, "Channels can be facebook, instagram, threads and youtube");
-  // Threads has no Stories; YouTube only takes Reels (as Shorts).
-  const fits = (c) => (c === "youtube" ? kind === "reel" : c === "threads" ? kind !== "story" : true);
+  if (wanted.some((c) => !CHANNELS.includes(c))) throw fail(400, "Channels can be facebook, instagram, threads, youtube and pinterest");
+  // Threads and Pinterest have no Stories; YouTube only takes Reels (as Shorts).
+  const fits = (c) => (c === "youtube" ? kind === "reel" : c === "threads" || c === "pinterest" ? kind !== "story" : true);
   const out = { caption: text, imageUrl: String(imageUrl), channels: wanted.filter(fits), format: kind };
   if (!out.channels.length) throw fail(400, kind === "story" ? "Stories go to Facebook and Instagram" : "Choose Facebook, Instagram or Threads");
   if (threadsText) out.threadsText = String(threadsText).trim().slice(0, threads.MAX_TEXT);
@@ -231,6 +236,7 @@ async function sendVideo(st, post, file, videoUrl) {
     instagram: () => reelToInstagram(st, post, videoUrl),
     threads: () => threads.publishVideo(post, videoUrl),
     youtube: () => youtube.publish(post, file),
+    pinterest: () => pinterest.publishVideo(post, file, post.cover),
   };
   const results = {};
   for (const c of post.channels) {
@@ -256,10 +262,13 @@ async function publishVideo(input, actor) {
   const st = cfg();
   const wanted = [...new Set((Array.isArray(input.channels) ? input.channels : []).map(String))].filter((c) => CHANNELS.includes(c));
   if (!wanted.length) throw fail(400, "Choose where to publish it");
-  const ready = { facebook: Boolean(st.pageId && st.token), instagram: Boolean(st.igUserId && st.token), threads: threads.configured(), youtube: youtube.configured() };
+  const ready = { facebook: Boolean(st.pageId && st.token), instagram: Boolean(st.igUserId && st.token), threads: threads.configured(), youtube: youtube.configured(), pinterest: pinterest.configured() };
   const missing = wanted.filter((c) => !ready[c]);
   if (missing.length) throw fail(400, `Not connected: ${missing.join(", ")}`);
-  const post = { caption, title: line(input.title, 90), threadsText: input.threadsText ? String(input.threadsText).slice(0, threads.MAX_TEXT) : undefined, channels: wanted, wide: input.wide === true };
+  const post = {
+    caption, title: line(input.title, 90), threadsText: input.threadsText ? String(input.threadsText).slice(0, threads.MAX_TEXT) : undefined, channels: wanted, wide: input.wide === true,
+    cover: input.cover || null,
+  };
   const videoUrl = `${IMAGE_BASE}/api/social-videos/${name}`;
   const row = jsonStore.insert(POSTS, {
     format: "video",
@@ -361,7 +370,7 @@ async function finishReel(rowId, post) {
     const music = await video.musicBed(frames.reduce((a, f) => a + f.seconds, 0)).catch(() => null);
     const made = (await aiReel(rowId, post, frames)) || (await video.buildReel(frames, path.join(DIR, "videos"), { music }));
     videoUrl = `${IMAGE_BASE}/api/social-videos/${made.name}`;
-    Object.assign(results, await sendVideo(st, post, made.file, videoUrl));
+    Object.assign(results, await sendVideo(st, { ...post, cover }, made.file, videoUrl));
   } catch (e) {
     for (const c of post.channels) results[c] = { ok: false, error: e.message };
   }
@@ -377,6 +386,7 @@ async function publish(input, actor) {
   if (post.channels.includes("instagram") && !(st.igUserId && st.token)) throw fail(400, "Instagram isn't connected (deploy/set-meta.sh)");
   if (post.channels.includes("threads") && !threads.configured()) throw fail(400, "Threads isn't connected (deploy/set-threads.sh)");
   if (post.channels.includes("youtube") && !youtube.configured()) throw fail(400, "YouTube isn't connected (deploy/set-youtube.sh)");
+  if (post.channels.includes("pinterest") && !pinterest.configured()) throw fail(400, "Pinterest isn't connected (Admin → Social Media → Connect Pinterest)");
   if (post.format === "reel") {
     if (!(await video.available())) throw fail(400, "The server can't make videos yet (ffmpeg isn't installed — redeploy the server)");
     await fetchPicture(post.imageUrl); // a bad picture fails now, not in the background
@@ -402,7 +412,7 @@ async function publish(input, actor) {
   }
   const images = await prepareFormat(post);
   const results = {};
-  for (const [channel, send] of [["facebook", toFacebook], ["instagram", toInstagram], ["threads", (_, p, im) => threads.publish(p, im)]]) {
+  for (const [channel, send] of [["facebook", toFacebook], ["instagram", toInstagram], ["threads", (_, p, im) => threads.publish(p, im)], ["pinterest", (_, p, im) => pinterest.publish(p, im)]]) {
     if (!post.channels.includes(channel)) continue;
     try {
       results[channel] = await send(st, post, images);
@@ -437,7 +447,9 @@ function score(m = {}) {
   const i = m.instagram || {};
   const t = m.threads || {};
   const y = m.youtube || {};
-  return (f.reactions || 0) + (i.likes || 0) + (t.likes || 0) + (y.likes || 0) + 3 * ((f.comments || 0) + (i.comments || 0) + (t.replies || 0) + (y.comments || 0)) + 4 * ((f.shares || 0) + (i.shares || 0) + (t.reposts || 0) + (t.quotes || 0)) + 2 * (i.saved || 0);
+  const p = m.pinterest || {};
+  // On Pinterest a save is the "like", and a click through to tikdum.com is worth most.
+  return (f.reactions || 0) + (i.likes || 0) + (t.likes || 0) + (y.likes || 0) + 3 * ((f.comments || 0) + (i.comments || 0) + (t.replies || 0) + (y.comments || 0)) + 4 * ((f.shares || 0) + (i.shares || 0) + (t.reposts || 0) + (t.quotes || 0)) + 2 * ((i.saved || 0) + (p.saves || 0)) + 3 * (p.outboundClicks || 0);
 }
 
 // Each number is asked for on its own: they need different Page permissions (reactions and
@@ -477,14 +489,16 @@ async function instagramMetrics(id) {
 
 // Reads the results of the posts from the last 30 days (not Stories: they're gone after a day).
 async function refreshMetrics({ now = Date.now() } = {}) {
-  if (!cfg().token && !threads.configured() && !youtube.configured()) return { checked: 0 };
+  if (!cfg().token && !threads.configured() && !youtube.configured() && !pinterest.configured()) return { checked: 0 };
   await threads.renewIfDue(now);
+  // Pinterest's token is renewed here too (twice a day), days before it would run out.
+  if (pinterest.configured()) await pinterest.accessToken(now).catch((e) => console.error("Pinterest token renewal failed:", e.message));
   let checked = 0;
   for (const row of jsonStore.readAll(POSTS)) {
     if (row.format === "story" || now - Date.parse(row.at) > 30 * 24 * 3600 * 1000) continue;
     const metrics = { at: new Date(now).toISOString() };
     const errors = [];
-    for (const [channel, read] of [["facebook", facebookMetrics], ["instagram", instagramMetrics], ["threads", threads.metrics], ["youtube", youtube.metrics]]) {
+    for (const [channel, read] of [["facebook", facebookMetrics], ["instagram", instagramMetrics], ["threads", threads.metrics], ["youtube", youtube.metrics], ["pinterest", pinterest.metrics]]) {
       const r = row.results?.[channel];
       if (!r?.ok || !r.id) continue;
       try {

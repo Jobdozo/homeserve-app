@@ -67,6 +67,13 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-support@tikdum.com}
       EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Tikdum Support}
       EMAIL_WEBHOOK_SECRET: ${EMAIL_WEBHOOK_SECRET:-}
+      # Pinterest (socialPinterest.js): the app's ID and secret (deploy/set-pinterest.sh); the sign-in
+      # itself is done in Admin → Social Media. PINTEREST_API=https://api-sandbox.pinterest.com/v5 while
+      # the app only has Trial access.
+      PINTEREST_CLIENT_ID: ${PINTEREST_CLIENT_ID:-}
+      PINTEREST_CLIENT_SECRET: ${PINTEREST_CLIENT_SECRET:-}
+      PINTEREST_API: ${PINTEREST_API:-}
+      PINTEREST_BOARD_ID: ${PINTEREST_BOARD_ID:-}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
       VAPID_SUBJECT: ${VAPID_SUBJECT}

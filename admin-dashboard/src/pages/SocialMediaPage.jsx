@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../context/AppContext";
 
@@ -10,7 +11,7 @@ const inputCls = "w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.
 const labelCls = "mb-1 block text-[12.5px] font-semibold text-gray-700";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const FORMAT = { single: "Picture", carousel: "Carousel", story: "Story", reel: "Reel" };
-const CHANNEL = { facebook: "Facebook", instagram: "Instagram", threads: "Threads", youtube: "YouTube" };
+const CHANNEL = { facebook: "Facebook", instagram: "Instagram", threads: "Threads", youtube: "YouTube", pinterest: "Pinterest" };
 
 const when = (iso) => new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 const fmtDate = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -19,13 +20,57 @@ function totals(m = {}) {
   const f = m.facebook || {};
   const i = m.instagram || {};
   const t = m.threads || {};
+  const p = m.pinterest || {};
   return {
     likes: (f.reactions || 0) + (i.likes || 0) + (t.likes || 0),
     comments: (f.comments || 0) + (i.comments || 0) + (t.replies || 0),
     shares: (f.shares || 0) + (i.shares || 0) + (t.reposts || 0),
-    saves: i.saved || 0,
-    reach: (f.reach || 0) + (i.reach || 0),
+    saves: (i.saved || 0) + (p.saves || 0),
+    reach: (f.reach || 0) + (i.reach || 0) + (p.impressions || 0),
   };
+}
+
+// Pinterest is signed in from here (Facebook, Instagram, Threads and YouTube are set up on the server).
+function PinterestCard() {
+  const { showToast, can } = useApp();
+  const location = useLocation();
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api.socialStatus().then(setSt).catch(() => setSt({}));
+    const result = new URLSearchParams(location.search).get("pinterest");
+    if (result) showToast(result === "connected" ? "Pinterest connected — the Marketing Agent's posts and Reels now go there too" : `Pinterest: ${result}`);
+  }, []);
+  const connect = async () => {
+    setBusy(true);
+    try {
+      const { url } = await api.pinterestConnectUrl();
+      window.location.href = url;
+    } catch (e) {
+      showToast(e.message || "Couldn't start the Pinterest sign-in");
+      setBusy(false);
+    }
+  };
+  if (!st) return null;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-card">
+      <div className="min-w-0">
+        <p className="text-[13.5px] font-bold text-gray-900">Pinterest</p>
+        <p className="text-[12px] text-gray-500">
+          {st.pinterest
+            ? `Connected${st.pinterestUsername ? ` as @${st.pinterestUsername}` : ""} — posts become Pins and Reels video Pins, each linking to tikdum.com.`
+            : st.pinterestReady
+              ? "Sign in with Tikdum's Pinterest business account to post there automatically."
+              : "Not set up on the server yet (deploy/set-pinterest.sh)."}
+        </p>
+      </div>
+      {st.pinterestReady && can("settings.edit") && (
+        <button onClick={connect} disabled={busy} className="rounded-xl border border-brand px-4 py-2 text-[12.5px] font-semibold text-brand-dark hover:bg-brand-light disabled:opacity-50">
+          {busy ? "Opening Pinterest…" : st.pinterest ? "Reconnect" : "Connect Pinterest"}
+        </button>
+      )}
+    </div>
+  );
 }
 
 function PostCard({ p }) {
@@ -422,7 +467,10 @@ export default function SocialMediaPage() {
       ) : !posts || !calendar ? (
         <p className="py-10 text-center text-[13px] text-gray-400">Loading…</p>
       ) : tab === "posts" ? (
-        <PostsTab posts={posts} busy={busy} canEdit={canEdit} onRefresh={() => run(() => api.refreshSocialResults(), "Results updated")} />
+        <>
+          <PinterestCard />
+          <PostsTab posts={posts} busy={busy} canEdit={canEdit} onRefresh={() => run(() => api.refreshSocialResults(), "Results updated")} />
+        </>
       ) : (
         <CalendarTab entries={calendar} canEdit={canEdit} run={run} />
       )}

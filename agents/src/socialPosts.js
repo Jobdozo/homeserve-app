@@ -168,7 +168,7 @@ function promptFor({ brief, today, pictures, recent, offers, calendar, results, 
   ].join("\n\n");
 }
 
-const channelName = (c) => ({ facebook: "Facebook", instagram: "Instagram", threads: "Threads", youtube: "YouTube" })[c] || c;
+const channelName = (c) => ({ facebook: "Facebook", instagram: "Instagram", threads: "Threads", youtube: "YouTube", pinterest: "Pinterest" })[c] || c;
 const oneLine = (v, n) => String(v || "").replace(/\s+/g, " ").trim().slice(0, n);
 const latinOnly = (v) => !/[ऀ-ॿ]/.test(v); // the server draws picture text without a Devanagari font
 
@@ -283,8 +283,8 @@ async function publish(client, post, channels) {
 
 async function shareStory(client, log, post, channels) {
   if (!post.storyLine) return false;
-  // Threads has no Stories.
-  const body = { format: "story", caption: "", imageUrl: post.picture.url, storyLine: post.storyLine, channels: channels.filter((c) => c !== "threads"), topic: post.topic };
+  // Threads and Pinterest have no Stories.
+  const body = { format: "story", caption: "", imageUrl: post.picture.url, storyLine: post.storyLine, channels: channels.filter((c) => c !== "threads" && c !== "pinterest"), topic: post.topic };
   if (post.colour) body.colour = post.colour;
   try {
     await client.request("POST", "/admin/social/posts", body, SLOW);
@@ -358,7 +358,7 @@ async function weeklyReport(client, log, now) {
 // Runs the schedule and any "Post: …" tasks. Returns how many posts were proposed or published.
 async function run(client, log, { st, office, now = Date.now() }) {
   const status = await client.get("/admin/social/status").catch(() => null);
-  const channels = ["facebook", "instagram", "threads"].filter((c) => status?.[c]);
+  const channels = ["facebook", "instagram", "threads", "pinterest"].filter((c) => status?.[c]);
   // YouTube only takes Reels (as Shorts); the server needs ffmpeg to make them.
   const reelChannels = [...channels, ...(status?.youtube ? ["youtube"] : [])];
   const reelsOn = self0 => self0?.socialReels !== false && status?.video !== false;

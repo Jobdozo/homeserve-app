@@ -347,6 +347,8 @@ const RULES = [
   [/^\/admin\/video-studio(\/|$)/, (m) => (m === "GET" ? "social.view" : "social.add")],
   // A fresh picture for a post (Image Studio) and reading results back are part of posting.
   [/^\/admin\/social\/(picture|metrics\/refresh)$/, () => "social.add"],
+  // Connecting an account is a settings change, not posting.
+  [/^\/admin\/social\/pinterest\/connect$/, () => "settings.edit"],
   // Read by the Marketing Agent and, for blog articles, the SEO Agent.
   [/^\/admin\/social\/calendar(\/|$)/, (m) => (m === "GET" ? ["social.view", "blog.view"] : "social.add")],
   [/^\/admin\/social(\/|$)/, () => "social.view"],

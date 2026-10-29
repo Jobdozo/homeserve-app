@@ -253,6 +253,8 @@ export const api = {
   unpublishBlogArticle: (id) => request(`/admin/blog/${id}/unpublish`, { method: "POST" }),
   deleteBlogArticle: (id) => request(`/admin/blog/${id}`, { method: "DELETE" }),
   listSocialPosts: (limit = 60) => request(`/admin/social/posts?limit=${limit}`),
+  socialStatus: () => request("/admin/social/status"),
+  pinterestConnectUrl: () => request("/admin/social/pinterest/connect"),
   refreshSocialResults: () => request("/admin/social/metrics/refresh", { method: "POST" }),
   listSocialCalendar: () => request("/admin/social/calendar"),
   getGoogleAds: () => request("/admin/google-ads"),

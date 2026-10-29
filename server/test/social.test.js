@@ -14,7 +14,7 @@ test("cleanPost: needs a caption and a picture, keeps Instagram's limits, defaul
   assert.throws(() => social.cleanPost({ caption: "Hello" }), /picture/);
   assert.throws(() => social.cleanPost({ caption: "x".repeat(2201), imageUrl: "/x.jpg" }), /2200/);
   assert.throws(() => social.cleanPost({ caption: Array.from({ length: 31 }, (_, i) => `#t${i}`).join(" "), imageUrl: "/x.jpg" }), /30 hashtags/);
-  assert.throws(() => social.cleanPost({ caption: "Hi there", imageUrl: "/x.jpg", channels: ["twitter"] }), /facebook, instagram, threads and youtube/);
+  assert.throws(() => social.cleanPost({ caption: "Hi there", imageUrl: "/x.jpg", channels: ["twitter"] }), /facebook, instagram, threads, youtube and pinterest/);
   assert.deepEqual(social.cleanPost({ caption: " Hi there ", imageUrl: "/x.jpg" }).channels, ["facebook", "instagram"]);
 });
 
