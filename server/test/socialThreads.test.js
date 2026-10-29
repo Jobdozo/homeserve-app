@@ -66,6 +66,13 @@ test("Reels: points required, YouTube only for Reels, video arguments, Short tit
   assert.match(filter, /\[0:v\].*d=105:s=1080x1920.*\[v0\];\[1:v\].*d=90:/);
   assert.match(filter, /\[v0\]\[v1\]concat=n=2:v=1:a=0,format=yuv420p\[v\]$/);
   assert.equal(args[args.indexOf("-t") + 1], "6.5"); // the silent track is as long as the video
+  // The first frame is the cover where none is given: never faded in from black; later frames are.
+  assert.doesNotMatch(filter.split(";")[0], /fade/);
+  assert.match(filter.split(";")[1], /fade=t=in/);
+  const studio = video.composeArgs({ clips: [{ file: "c0.mp4", seconds: 4 }, { file: "c1.mp4", seconds: 4 }], logo: "l.png", title: "t.png", cta: "e.jpg", out: "o.mp4" });
+  const sf = studio[studio.indexOf("-filter_complex") + 1].split(";");
+  assert.doesNotMatch(sf.find((p) => p.endsWith("[c0]")), /fade/);
+  assert.match(sf.find((p) => p.endsWith("[c1]")), /fade=t=in/);
   assert.equal(args.at(-1), "out.mp4");
 
   const m = youtube.metadata({ title: "x".repeat(120), caption: "Hello #Jammu #GeyserRepair <b>" });

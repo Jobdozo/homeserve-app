@@ -40,8 +40,10 @@ function reelArgs(files, seconds, out, music = null) {
   else args.push("-f", "lavfi", "-t", String(total), "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
   const parts = files.map((_, i) => {
     const frames = Math.round(seconds[i] * FPS);
-    // Scaled up first so the zoom doesn't judder; a short fade in from black between frames.
-    return `[${i}:v]scale=1296:2304,zoompan=z='min(zoom+0.0007,1.08)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=1080x1920:fps=${FPS},setsar=1,fade=t=in:st=0:d=0.25[v${i}]`;
+    // Scaled up first so the zoom doesn't judder; a short fade in from black between frames —
+    // never on the first, whose opening frame is the video's cover where none is given (a black
+    // first frame made black covers on Instagram, 29 Oct 2026).
+    return `[${i}:v]scale=1296:2304,zoompan=z='min(zoom+0.0007,1.08)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=1080x1920:fps=${FPS},setsar=1${i ? ",fade=t=in:st=0:d=0.25" : ""}[v${i}]`;
   });
   const filter = `${parts.join(";")};${files.map((_, i) => `[v${i}]`).join("")}concat=n=${files.length}:v=1:a=0,format=yuv420p[v]`;
   args.push("-filter_complex", filter, "-map", "[v]", "-map", `${files.length}:a`);
@@ -149,7 +151,8 @@ function composeArgs({ clips, logo, title, subtitles = [], voices = [], music = 
   const musicIn = music ? input("-i", music) : null;
 
   const f = [];
-  clips.forEach((c, i) => f.push(`[${clipIn[i]}:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=${FPS},format=yuv420p,fade=t=in:st=0:d=0.3[c${i}]`));
+  // No fade on the first clip: its opening frame is the video's cover (see reelArgs).
+  clips.forEach((c, i) => f.push(`[${clipIn[i]}:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=${FPS},format=yuv420p${i ? ",fade=t=in:st=0:d=0.3" : ""}[c${i}]`));
   f.push(`[${ctaIn}:v]scale=${W}:${H},setsar=1,fps=${FPS},format=yuv420p,fade=t=in:st=0:d=0.3[cta]`);
   f.push(`${clips.map((_, i) => `[c${i}]`).join("")}[cta]concat=n=${clips.length + 1}:v=1:a=0[base]`);
   let v = "base";

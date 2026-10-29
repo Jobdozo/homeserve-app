@@ -304,7 +304,8 @@ async function waitForVideo(get, label) {
 }
 
 async function reelToInstagram(st, post, videoUrl) {
-  const c = await graph("POST", `/${st.igUserId}/media`, { media_type: "REELS", video_url: videoUrl, caption: post.caption, share_to_feed: "true" });
+  // The Reel's own cover picture (its title card), so the grid never shows a dark frame.
+  const c = await graph("POST", `/${st.igUserId}/media`, { media_type: "REELS", video_url: videoUrl, caption: post.caption, share_to_feed: "true", ...(post.cover ? { cover_url: post.cover } : {}) });
   await waitForVideo(async () => (await graph("GET", `/${c.id}`, { fields: "status_code" })).status_code, "Instagram");
   const r = await graph("POST", `/${st.igUserId}/media_publish`, { creation_id: c.id });
   const info = await graph("GET", `/${r.id}`, { fields: "permalink" }).catch(() => ({}));
