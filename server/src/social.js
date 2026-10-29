@@ -59,7 +59,8 @@ async function graph(method, pathname, params = {}) {
   return data;
 }
 
-// Which channels are connected, with the Page and Instagram names (cached 10 minutes).
+// Which channels are connected, with the Page and Instagram names (the names cached 10 minutes;
+// what's connected is always read fresh, so Pinterest shows as connected the moment it is).
 let statusCache = { at: 0, value: null };
 async function status() {
   const { pageId, token, igUserId } = cfg();
@@ -69,7 +70,7 @@ async function status() {
     pinterestUsername: pin.username, pinterestReady: pin.appReady, video: await video.available(),
   };
   if (!base.facebook) return { ...base, page: null, instagramUsername: null, threadsUsername: base.threads ? await threads.username() : null };
-  if (statusCache.value && Date.now() - statusCache.at < 10 * 60 * 1000) return statusCache.value;
+  if (statusCache.value && Date.now() - statusCache.at < 10 * 60 * 1000) return { ...statusCache.value, ...base };
   let value = { ...base, page: null, instagramUsername: null };
   try {
     const p = await graph("GET", `/${pageId}`, { fields: "name,instagram_business_account{username}" });
